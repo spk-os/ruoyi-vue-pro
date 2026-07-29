@@ -1,0 +1,134 @@
+{
+  "id": "n_start",
+  "type": 10,
+  "name": "发起人",
+  "childNode": {
+    "id": "n_g1",
+    "type": 15,
+    "name": "G1 立项门禁",
+    "triggerSetting": {
+      "type": 2,
+      "httpRequestSetting": {
+        "url": "http://${spk-base-url}/spk/gate/dispatch",
+        "body": [
+          { "type": 1, "key": "gate", "value": "g1" }
+        ]
+      }
+    },
+    "childNode": {
+      "id": "n_concept",
+      "type": 15,
+      "name": "概念起草 Agent",
+      "triggerSetting": {
+        "type": 1,
+        "httpRequestSetting": {
+          "url": "http://${spk-base-url}/spk/agent-task/run",
+          "body": [
+            { "type": 1, "key": "roleId", "value": "1" },
+            { "type": 1, "key": "prompt", "value": "起草产品概念方案：定位、目标用户、核心场景" },
+            { "type": 1, "key": "nodeKey", "value": "n_concept" }
+          ],
+          "response": [
+            { "key": "agentResult", "value": "result" }
+          ]
+        }
+      },
+      "childNode": {
+        "id": "n_tr1",
+        "type": 11,
+        "name": "TR1 概念评审",
+        "candidateStrategy": 36,
+        "approveType": 1,
+        "approveMethod": 1,
+        "rejectHandler": { "type": 1 },
+        "childNode": {
+          "id": "n_g2",
+          "type": 15,
+          "name": "G2 架构 Agent",
+          "triggerSetting": {
+            "type": 1,
+            "httpRequestSetting": {
+              "url": "http://${spk-base-url}/spk/agent-task/run",
+              "body": [
+                { "type": 1, "key": "roleId", "value": "1" },
+                { "type": 1, "key": "prompt", "value": "输出系统架构设计：模块划分、关键接口、技术选型" },
+                { "type": 1, "key": "nodeKey", "value": "n_g2" }
+              ],
+              "response": [
+                { "key": "agentResult", "value": "result" }
+              ]
+            }
+          },
+          "childNode": {
+            "id": "n_aegis",
+            "type": 15,
+            "name": "Aegis 同步审查",
+            "triggerSetting": {
+              "type": 1,
+              "httpRequestSetting": {
+                "url": "http://${spk-base-url}/spk/aegis/review",
+                "body": [
+                  { "type": 1, "key": "nodeKey", "value": "n_aegis" }
+                ],
+                "response": [
+                  { "key": "aegisVerdict", "value": "aegisVerdict" },
+                  { "key": "aegisReport", "value": "aegisReport" }
+                ]
+              }
+            },
+            "childNode": {
+              "id": "n_adcp",
+              "type": 51,
+              "name": "ADCP Aegis 裁决分支",
+              "conditionNodes": [
+                {
+                  "id": "n_adcp_pass",
+                  "type": 50,
+                  "name": "通过",
+                  "conditionSetting": {
+                    "conditionType": 1,
+                    "conditionExpression": "${aegisVerdict == 'pass'}",
+                    "defaultFlow": false
+                  }
+                },
+                {
+                  "id": "n_adcp_default",
+                  "type": 50,
+                  "name": "条件/失败",
+                  "conditionSetting": {
+                    "conditionType": 1,
+                    "defaultFlow": true
+                  }
+                }
+              ],
+              "childNode": {
+                "id": "n_tr6",
+                "type": 11,
+                "name": "TR6 发布评审",
+                "candidateStrategy": 36,
+                "approveType": 1,
+                "approveMethod": 1,
+                "rejectHandler": { "type": 1 },
+                "childNode": {
+                  "id": "n_g8",
+                  "type": 15,
+                  "name": "G8 退市门禁",
+                  "triggerSetting": {
+                    "type": 2,
+                    "httpRequestSetting": {
+                      "url": "http://${spk-base-url}/spk/gate/dispatch",
+                      "body": [
+                        { "type": 1, "key": "gate", "value": "g8" }
+                      ]
+                    }
+                  },
+                  "childNode": null
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -15,20 +15,21 @@
         <!-- 各种 module 拓展 -->
         <module>yudao-module-system</module>
         <module>yudao-module-infra</module>
-<!--        <module>yudao-module-member</module>-->
-<!--        <module>yudao-module-bpm</module>-->
-<!--        <module>yudao-module-report</module>-->
-<!--        <module>yudao-module-mp</module>-->
-<!--        <module>yudao-module-pay</module>-->
-<!--        <module>yudao-module-mall</module>-->
-<!--        <module>yudao-module-crm</module>-->
-<!--        <module>yudao-module-erp</module>-->
-<!--        <module>yudao-module-iot</module>-->
-<!--        <module>yudao-module-mes</module>-->
-<!--        <module>yudao-module-wms</module>-->
-<!--        <module>yudao-module-im</module>-->
-<!-- 请参考 https://doc.iocoder.cn/ai/build/ 文档，完成 AI 模块的启动！！！ -->
-<!--        <module>yudao-module-ai</module>-->
+        <module>yudao-module-member</module> <!-- SPK-OS: 启用会员中心 -->
+        <module>yudao-module-bpm</module>
+        <module>yudao-module-report</module> <!-- SPK-OS: 启用数据报表 -->
+        <module>yudao-module-mp</module> <!-- SPK-OS: 启用微信公众号 -->
+        <module>yudao-module-pay</module> <!-- SPK-OS: 启用支付服务 -->
+        <module>yudao-module-mall</module> <!-- SPK-OS: 启用商城（聚合 product/promotion/trade/statistics） -->
+        <module>yudao-module-crm</module> <!-- SPK-OS: 启用 CRM -->
+        <module>yudao-module-erp</module> <!-- SPK-OS: 启用 ERP -->
+        <module>yudao-module-iot</module> <!-- SPK-OS: 启用 IoT 物联网（聚合 iot-biz/iot-core/iot-gateway） -->
+        <module>yudao-module-mes</module> <!-- SPK-OS: 启用 MES 制造执行 -->
+        <module>yudao-module-wms</module> <!-- SPK-OS: 启用 WMS 仓库管理 -->
+        <module>yudao-module-im</module> <!-- SPK-OS: 启用 IM 即时通讯 -->
+        <!-- 请参考 https://doc.iocoder.cn/ai/build/ 文档，完成 AI 模块的启动！！！ -->
+        <module>yudao-module-ai</module> <!-- SPK-OS: 启用 AI 大模型 -->
+        <module>yudao-module-spk-delivery</module> <!-- SPK-OS: IPD 交付子系统自研模块 -->
     </modules>
 
     <name>${project.artifactId}</name>

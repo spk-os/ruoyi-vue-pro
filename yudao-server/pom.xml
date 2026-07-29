@@ -32,109 +32,126 @@
             <version>${revision}</version>
         </dependency>
 
-        <!-- 会员中心。默认注释，保证编译速度 -->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-member</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
+        <!-- 会员中心。SPK-OS: 启用 -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-member</artifactId>
+            <version>${revision}</version>
+        </dependency>
 
-        <!-- 数据报表。默认注释，保证编译速度 -->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-report</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
+        <!-- 数据报表。SPK-OS: 暂未启用——jimureport-spring-boot3-starter（2.3.4/2.5.0 均基于 Spring Boot 3.x）
+             的 JimuAiAssistantServiceImpl <clinit> 调用 HttpComponentsClientHttpRequestFactory.setConnectTimeout(int)，
+             该方法在 Spring Framework 7 / Spring Boot 4 已移除 → 启动期 NoSuchMethodError 致整个应用启动失败。
+             jimureport 目前无 Boot 4 兼容版本，待上游发布后再取消注释重启。
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-report</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        -->
+
         <!-- 工作流。默认注释，保证编译速度 -->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-bpm</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
-        <!-- 支付服务。默认注释，保证编译速度 -->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-pay</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-bpm</artifactId>
+            <version>${revision}</version>
+        </dependency>
 
-        <!-- 微信公众号模块。默认注释，保证编译速度 -->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-mp</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
+        <!-- 支付服务。SPK-OS: 启用 -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-pay</artifactId>
+            <version>${revision}</version>
+        </dependency>
 
-        <!-- 商城相关模块。默认注释，保证编译速度-->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-product</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-promotion</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-trade</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-statistics</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
+        <!-- 微信公众号模块。SPK-OS: 暂未启用——MP 的 MpAccountServiceImpl 启动期会查 mp_account 表，
+             该模块 DDL 缺失（见 功能开启.md §4.1.1），会导致整个应用启动失败。
+             待补齐 mp_account 等 8 张表后取消下方注释并重启。 -->
+        <!--
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-mp</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        -->
 
-        <!-- CRM 相关模块。默认注释，保证编译速度 -->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-crm</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
+        <!-- 商城相关模块。SPK-OS: 启用（product/promotion/trade/statistics） -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-product</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-promotion</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-trade</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-statistics</artifactId>
+            <version>${revision}</version>
+        </dependency>
 
-        <!-- ERP 相关模块。默认注释，保证编译速度 -->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-erp</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
+        <!-- CRM 相关模块。SPK-OS: 启用 -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-crm</artifactId>
+            <version>${revision}</version>
+        </dependency>
 
-        <!-- AI 大模型相关模块。默认注释，保证编译速度 -->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-ai</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
+        <!-- ERP 相关模块。SPK-OS: 启用 -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-erp</artifactId>
+            <version>${revision}</version>
+        </dependency>
 
-        <!-- IoT 物联网相关模块。默认注释，保证编译速度 -->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-iot-biz</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
+        <!-- AI 大模型相关模块。SPK-OS: 启用 -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-ai</artifactId>
+            <version>${revision}</version>
+        </dependency>
 
-        <!-- MES 制造执行系统相关模块 -->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-mes</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
+        <!-- SPK-OS: IPD 交付子系统自研模块（依赖 bpm + ai + system） -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-spk-delivery</artifactId>
+            <version>${revision}</version>
+        </dependency>
 
-        <!-- WMS 仓库管理模块 -->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-wms</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
+        <!-- IoT 物联网相关模块。SPK-OS: 启用（依赖 iot-biz，自动引入 iot-core） -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-iot-biz</artifactId>
+            <version>${revision}</version>
+        </dependency>
 
-        <!-- IM 相关模块。默认注释，保证编译速度 -->
-<!--        <dependency>-->
-<!--            <groupId>cn.iocoder.boot</groupId>-->
-<!--            <artifactId>yudao-module-im</artifactId>-->
-<!--            <version>${revision}</version>-->
-<!--        </dependency>-->
+        <!-- MES 制造执行系统相关模块。SPK-OS: 启用 -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-mes</artifactId>
+            <version>${revision}</version>
+        </dependency>
+
+        <!-- WMS 仓库管理模块。SPK-OS: 启用 -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-wms</artifactId>
+            <version>${revision}</version>
+        </dependency>
+
+        <!-- IM 相关模块。SPK-OS: 启用 -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-module-im</artifactId>
+            <version>${revision}</version>
+        </dependency>
 
         <!-- spring boot 配置所需依赖 -->
         <dependency>
@@ -147,6 +164,12 @@
         <dependency>
             <groupId>cn.iocoder.boot</groupId>
             <artifactId>yudao-spring-boot-starter-protection</artifactId>
+        </dependency>
+
+        <!-- PostgreSQL 驱动：mybatis starter 中为 optional 不传递，yudao-server 显式引入（SPK-OS 用 postgres） -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
         </dependency>
 
     </dependencies>

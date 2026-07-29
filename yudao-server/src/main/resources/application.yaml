@@ -153,9 +153,12 @@ spring:
         client:
           host: 127.0.0.1
           port: 19530
-    openai: # OpenAI 官方
-      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
-      api-key: ${OPENAI_API_KEY:sk-xxxx}
+    openai: # OpenAI 官方（SPK-OS: 经 new-api 网关统一接入，OpenAI 兼容）
+      base-url: ${OPENAI_BASE_URL:http://192.168.56.101:3500/v1}
+      api-key: ${OPENAI_API_KEY:sk-AiTPLJUMp7tmYJF8pSer9F8EqsFjAYLQQCOvN2PshxFQ19hn}
+      chat:
+        options:
+          model: ${OPENAI_MODEL:deepseek-v4-flash}
     anthropic: # Anthropic Claude
       base-url: ${ANTHROPIC_BASE_URL:https://api.anthropic.com}
       api-key: ${ANTHROPIC_API_KEY:sk-xxxx}
@@ -318,6 +321,16 @@ yudao:
       - /admin-api/system/user/profile/**
       - /admin-api/system/auth/**
     ignore-tables:
+      # BPM 模块 DO 均继承 BaseDO（无 tenantId 字段），H2 建表脚本亦无 tenant_id 列，
+      # 属租户无关表；SPK-OS 单租户(tenant=1)，显式忽略避免租户拦截器追加 tenant_id 致 SQL 报错
+      - bpm_user_group
+      - bpm_category
+      - bpm_form
+      - bpm_process_listener
+      - bpm_process_expression
+      - bpm_process_definition_info
+      - bpm_process_instance_copy
+      - bpm_oa_leave
     ignore-caches:
       - user_role_ids
       - permission_menu_ids
