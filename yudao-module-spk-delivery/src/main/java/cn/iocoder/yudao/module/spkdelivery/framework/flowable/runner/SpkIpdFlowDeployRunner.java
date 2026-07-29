@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.spkdelivery.framework.flowable.runner;
 
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
+import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.bpm.controller.admin.definition.vo.model.BpmModelSaveReqVO;
 import cn.iocoder.yudao.module.bpm.controller.admin.definition.vo.model.simple.BpmSimpleModelNodeVO;
 import cn.iocoder.yudao.module.bpm.enums.definition.BpmModelFormTypeEnum;
@@ -61,6 +62,10 @@ public class SpkIpdFlowDeployRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        // SPK-OS 单租户(tenant=1)：启动时无租户上下文，显式设为 1，使流程部署到 tenant 1，
+        // 实例继承 tenant 1，HTTP 触发器回写 tenant-id:1 头，/admin-api/spk/* 回调端点免 400。
+        Long prevTenant = TenantContextHolder.getTenantId();
+        TenantContextHolder.setTenantId(1L);
         try {
             // 1. 读取 simpleModel JSON 并替换占位
             String json = StreamUtils.copyToString(
@@ -103,11 +108,13 @@ public class SpkIpdFlowDeployRunner implements ApplicationRunner {
                 log.warn("[run][记录流程契约快照失败，不影响部署]", e);
             }
 
-            // 5. 部署：已部署则跳过，避免每次启动产生新版本
+            // 5. 部署：已部署则跳过，避免每次启动产生新版本（按当前租户作用域，避免命中其他租户的旧部署）
             List<ProcessDefinition> deployed = repositoryService.createProcessDefinitionQuery()
-                    .processDefinitionKey(MODEL_KEY).latestVersion().list();
+                    .processDefinitionKey(MODEL_KEY).processDefinitionTenantId(FlowableUtils.getTenantId())
+                    .latestVersion().list();
             if (!deployed.isEmpty()) {
-                log.info("[run][IPD 流程已部署，跳过 deploymentId={}]", deployed.get(0).getDeploymentId());
+                log.info("[run][IPD 流程已部署，跳过 deploymentId={} tenant={}]",
+                        deployed.get(0).getDeploymentId(), FlowableUtils.getTenantId());
                 return;
             }
             modelService.deployModel(systemUserId, modelId);
@@ -115,6 +122,13 @@ public class SpkIpdFlowDeployRunner implements ApplicationRunner {
         } catch (Exception e) {
             // 仿 TDengineTableInitRunner：部署失败不阻断应用启动
             log.error("[run][IPD 流程自动部署失败，可经管理后台手工导入]", e);
+        } finally {
+            // 恢复租户上下文（避免污染启动期其他 Runner）
+            if (prevTenant == null) {
+                TenantContextHolder.clear();
+            } else {
+                TenantContextHolder.setTenantId(prevTenant);
+            }
         }
     }
 

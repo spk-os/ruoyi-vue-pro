@@ -9,7 +9,7 @@
     "triggerSetting": {
       "type": 2,
       "httpRequestSetting": {
-        "url": "http://${spk-base-url}/spk/gate/dispatch",
+        "url": "http://${spk-base-url}/admin-api/spk/gate/dispatch",
         "body": [
           { "type": 1, "key": "gate", "value": "g1" }
         ]
@@ -22,7 +22,7 @@
       "triggerSetting": {
         "type": 1,
         "httpRequestSetting": {
-          "url": "http://${spk-base-url}/spk/agent-task/run",
+          "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
           "body": [
             { "type": 1, "key": "roleId", "value": "1" },
             { "type": 1, "key": "prompt", "value": "起草产品概念方案：定位、目标用户、核心场景" },
@@ -48,7 +48,7 @@
           "triggerSetting": {
             "type": 1,
             "httpRequestSetting": {
-              "url": "http://${spk-base-url}/spk/agent-task/run",
+              "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
               "body": [
                 { "type": 1, "key": "roleId", "value": "1" },
                 { "type": 1, "key": "prompt", "value": "输出系统架构设计：模块划分、关键接口、技术选型" },
@@ -66,7 +66,7 @@
             "triggerSetting": {
               "type": 1,
               "httpRequestSetting": {
-                "url": "http://${spk-base-url}/spk/aegis/review",
+                "url": "http://${spk-base-url}/admin-api/spk/aegis/review",
                 "body": [
                   { "type": 1, "key": "nodeKey", "value": "n_aegis" }
                 ],
@@ -116,13 +116,17 @@
                   "triggerSetting": {
                     "type": 2,
                     "httpRequestSetting": {
-                      "url": "http://${spk-base-url}/spk/gate/dispatch",
+                      "url": "http://${spk-base-url}/admin-api/spk/gate/dispatch",
                       "body": [
                         { "type": 1, "key": "gate", "value": "g8" }
                       ]
                     }
                   },
-                  "childNode": null
+                  "childNode": {
+                    "id": "n_end",
+                    "type": 1,
+                    "name": "结束"
+                  }
                 }
               }
             }

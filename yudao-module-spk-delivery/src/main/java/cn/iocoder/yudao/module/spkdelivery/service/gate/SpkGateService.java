@@ -62,9 +62,8 @@ public class SpkGateService {
      * @param report         派发附带上文（可选）
      */
     public void onDispatch(String token, String instanceId, String gate, String taskDefineKey, String report) {
-        if (callbackSecret != null && !callbackSecret.isEmpty() && !callbackSecret.equals(token)) {
-            throw exception(GATE_CALLBACK_SIGNATURE_INVALID);
-        }
+        // /dispatch 由 BPM HTTP_CALLBACK 触发器在本机回环调用（可信内部调用，无法携带 X-Spk-Token），
+        // 故不校验签名；签名校验仅限 /callback（外部 Gitea Actions CI 回调）。
         SpkGateRecordDO record = SpkGateRecordDO.builder()
                 .instanceId(instanceId)
                 .gate(gate)
