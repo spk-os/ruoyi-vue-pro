@@ -215,3 +215,80 @@ CREATE TABLE IF NOT EXISTS "spk_dcp_redirect_log" (
 COMMENT ON TABLE "spk_dcp_redirect_log" IS 'SPK-OS DCP 回退日志';
 COMMENT ON COLUMN "spk_dcp_redirect_log"."dcp" IS 'DCP 标识 cdc/pdc/adc/ldc';
 CREATE SEQUENCE IF NOT EXISTS spk_dcp_redirect_log_seq;
+
+-- ----------------------------
+-- SPK-OS 智能体模块：智能体定义 + 编队（头表 + 成员表）
+-- ----------------------------
+
+CREATE TABLE IF NOT EXISTS "spk_agent_def" (
+    "id" int8 NOT NULL,
+    "name" varchar(100) NOT NULL,
+    "code" varchar(64) NOT NULL,
+    "role" varchar(100) NOT NULL,
+    "session_key" varchar(128) NULL,
+    "soul_content" text NULL,
+    "working_memory" text NULL,
+    "status" varchar(20) NOT NULL DEFAULT 'offline',
+    "model" varchar(100) NULL,
+    "role_id" int8 NULL,
+    "conversation_id" int8 NULL,
+    "tools_config" text NULL,
+    "config" text NULL,
+    "runtime_type" varchar(20) NOT NULL DEFAULT 'native',
+    "source" varchar(20) NOT NULL DEFAULT 'manual',
+    "hidden" int2 NOT NULL DEFAULT 0,
+    "last_seen" timestamp NULL,
+    "last_activity" varchar(255) NULL,
+    "creator" varchar(64) NULL DEFAULT '',
+    "create_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updater" varchar(64) NULL DEFAULT '',
+    "update_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "deleted" int2 NOT NULL DEFAULT 0,
+    "tenant_id" int8 NOT NULL DEFAULT 0,
+    PRIMARY KEY ("id")
+);
+COMMENT ON TABLE "spk_agent_def" IS 'SPK-OS 智能体定义（不依赖 openclaw，本地实现）';
+COMMENT ON COLUMN "spk_agent_def"."status" IS '状态 offline/idle/busy/error';
+COMMENT ON COLUMN "spk_agent_def"."role_id" IS '关联 yudao AiChatRoleDO.id';
+COMMENT ON COLUMN "spk_agent_def"."conversation_id" IS '关联 yudao AiChatConversationDO.id';
+COMMENT ON COLUMN "spk_agent_def"."runtime_type" IS '运行时类型 native/claude/codex/custom';
+CREATE SEQUENCE IF NOT EXISTS spk_agent_def_seq;
+
+CREATE TABLE IF NOT EXISTS "spk_agent_squad" (
+    "id" int8 NOT NULL,
+    "name" varchar(100) NOT NULL,
+    "code" varchar(64) NOT NULL,
+    "description" varchar(500) NULL,
+    "status" varchar(20) NOT NULL DEFAULT 'active',
+    "config" text NULL,
+    "creator" varchar(64) NULL DEFAULT '',
+    "create_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updater" varchar(64) NULL DEFAULT '',
+    "update_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "deleted" int2 NOT NULL DEFAULT 0,
+    "tenant_id" int8 NOT NULL DEFAULT 0,
+    PRIMARY KEY ("id")
+);
+COMMENT ON TABLE "spk_agent_squad" IS 'SPK-OS 智能体编队（独立编队实体）';
+COMMENT ON COLUMN "spk_agent_squad"."status" IS '状态 active/disabled';
+CREATE SEQUENCE IF NOT EXISTS spk_agent_squad_seq;
+
+CREATE TABLE IF NOT EXISTS "spk_agent_squad_member" (
+    "id" int8 NOT NULL,
+    "squad_id" int8 NOT NULL,
+    "agent_id" int8 NOT NULL,
+    "role" varchar(100) NULL,
+    "sort_order" int4 NOT NULL DEFAULT 0,
+    "creator" varchar(64) NULL DEFAULT '',
+    "create_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updater" varchar(64) NULL DEFAULT '',
+    "update_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "deleted" int2 NOT NULL DEFAULT 0,
+    "tenant_id" int8 NOT NULL DEFAULT 0,
+    PRIMARY KEY ("id")
+);
+COMMENT ON TABLE "spk_agent_squad_member" IS 'SPK-OS 智能体编队成员';
+COMMENT ON COLUMN "spk_agent_squad_member"."squad_id" IS '编队 id';
+COMMENT ON COLUMN "spk_agent_squad_member"."agent_id" IS '智能体定义 id';
+COMMENT ON COLUMN "spk_agent_squad_member"."sort_order" IS '顺序（升序，wake 按此串行）';
+CREATE SEQUENCE IF NOT EXISTS spk_agent_squad_member_seq;
