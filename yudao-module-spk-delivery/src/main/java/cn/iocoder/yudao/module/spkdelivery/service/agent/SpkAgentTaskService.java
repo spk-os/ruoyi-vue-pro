@@ -2,6 +2,8 @@ package cn.iocoder.yudao.module.spkdelivery.service.agent;
 
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agent.SpkAgentTaskDO;
 
+import java.util.List;
+
 /**
  * SPK-OS Agent 任务服务
  * <p>
@@ -37,5 +39,10 @@ public interface SpkAgentTaskService {
      * 根据流程实例与节点查询 agent 任务
      */
     SpkAgentTaskDO getByInstanceIdAndNodeKey(String instanceId, String nodeKey);
+
+    /**
+     * 按流程实例查询全部 agent 任务（用于详情页 IPD 产物 tab）
+     */
+    List<SpkAgentTaskDO> getListByInstanceId(String instanceId);
 
 }

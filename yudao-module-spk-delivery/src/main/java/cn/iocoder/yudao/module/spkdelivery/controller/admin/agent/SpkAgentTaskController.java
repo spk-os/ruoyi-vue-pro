@@ -10,7 +10,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.annotation.security.PermitAll;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
@@ -60,6 +63,14 @@ public class SpkAgentTaskController {
     public CommonResult<Boolean> callback(@Valid @RequestBody SpkAgentTaskCallbackReqVO reqVO) {
         agentTaskService.callback(reqVO.getTaskId(), reqVO.getStatus(), reqVO.getResult());
         return success(true);
+    }
+
+    @GetMapping("/list-by-instance")
+    @Operation(summary = "按流程实例查询 Agent 任务产物（IPD 产物 tab）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:agent:query')")
+    public CommonResult<List<SpkAgentTaskDO>> listByInstance(
+            @Parameter(description = "流程实例编号") @RequestParam("processInstanceId") String processInstanceId) {
+        return success(agentTaskService.getListByInstanceId(processInstanceId));
     }
 
 }

@@ -53,3 +53,10 @@ application-my.yaml
 /yudao-ui-app/unpackage/
 .DS_Store
 **/.DS_Store
+
+### CodeGraph 代码索引（本地知识图谱，勿入库）###
+.codegraph/
+.codewiki_cache/
+### 本地配置备份，勿入库 ###
+*.bak.*
+*.bak

@@ -86,8 +86,7 @@ public class SpkGateService {
      * @param report     门禁报告（JSON）
      * @param pass       是否通过
      */
-    public void onCallback(String token, String instanceId, String gate, String nodeKey, String report, Boolean pass) {
-        if (callbackSecret != null && !callbackSecret.isEmpty() && !callbackSecret.equals(token)) {
+    public void onCallback(String token, String instanceId, String gate, String nodeKey, String report, Boolean pass) {        if (callbackSecret != null && !callbackSecret.isEmpty() && !callbackSecret.equals(token)) {
             throw exception(GATE_CALLBACK_SIGNATURE_INVALID);
         }
         // 1. 解析 receiveTask key：未传则取当前活动 id（线性流程下即 receiveTask）
@@ -120,6 +119,13 @@ public class SpkGateService {
         // 4. trigger receiveTask 推进
         processTaskApi.triggerTask(instanceId, receiveTaskKey);
         log.info("[onCallback][instanceId={} gate={} pass={} nodeKey={}]", instanceId, gate, pass, receiveTaskKey);
+    }
+
+    /**
+     * 按流程实例查询全部门禁记录（用于详情页 IPD 产物 tab）
+     */
+    public List<SpkGateRecordDO> getListByInstanceId(String instanceId) {
+        return gateRecordMapper.selectListByInstanceId(instanceId);
     }
 
 }

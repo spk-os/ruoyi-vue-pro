@@ -85,4 +85,11 @@ public class SpkDcpRedirectService {
         log.info("[redirect][instanceId={} dcp={} count={} target={}]", instanceId, dcp, count, targetNode);
     }
 
+    /**
+     * 按流程实例查询全部 DCP 回退日志（用于详情页 IPD 产物 tab）
+     */
+    public List<SpkDcpRedirectLogDO> getListByInstanceId(String instanceId) {
+        return dcpRedirectLogMapper.selectListByInstanceId(instanceId);
+    }
+
 }

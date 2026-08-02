@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.spkdelivery.controller.admin.dcp;
 
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.dcp.SpkDcpRedirectLogDO;
 import cn.iocoder.yudao.module.spkdelivery.service.dcp.SpkDcpRedirectService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -8,10 +9,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
@@ -38,6 +42,14 @@ public class SpkDcpController {
             @Parameter(description = "回退目标节点 key") @RequestParam("targetNode") String targetNode) {
         dcpRedirectService.redirect(processInstanceId, dcp, targetNode);
         return success(true);
+    }
+
+    @GetMapping("/list-by-instance")
+    @Operation(summary = "按流程实例查询 DCP 回退日志（IPD 产物 tab）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:dcp:query')")
+    public CommonResult<List<SpkDcpRedirectLogDO>> listByInstance(
+            @Parameter(description = "流程实例编号") @RequestParam("processInstanceId") String processInstanceId) {
+        return success(dcpRedirectService.getListByInstanceId(processInstanceId));
     }
 
 }

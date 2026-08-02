@@ -64,16 +64,14 @@
             <version>${revision}</version>
         </dependency>
 
-        <!-- 微信公众号模块。SPK-OS: 暂未启用——MP 的 MpAccountServiceImpl 启动期会查 mp_account 表，
-             该模块 DDL 缺失（见 功能开启.md §4.1.1），会导致整个应用启动失败。
-             待补齐 mp_account 等 8 张表后取消下方注释并重启。 -->
-        <!--
+        <!-- 微信公众号模块。SPK-OS: 启用——mp_account 等 8 张表已由 v7.0.2 补齐
+             （sql/postgresql/optional/04_mp_tables.sql），wx-java-mp-spring-boot-starter
+             4.8.4-20260623 随模块传递引入（yudao-dependencies 锁定）。 -->
         <dependency>
             <groupId>cn.iocoder.boot</groupId>
             <artifactId>yudao-module-mp</artifactId>
             <version>${revision}</version>
         </dependency>
-        -->
 
         <!-- 商城相关模块。SPK-OS: 启用（product/promotion/trade/statistics） -->
         <dependency>

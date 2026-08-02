@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
@@ -115,6 +116,11 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
             throw exception(AGENT_TASK_NOT_EXISTS);
         }
         return task;
+    }
+
+    @Override
+    public List<SpkAgentTaskDO> getListByInstanceId(String instanceId) {
+        return agentTaskMapper.selectListByInstanceId(instanceId);
     }
 
     /**

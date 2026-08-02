@@ -5782,3 +5782,47 @@ CREATE TABLE IF NOT EXISTS "spk_dcp_redirect_log" (
 COMMENT ON TABLE "spk_dcp_redirect_log" IS 'SPK-OS DCP 回退日志';
 COMMENT ON COLUMN "spk_dcp_redirect_log"."dcp" IS 'DCP 标识 cdc/pdc/adc/ldc';
 CREATE SEQUENCE IF NOT EXISTS spk_dcp_redirect_log_seq;
+
+-- ----------------------------
+-- SPK-OS IPD 流程可视化：菜单 + 按钮权限（流程实例详情页「IPD 产物」tab + IPD 流程列表入口）
+-- 复用 yudao 原生流程实例详情页，仅增量查询接口。超管（role_id=1）自动授权。
+-- ----------------------------
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, updater, deleted)
+VALUES (6800, 'SPK 研发', '', 1, 50, 0, '/spk', 'ep:cpu', NULL, NULL, 0, true, true, true, 'admin', 'admin', 0)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, updater, deleted)
+VALUES (6801, 'IPD 流程', '', 2, 1, 6800, 'ipd-process', 'ep:set-up', 'spk/ipd/process/index', 'SpkIpdProcess', 0, true, true, true, 'admin', 'admin', 0)
+ON CONFLICT (id) DO NOTHING;
+
+-- IPD 流程列表查询按钮
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, updater, deleted)
+VALUES (6802, 'IPD 流程查询', 'spk:ipd-process:query', 3, 1, 6801, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0)
+ON CONFLICT (id) DO NOTHING;
+
+-- 7 个产物域查询按钮权限（供流程实例详情页「IPD 产物」tab 调用聚合查询接口）
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, updater, deleted)
+VALUES
+(6803, '门禁记录查询', 'spk-delivery:gate:query',     3, 2,  6801, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6804, 'Agent 产物查询', 'spk-delivery:agent:query',   3, 3,  6801, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6805, 'Aegis 裁决查询', 'spk-delivery:aegis:query',  3, 4,  6801, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6806, 'CCB 台账查询',   'spk-delivery:ccb:query',    3, 5,  6801, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6807, 'DCP 回退查询',   'spk-delivery:dcp:query',    3, 6,  6801, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6808, 'R7 反馈查询',    'spk-delivery:feedback:query', 3, 7, 6801, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6809, 'R8 退市查询',    'spk-delivery:sunset:query',  3, 8, 6801, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0)
+ON CONFLICT (id) DO NOTHING;
+
+-- 超级管理员（role_id=1）自动授权以上菜单
+INSERT INTO system_role_menu (id, role_id, menu_id, creator, updater, deleted, tenant_id)
+VALUES
+(6900, 1, 6800, 'admin', 'admin', 0, 1),
+(6901, 1, 6801, 'admin', 'admin', 0, 1),
+(6902, 1, 6802, 'admin', 'admin', 0, 1),
+(6903, 1, 6803, 'admin', 'admin', 0, 1),
+(6904, 1, 6804, 'admin', 'admin', 0, 1),
+(6905, 1, 6805, 'admin', 'admin', 0, 1),
+(6906, 1, 6806, 'admin', 'admin', 0, 1),
+(6907, 1, 6807, 'admin', 'admin', 0, 1),
+(6908, 1, 6808, 'admin', 'admin', 0, 1),
+(6909, 1, 6809, 'admin', 'admin', 0, 1)
+ON CONFLICT (id) DO NOTHING;

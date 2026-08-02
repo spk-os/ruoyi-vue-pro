@@ -60,24 +60,32 @@ spring:
       primary: master
       datasource:
         master:
-          url: jdbc:postgresql://127.0.0.1:5433/yudao
-          username: postgres
-          password: difyai123456
+          url: jdbc:postgresql://192.168.56.101:5435/yudao
+          username: spk
+          password: wNqULpoQdeNSeFPRPSkGOlOh
           driver-class-name: org.postgresql.Driver
         slave: # 模拟从库，可根据自己需要修改
           lazy: true # 开启懒加载，保证启动速度
-          url: jdbc:postgresql://127.0.0.1:5433/yudao
-          username: postgres
-          password: difyai123456
+          url: jdbc:postgresql://192.168.56.101:5435/yudao
+          username: spk
+          password: wNqULpoQdeNSeFPRPSkGOlOh
           driver-class-name: org.postgresql.Driver
+        tdengine: # IoT 时序数据库（device_message 超级表）；SPK-OS 2026-08-02 部署，供 iot/home 设备消息统计
+          lazy: true # 开启懒加载，保证启动速度
+          url: jdbc:TAOS-WS://127.0.0.1:6041/ruoyi_vue_pro?varcharAsString=true&enableAutoReconnect=true # 参见：https://t.zsxq.com/qaX9c，开启 TDengine WebSocket 自动重连
+          driver-class-name: com.taosdata.jdbc.ws.WebSocketDriver
+          username: root
+          password: taosdata
+          druid:
+            validation-query: SELECT SERVER_STATUS() # TDengine 数据源的有效性检查 SQL
 
   # Redis 配置。Redisson 默认的配置足够使用，一般不需要进行调优
   data:
     redis:
-      host: 127.0.0.1 # 宿主端口映射（docker-compose.ha.yml: redis ports 127.0.0.1:6379:6379），容器内网 IP 易变故改走宿主回环
-      port: 6379 # 端口
+      host: 192.168.56.101
+      port: 6381
       database: 1 # 数据库索引
-      password: redis_secure_2026 # 密码（new-api-redis --requirepass）
+      password: MQ9PWN5iL27G2n3N7dPpx4SK
 
 --- #################### 定时任务相关配置 ####################
 

@@ -8,7 +8,9 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.annotation.security.PermitAll;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -62,6 +64,14 @@ public class SpkAegisController {
         data.put("aegisVerdict", review.getVerdict());
         data.put("aegisReport", review.getReport());
         return success(data);
+    }
+
+    @GetMapping("/get-by-instance")
+    @Operation(summary = "按流程实例查询 Aegis 审查结论（IPD 产物 tab）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:aegis:query')")
+    public CommonResult<SpkAegisReviewDO> getByInstance(
+            @Parameter(description = "流程实例编号") @RequestParam("processInstanceId") String processInstanceId) {
+        return success(aegisReviewService.getByInstanceId(processInstanceId));
     }
 
 }

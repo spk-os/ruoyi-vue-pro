@@ -8,10 +8,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
@@ -39,6 +42,14 @@ public class SpkFeedbackController {
             @RequestParam(value = "summary", required = false) String summary,
             @RequestParam(value = "newCharterSeed", required = false) Boolean newCharterSeed) {
         return success(feedbackService.collect(processInstanceId, source, content, summary, newCharterSeed));
+    }
+
+    @GetMapping("/list-by-instance")
+    @Operation(summary = "按流程实例查询 R7 反馈（IPD 产物 tab）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:feedback:query')")
+    public CommonResult<List<SpkFeedbackDO>> listByInstance(
+            @RequestParam("processInstanceId") String processInstanceId) {
+        return success(feedbackService.getListByInstanceId(processInstanceId));
     }
 
 }

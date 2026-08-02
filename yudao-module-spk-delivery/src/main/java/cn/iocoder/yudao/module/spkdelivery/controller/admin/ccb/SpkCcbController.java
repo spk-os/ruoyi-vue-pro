@@ -8,10 +8,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
@@ -39,6 +42,14 @@ public class SpkCcbController {
             @RequestParam(value = "impact", required = false) String impact,
             @RequestParam(value = "decision", required = false) String decision) {
         return success(ccbService.register(changeId, processInstanceId, changeRequest, impact, decision));
+    }
+
+    @GetMapping("/list-by-instance")
+    @Operation(summary = "按流程实例查询 CCB 变更台账（IPD 产物 tab）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:ccb:query')")
+    public CommonResult<List<SpkCcbRecordDO>> listByInstance(
+            @RequestParam("processInstanceId") String processInstanceId) {
+        return success(ccbService.getListByInstanceId(processInstanceId));
     }
 
 }

@@ -135,4 +135,11 @@ public class SpkAegisReviewService {
         return review;
     }
 
+    /**
+     * 按流程实例查询 Aegis 审查结论（用于详情页 IPD 产物 tab，取最近一条）
+     */
+    public SpkAegisReviewDO getByInstanceId(String instanceId) {
+        return aegisReviewMapper.selectByInstanceId(instanceId);
+    }
+
 }

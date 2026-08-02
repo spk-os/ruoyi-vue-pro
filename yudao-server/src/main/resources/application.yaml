@@ -331,6 +331,24 @@ yudao:
       - bpm_process_definition_info
       - bpm_process_instance_copy
       - bpm_oa_leave
+      # Pay 模块以下 DO 继承 BaseDO（无 tenantId 字段），DDL 亦无 tenant_id 列，
+      # 属平台级租户无关表；SPK-OS 单租户(tenant=1)，显式忽略避免租户拦截器追加 tenant_id 致 SQL 报错
+      - pay_app
+      - pay_notify_log
+      - pay_order
+      - pay_order_extension
+      - pay_refund
+      - pay_transfer
+      # Trade/Product/Pay-wallet 以下 DO 继承 BaseDO（无 tenantId 字段），DDL 亦无 tenant_id 列，
+      # 属租户无关表（按 user_id 业务隔离）；拦截器默认对其注入 tenant_id 致 SQL 报"column tenant_id does not exist"，故显式忽略
+      - trade_order
+      - trade_order_item
+      - trade_after_sale
+      - trade_cart
+      - pay_wallet_recharge
+      - pay_wallet_transaction
+      - product_browse_history
+      - product_favorite
     ignore-caches:
       - user_role_ids
       - permission_menu_ids

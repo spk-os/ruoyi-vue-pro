@@ -7,7 +7,7 @@
         FROM infra_api_access_log
         WHERE user_type = #{userType}
         AND create_time BETWEEN #{beginTime} AND #{endTime}
-        AND deleted = FALSE
+        AND deleted = 0
     </select>
 
     <select id="selectUserCountByUserTypeAndCreateTimeBetween" resultType="java.lang.Integer">
@@ -16,7 +16,7 @@
         WHERE user_id > 0
           AND user_type = #{userType}
           AND create_time BETWEEN #{beginTime} AND #{endTime}
-          AND deleted = FALSE
+          AND deleted = 0
     </select>
 
 </mapper>

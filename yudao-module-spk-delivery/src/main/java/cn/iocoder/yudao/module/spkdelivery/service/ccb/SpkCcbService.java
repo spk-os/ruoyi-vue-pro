@@ -6,6 +6,8 @@ import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
+import java.util.List;
+
 /**
  * SPK-OS CCB 变更台账服务
  *
@@ -28,6 +30,13 @@ public class SpkCcbService {
                 .build();
         ccbRecordMapper.insert(record);
         return record;
+    }
+
+    /**
+     * 按流程实例查询全部 CCB 变更台账（用于详情页 IPD 产物 tab）
+     */
+    public List<SpkCcbRecordDO> getListByInstanceId(String instanceId) {
+        return ccbRecordMapper.selectListByInstanceId(instanceId);
     }
 
 }

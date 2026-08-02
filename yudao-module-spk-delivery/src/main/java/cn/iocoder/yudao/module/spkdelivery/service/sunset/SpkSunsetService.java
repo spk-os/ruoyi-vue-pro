@@ -28,4 +28,11 @@ public class SpkSunsetService {
         return sunset;
     }
 
+    /**
+     * 按流程实例查询 R8 退市记录（用于详情页 IPD 产物 tab，取最近一条）
+     */
+    public SpkSunsetDO getByInstanceId(String instanceId) {
+        return sunsetMapper.selectByInstanceId(instanceId);
+    }
+
 }

@@ -12,21 +12,21 @@
                 FROM trade_order AS s
                 WHERE s.receiver_area_id = m.receiver_area_id
                   AND s.pay_status = TRUE
-                  AND s.deleted = FALSE)                       AS orderPayUserCount,
+                  AND s.deleted = 0)                       AS orderPayUserCount,
                (SELECT SUM(s.pay_price)
                 FROM trade_order AS s
                 WHERE s.receiver_area_id = m.receiver_area_id
                   AND s.pay_status = TRUE
-                  AND s.deleted = FALSE)                       AS orderPayPrice
+                  AND s.deleted = 0)                       AS orderPayPrice
         FROM trade_order m
-        WHERE deleted = FALSE
+        WHERE deleted = 0
         GROUP BY receiver_area_id
     </select>
 
     <select id="selectUserCountByCreateTimeBetween" resultType="java.lang.Integer">
         SELECT COUNT(DISTINCT (user_id))
         FROM trade_order
-        WHERE deleted = FALSE
+        WHERE deleted = 0
           AND create_time BETWEEN #{beginTime} AND #{endTime}
     </select>
 
@@ -35,14 +35,14 @@
         FROM trade_order
         WHERE pay_time BETWEEN #{beginTime} AND #{endTime}
           AND pay_status = TRUE
-          AND deleted = FALSE
+          AND deleted = 0
     </select>
 
     <select id="selectCountByCreateTimeBetween" resultType="java.lang.Integer">
         SELECT COUNT(1)
         FROM trade_order
         WHERE create_time BETWEEN #{beginTime} AND #{endTime}
-          AND deleted = FALSE
+          AND deleted = 0
     </select>
 
     <select id="selectCountByPayTimeBetween" resultType="java.lang.Integer">
@@ -50,38 +50,38 @@
         FROM trade_order
         WHERE pay_status = TRUE
           AND create_time BETWEEN #{beginTime} AND #{endTime}
-          AND deleted = FALSE
+          AND deleted = 0
     </select>
 
     <select id="selectSummaryPriceByPayTimeBetween" resultType="java.lang.Integer">
         SELECT SUM(pay_price)
         FROM trade_order AS s
         WHERE s.pay_status = TRUE
-          AND deleted = FALSE
+          AND deleted = 0
           AND create_time BETWEEN #{beginTime} AND #{endTime}
     </select>
 
     <select id="selectListByPayTimeBetweenAndGroupByDay"
             resultType="cn.iocoder.yudao.module.statistics.controller.admin.trade.vo.TradeOrderTrendRespVO">
-        SELECT DATE_FORMAT(pay_time, '%Y-%m-%d') AS date,
+        SELECT TO_CHAR(pay_time, 'YYYY-MM-DD') AS date,
                COUNT(1)                          AS orderPayCount,
                SUM(pay_price)                    AS orderPayPrice
         FROM trade_order
         WHERE pay_status = TRUE
           AND create_time BETWEEN #{beginTime} AND #{endTime}
-          AND deleted = FALSE
+          AND deleted = 0
         GROUP BY date
     </select>
 
     <select id="selectListByPayTimeBetweenAndGroupByMonth"
             resultType="cn.iocoder.yudao.module.statistics.controller.admin.trade.vo.TradeOrderTrendRespVO">
-        SELECT DATE_FORMAT(pay_time, '%Y-%m') AS date,
+        SELECT TO_CHAR(pay_time, 'YYYY-MM') AS date,
                COUNT(1)                       AS order_pay_count,
                SUM(pay_price)                 AS order_pay_price
         FROM trade_order
         WHERE pay_status = TRUE
           AND create_time BETWEEN #{beginTime} AND #{endTime}
-          AND deleted = FALSE
+          AND deleted = 0
         GROUP BY date
     </select>
 
@@ -90,17 +90,17 @@
         FROM trade_order
         WHERE status = #{status}
           ANd delivery_type = #{deliveryType}
-          AND deleted = FALSE
+          AND deleted = 0
     </select>
 
     <select id="selectPaySummaryByPayStatusAndPayTimeBetween"
             resultType="cn.iocoder.yudao.module.statistics.controller.admin.trade.vo.TradeOrderSummaryRespVO">
-        SELECT IFNULL(SUM(pay_price), 0) AS order_pay_price,
+        SELECT COALESCE(SUM(pay_price), 0) AS order_pay_price,
                COUNT(1)                  AS order_pay_count
         FROM trade_order
         WHERE pay_status = #{payStatus}
           AND pay_time BETWEEN #{beginTime} AND #{endTime}
-          AND deleted = FALSE
+          AND deleted = 0
     </select>
 
 </mapper>

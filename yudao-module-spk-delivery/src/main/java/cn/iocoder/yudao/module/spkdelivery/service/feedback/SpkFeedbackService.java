@@ -6,6 +6,8 @@ import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
+import java.util.List;
+
 /**
  * SPK-OS R7 反馈服务
  *
@@ -28,6 +30,13 @@ public class SpkFeedbackService {
                 .build();
         feedbackMapper.insert(fb);
         return fb;
+    }
+
+    /**
+     * 按流程实例查询全部 R7 反馈（用于详情页 IPD 产物 tab）
+     */
+    public List<SpkFeedbackDO> getListByInstanceId(String instanceId) {
+        return feedbackMapper.selectListByInstanceId(instanceId);
     }
 
 }

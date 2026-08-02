@@ -62,7 +62,7 @@
                       </div>
                       <!-- 情况二：业务表单 -->
                       <div v-if="processDefinition?.formType === BpmModelFormType.CUSTOM">
-                        <BusinessFormComponent :id="processInstance.businessKey" />
+                        <BusinessFormComponent :id="processInstance.businessKey" :process-instance-id="id" />
                       </div>
                     </div>
                   </el-col>
@@ -110,6 +110,15 @@
               <el-scrollbar> 流转评论 </el-scrollbar>
             </div>
           </el-tab-pane>
+
+          <!-- SPK-OS IPD 产物（仅 spk-ipd- 流程显示，复用 yudao 流程图/表单/审批记录 tab） -->
+          <el-tab-pane label="IPD 产物" name="spk-ipd" v-if="isSpkIpdFlow" lazy>
+            <div class="form-scroll-area">
+              <el-scrollbar>
+                <SpkIpdProducts :process-instance-id="id" />
+              </el-scrollbar>
+            </div>
+          </el-tab-pane>
         </el-tabs>
 
         <div class="b-t-solid border-t-1px border-[var(--el-border-color)]">
@@ -146,6 +155,7 @@ import ProcessInstanceSimpleViewer from './ProcessInstanceSimpleViewer.vue'
 import ProcessInstanceTaskList from './ProcessInstanceTaskList.vue'
 import ProcessInstanceOperationButton from './ProcessInstanceOperationButton.vue'
 import ProcessInstanceTimeline from './ProcessInstanceTimeline.vue'
+import SpkIpdProducts from './SpkIpdProducts.vue'
 import { FieldPermissionType } from '@/components/SimpleProcessDesignerV2/src/consts'
 import { TaskStatusEnum } from '@/api/bpm/task'
 import runningSvg from '@/assets/svgs/bpm/running.svg'
@@ -301,6 +311,14 @@ const handlePrint = async () => {
 
 /** 当前的 Tab */
 const activeTab = ref('form')
+
+/** 是否为 SPK-OS IPD 流程（决定是否展示「IPD 产物」tab）
+ *  DeployRunner 实际部署 key 为驼峰 spkIpdFlow（live，触发器+finish listener 正常→产产物）；
+ *  同时兼容连字符 spk-ipd- 前缀（旧孤儿部署 / 未来 kebab 归一化）。 */
+const isSpkIpdFlow = computed(() => {
+  const key = processDefinition.value?.key
+  return !!key && (key === 'spkIpdFlow' || key.startsWith('spk-ipd-'))
+})
 
 /** 初始化 */
 const userOptions = ref<UserApi.UserVO[]>([]) // 用户列表
