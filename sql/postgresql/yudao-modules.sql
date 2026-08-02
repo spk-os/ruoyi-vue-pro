@@ -5826,3 +5826,132 @@ VALUES
 (6908, 1, 6808, 'admin', 'admin', 0, 1),
 (6909, 1, 6809, 'admin', 'admin', 0, 1)
 ON CONFLICT (id) DO NOTHING;
+
+-- ----------------------------
+-- SPK-OS 智能体模块：智能体定义 + 编队（头表 + 成员表）
+-- 与 Paddock 的差别：本地智能体定义 + 独立编队实体（Paddock 的 Squad 仅是 agents 卡片列表）
+-- 唯一性校验在服务层完成（与现有 spk 子域一致，不加 DB 级 UNIQUE）
+-- ----------------------------
+
+-- 1. spk_agent_def：智能体定义
+CREATE TABLE IF NOT EXISTS "spk_agent_def" (
+    "id" int8 NOT NULL,
+    "name" varchar(100) NOT NULL,
+    "code" varchar(64) NOT NULL,
+    "role" varchar(100) NOT NULL,
+    "session_key" varchar(128) NULL,
+    "soul_content" text NULL,
+    "working_memory" text NULL,
+    "status" varchar(20) NOT NULL DEFAULT 'offline',
+    "model" varchar(100) NULL,
+    "role_id" int8 NULL,
+    "conversation_id" int8 NULL,
+    "tools_config" text NULL,
+    "config" text NULL,
+    "runtime_type" varchar(20) NOT NULL DEFAULT 'native',
+    "source" varchar(20) NOT NULL DEFAULT 'manual',
+    "hidden" int2 NOT NULL DEFAULT 0,
+    "last_seen" timestamp NULL,
+    "last_activity" varchar(255) NULL,
+    "creator" varchar(64) NULL DEFAULT '',
+    "create_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updater" varchar(64) NULL DEFAULT '',
+    "update_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "deleted" int2 NOT NULL DEFAULT 0,
+    "tenant_id" int8 NOT NULL DEFAULT 0,
+    PRIMARY KEY ("id")
+);
+COMMENT ON TABLE "spk_agent_def" IS 'SPK-OS 智能体定义（不依赖 openclaw，本地实现）';
+COMMENT ON COLUMN "spk_agent_def"."status" IS '状态 offline/idle/busy/error';
+COMMENT ON COLUMN "spk_agent_def"."role_id" IS '关联 yudao AiChatRoleDO.id，wake 经此走 NativeAi 内核';
+COMMENT ON COLUMN "spk_agent_def"."conversation_id" IS '关联 yudao AiChatConversationDO.id，首次 wake 后复用';
+COMMENT ON COLUMN "spk_agent_def"."runtime_type" IS '运行时类型 native/claude/codex/custom，仅 native 支持本地唤醒';
+CREATE SEQUENCE IF NOT EXISTS spk_agent_def_seq;
+
+-- 2. spk_agent_squad：智能体编队
+CREATE TABLE IF NOT EXISTS "spk_agent_squad" (
+    "id" int8 NOT NULL,
+    "name" varchar(100) NOT NULL,
+    "code" varchar(64) NOT NULL,
+    "description" varchar(500) NULL,
+    "status" varchar(20) NOT NULL DEFAULT 'active',
+    "config" text NULL,
+    "creator" varchar(64) NULL DEFAULT '',
+    "create_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updater" varchar(64) NULL DEFAULT '',
+    "update_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "deleted" int2 NOT NULL DEFAULT 0,
+    "tenant_id" int8 NOT NULL DEFAULT 0,
+    PRIMARY KEY ("id")
+);
+COMMENT ON TABLE "spk_agent_squad" IS 'SPK-OS 智能体编队（独立编队实体）';
+COMMENT ON COLUMN "spk_agent_squad"."status" IS '状态 active/disabled';
+CREATE SEQUENCE IF NOT EXISTS spk_agent_squad_seq;
+
+-- 3. spk_agent_squad_member：编队成员（多对多，带顺序）
+CREATE TABLE IF NOT EXISTS "spk_agent_squad_member" (
+    "id" int8 NOT NULL,
+    "squad_id" int8 NOT NULL,
+    "agent_id" int8 NOT NULL,
+    "role" varchar(100) NULL,
+    "sort_order" int4 NOT NULL DEFAULT 0,
+    "creator" varchar(64) NULL DEFAULT '',
+    "create_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updater" varchar(64) NULL DEFAULT '',
+    "update_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "deleted" int2 NOT NULL DEFAULT 0,
+    "tenant_id" int8 NOT NULL DEFAULT 0,
+    PRIMARY KEY ("id")
+);
+COMMENT ON TABLE "spk_agent_squad_member" IS 'SPK-OS 智能体编队成员';
+COMMENT ON COLUMN "spk_agent_squad_member"."squad_id" IS '编队 id';
+COMMENT ON COLUMN "spk_agent_squad_member"."agent_id" IS '智能体定义 id';
+COMMENT ON COLUMN "spk_agent_squad_member"."sort_order" IS '顺序（升序，wake 按此串行）';
+CREATE SEQUENCE IF NOT EXISTS spk_agent_squad_member_seq;
+
+-- ----------------------------
+-- SPK-OS 智能体模块菜单 + 按钮权限
+-- 目录 6810「智能体管理」挂 SPK 研发 6800 下；菜单 6811/6812；按钮 6813-6822；超管 role_id=1 自动授权 6910-6923
+-- ----------------------------
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, updater, deleted)
+VALUES (6810, '智能体管理', '', 1, 60, 6800, 'spk-agent', 'ep:cpu', NULL, NULL, 0, true, true, true, 'admin', 'admin', 0)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, updater, deleted)
+VALUES (6811, '智能体', '', 2, 1, 6810, 'agent', 'ep:user', 'spk/agent/index', 'SpkAgent', 0, true, true, true, 'admin', 'admin', 0)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, updater, deleted)
+VALUES (6812, '智能体编队', '', 2, 2, 6810, 'agent-squad', 'ep:user-filled', 'spk/squad/index', 'SpkAgentSquad', 0, true, true, true, 'admin', 'admin', 0)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, updater, deleted)
+VALUES
+(6813, '智能体查询',   'spk-delivery:agent-def:query',   3, 1, 6811, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6814, '智能体创建',   'spk-delivery:agent-def:create',  3, 2, 6811, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6815, '智能体更新',   'spk-delivery:agent-def:update',  3, 3, 6811, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6816, '智能体删除',   'spk-delivery:agent-def:delete',  3, 4, 6811, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6817, '智能体唤醒',   'spk-delivery:agent-def:wake',    3, 5, 6811, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6818, '编队查询',     'spk-delivery:agent-squad:query', 3, 1, 6812, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6819, '编队创建',     'spk-delivery:agent-squad:create',3, 2, 6812, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6820, '编队更新',     'spk-delivery:agent-squad:update', 3, 3, 6812, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6821, '编队删除',     'spk-delivery:agent-squad:delete',3, 4, 6812, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+(6822, '编队唤醒',     'spk-delivery:agent-squad:wake',   3, 5, 6812, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO system_role_menu (id, role_id, menu_id, creator, updater, deleted, tenant_id)
+VALUES
+(6910, 1, 6810, 'admin', 'admin', 0, 1),
+(6911, 1, 6811, 'admin', 'admin', 0, 1),
+(6912, 1, 6812, 'admin', 'admin', 0, 1),
+(6913, 1, 6813, 'admin', 'admin', 0, 1),
+(6914, 1, 6814, 'admin', 'admin', 0, 1),
+(6915, 1, 6815, 'admin', 'admin', 0, 1),
+(6916, 1, 6816, 'admin', 'admin', 0, 1),
+(6917, 1, 6817, 'admin', 'admin', 0, 1),
+(6918, 1, 6818, 'admin', 'admin', 0, 1),
+(6919, 1, 6819, 'admin', 'admin', 0, 1),
+(6920, 1, 6820, 'admin', 'admin', 0, 1),
+(6921, 1, 6821, 'admin', 'admin', 0, 1),
+(6922, 1, 6822, 'admin', 'admin', 0, 1)
+ON CONFLICT (id) DO NOTHING;

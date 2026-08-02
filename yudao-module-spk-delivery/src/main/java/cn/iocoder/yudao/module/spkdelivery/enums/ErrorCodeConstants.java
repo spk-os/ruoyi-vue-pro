@@ -48,4 +48,20 @@ public interface ErrorCodeConstants {
     ErrorCode CONTRACT_VERSION_NOT_EXISTS = new ErrorCode(1_050_107_000, "流程契约版本不存在");
     ErrorCode CONTRACT_HASH_MISMATCH = new ErrorCode(1_050_107_001, "流程契约 hash 不匹配");
 
+    // ========== 智能体定义（1-050-108-000） ==========
+    ErrorCode AGENT_DEF_NOT_EXISTS = new ErrorCode(1_050_108_000, "智能体定义不存在");
+    ErrorCode AGENT_DEF_NAME_DUPLICATE = new ErrorCode(1_050_108_001, "智能体名称已存在");
+    ErrorCode AGENT_DEF_CODE_DUPLICATE = new ErrorCode(1_050_108_002, "智能体编码已存在");
+    ErrorCode AGENT_DEF_ROLE_REQUIRED = new ErrorCode(1_050_108_003, "智能体未关联 AI 角色，无法唤醒");
+    ErrorCode AGENT_DEF_RUNTIME_NOT_SUPPORT_WAKE = new ErrorCode(1_050_108_004, "该运行时类型暂不支持本地唤醒");
+    ErrorCode AGENT_DEF_WAKE_FAIL = new ErrorCode(1_050_108_005, "智能体唤醒失败");
+
+    // ========== 智能体编队（1-050-109-000） ==========
+    ErrorCode AGENT_SQUAD_NOT_EXISTS = new ErrorCode(1_050_109_000, "智能体编队不存在");
+    ErrorCode AGENT_SQUAD_NAME_DUPLICATE = new ErrorCode(1_050_109_001, "编队名称已存在");
+    ErrorCode AGENT_SQUAD_CODE_DUPLICATE = new ErrorCode(1_050_109_002, "编队编码已存在");
+    ErrorCode AGENT_SQUAD_MEMBER_NOT_EXISTS = new ErrorCode(1_050_109_003, "编队成员不存在");
+    ErrorCode AGENT_SQUAD_MEMBER_DUPLICATE = new ErrorCode(1_050_109_004, "该智能体已在此编队中");
+    ErrorCode AGENT_SQUAD_NO_MEMBER = new ErrorCode(1_050_109_005, "编队无可用成员，无法唤醒");
+
 }
