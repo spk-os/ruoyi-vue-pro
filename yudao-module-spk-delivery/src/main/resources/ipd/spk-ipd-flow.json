@@ -1,32 +1,37 @@
 {
   "id": "n_start",
   "type": 10,
-  "name": "发起人",
+  "name": "IPD 立项发起",
   "childNode": {
-    "id": "n_g1",
+    "id": "n_concept_1",
     "type": 15,
-    "name": "G1 立项门禁",
+    "name": "概念阶段·需求洞察",
     "triggerSetting": {
-      "type": 2,
+      "type": 1,
       "httpRequestSetting": {
-        "url": "http://${spk-base-url}/admin-api/spk/gate/dispatch",
+        "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
         "body": [
-          { "type": 1, "key": "gate", "value": "g1" }
+          { "type": 1, "key": "activityId", "value": "ACT-03-02-01" },
+          { "type": 1, "key": "activityVersion", "value": "1.0.0" },
+          { "type": 1, "key": "nodeKey", "value": "n_concept_1" }
+        ],
+        "response": [
+          { "key": "agentResult", "value": "result" }
         ]
       }
     },
     "childNode": {
-      "id": "n_concept",
+      "id": "n_concept_2",
       "type": 15,
-      "name": "概念起草 Agent",
+      "name": "概念阶段·概念选项集",
       "triggerSetting": {
         "type": 1,
         "httpRequestSetting": {
           "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
           "body": [
-            { "type": 1, "key": "roleId", "value": "1" },
-            { "type": 1, "key": "prompt", "value": "起草产品概念方案：定位、目标用户、核心场景" },
-            { "type": 1, "key": "nodeKey", "value": "n_concept" }
+            { "type": 1, "key": "activityId", "value": "ACT-03-02-02" },
+            { "type": 1, "key": "activityVersion", "value": "1.0.0" },
+            { "type": 1, "key": "nodeKey", "value": "n_concept_2" }
           ],
           "response": [
             { "key": "agentResult", "value": "result" }
@@ -34,25 +39,25 @@
         }
       },
       "childNode": {
-        "id": "n_tr1",
+        "id": "n_cdcp",
         "type": 11,
-        "name": "TR1 概念评审",
+        "name": "CDCP 概念决策门",
         "candidateStrategy": 36,
         "approveType": 1,
         "approveMethod": 1,
         "rejectHandler": { "type": 1 },
         "childNode": {
-          "id": "n_g2",
+          "id": "n_plan_1",
           "type": 15,
-          "name": "G2 架构 Agent",
+          "name": "计划阶段·项目计划",
           "triggerSetting": {
             "type": 1,
             "httpRequestSetting": {
               "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
               "body": [
-                { "type": 1, "key": "roleId", "value": "1" },
-                { "type": 1, "key": "prompt", "value": "输出系统架构设计：模块划分、关键接口、技术选型" },
-                { "type": 1, "key": "nodeKey", "value": "n_g2" }
+                { "type": 1, "key": "activityId", "value": "ACT-03-03-01" },
+                { "type": 1, "key": "activityVersion", "value": "1.0.0" },
+                { "type": 1, "key": "nodeKey", "value": "n_plan_1" }
               ],
               "response": [
                 { "key": "agentResult", "value": "result" }
@@ -60,72 +65,174 @@
             }
           },
           "childNode": {
-            "id": "n_aegis",
+            "id": "n_plan_2",
             "type": 15,
-            "name": "Aegis 同步审查",
+            "name": "计划阶段·架构设计",
             "triggerSetting": {
               "type": 1,
               "httpRequestSetting": {
-                "url": "http://${spk-base-url}/admin-api/spk/aegis/review",
+                "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                 "body": [
-                  { "type": 1, "key": "nodeKey", "value": "n_aegis" }
+                  { "type": 1, "key": "activityId", "value": "ACT-03-03-02" },
+                  { "type": 1, "key": "activityVersion", "value": "1.0.0" },
+                  { "type": 1, "key": "nodeKey", "value": "n_plan_2" }
                 ],
                 "response": [
-                  { "key": "aegisVerdict", "value": "aegisVerdict" },
-                  { "key": "aegisReport", "value": "aegisReport" }
+                  { "key": "agentResult", "value": "result" }
                 ]
               }
             },
             "childNode": {
-              "id": "n_adcp",
-              "type": 51,
-              "name": "ADCP Aegis 裁决分支",
-              "conditionNodes": [
-                {
-                  "id": "n_adcp_pass",
-                  "type": 50,
-                  "name": "通过",
-                  "conditionSetting": {
-                    "conditionType": 1,
-                    "conditionExpression": "${aegisVerdict == 'pass'}",
-                    "defaultFlow": false
+              "id": "n_pdcp",
+              "type": 11,
+              "name": "PDCP 计划决策门",
+              "candidateStrategy": 36,
+              "approveType": 1,
+              "approveMethod": 1,
+              "rejectHandler": { "type": 1 },
+              "childNode": {
+                "id": "n_dev_1",
+                "type": 15,
+                "name": "开发阶段·详细设计",
+                "triggerSetting": {
+                  "type": 1,
+                  "httpRequestSetting": {
+                    "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                    "body": [
+                      { "type": 1, "key": "activityId", "value": "ACT-03-04-01" },
+                      { "type": 1, "key": "activityVersion", "value": "1.0.0" },
+                      { "type": 1, "key": "nodeKey", "value": "n_dev_1" }
+                    ],
+                    "response": [
+                      { "key": "agentResult", "value": "result" }
+                    ]
                   }
                 },
-                {
-                  "id": "n_adcp_default",
-                  "type": 50,
-                  "name": "条件/失败",
-                  "conditionSetting": {
-                    "conditionType": 1,
-                    "defaultFlow": true
-                  }
-                }
-              ],
-              "childNode": {
-                "id": "n_tr6",
-                "type": 11,
-                "name": "TR6 发布评审",
-                "candidateStrategy": 36,
-                "approveType": 1,
-                "approveMethod": 1,
-                "rejectHandler": { "type": 1 },
                 "childNode": {
-                  "id": "n_g8",
+                  "id": "n_dev_2",
                   "type": 15,
-                  "name": "G8 退市门禁",
+                  "name": "开发阶段·编码实现",
                   "triggerSetting": {
-                    "type": 2,
+                    "type": 1,
                     "httpRequestSetting": {
-                      "url": "http://${spk-base-url}/admin-api/spk/gate/dispatch",
+                      "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                       "body": [
-                        { "type": 1, "key": "gate", "value": "g8" }
+                        { "type": 1, "key": "activityId", "value": "ACT-03-04-02" },
+                        { "type": 1, "key": "activityVersion", "value": "1.0.0" },
+                        { "type": 1, "key": "nodeKey", "value": "n_dev_2" }
+                      ],
+                      "response": [
+                        { "key": "agentResult", "value": "result" }
                       ]
                     }
                   },
                   "childNode": {
-                    "id": "n_end",
-                    "type": 1,
-                    "name": "结束"
+                    "id": "n_adcp",
+                    "type": 11,
+                    "name": "ADCP 开发决策门",
+                    "candidateStrategy": 36,
+                    "approveType": 1,
+                    "approveMethod": 1,
+                    "rejectHandler": { "type": 1 },
+                    "childNode": {
+                      "id": "n_qual_1",
+                      "type": 15,
+                      "name": "验证阶段·集成验证",
+                      "triggerSetting": {
+                        "type": 1,
+                        "httpRequestSetting": {
+                          "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                          "body": [
+                            { "type": 1, "key": "activityId", "value": "ACT-03-05-01" },
+                            { "type": 1, "key": "activityVersion", "value": "1.0.0" },
+                            { "type": 1, "key": "nodeKey", "value": "n_qual_1" }
+                          ],
+                          "response": [
+                            { "key": "agentResult", "value": "result" }
+                          ]
+                        }
+                      },
+                      "childNode": {
+                        "id": "n_qual_2",
+                        "type": 15,
+                        "name": "验证阶段·Beta 验证",
+                        "triggerSetting": {
+                          "type": 1,
+                          "httpRequestSetting": {
+                            "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                            "body": [
+                              { "type": 1, "key": "activityId", "value": "ACT-03-05-02" },
+                              { "type": 1, "key": "activityVersion", "value": "1.0.0" },
+                              { "type": 1, "key": "nodeKey", "value": "n_qual_2" }
+                            ],
+                            "response": [
+                              { "key": "agentResult", "value": "result" }
+                            ]
+                          }
+                        },
+                        "childNode": {
+                          "id": "n_ga",
+                          "type": 11,
+                          "name": "GA 通用可用性决策门",
+                          "candidateStrategy": 36,
+                          "approveType": 1,
+                          "approveMethod": 1,
+                          "rejectHandler": { "type": 1 },
+                          "childNode": {
+                            "id": "n_launch_1",
+                            "type": 15,
+                            "name": "发布阶段·上市发布",
+                            "triggerSetting": {
+                              "type": 1,
+                              "httpRequestSetting": {
+                                "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                                "body": [
+                                  { "type": 1, "key": "activityId", "value": "ACT-03-06-01" },
+                                  { "type": 1, "key": "activityVersion", "value": "1.0.0" },
+                                  { "type": 1, "key": "nodeKey", "value": "n_launch_1" }
+                                ],
+                                "response": [
+                                  { "key": "agentResult", "value": "result" }
+                                ]
+                              }
+                            },
+                            "childNode": {
+                              "id": "n_life_1",
+                              "type": 15,
+                              "name": "生命周期阶段·运营反馈",
+                              "triggerSetting": {
+                                "type": 1,
+                                "httpRequestSetting": {
+                                  "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                                  "body": [
+                                    { "type": 1, "key": "activityId", "value": "ACT-03-07-01" },
+                                    { "type": 1, "key": "activityVersion", "value": "1.0.0" },
+                                    { "type": 1, "key": "nodeKey", "value": "n_life_1" }
+                                  ],
+                                  "response": [
+                                    { "key": "agentResult", "value": "result" }
+                                  ]
+                                }
+                              },
+                              "childNode": {
+                                "id": "n_ldcp",
+                                "type": 11,
+                                "name": "LDCP 生命周期决策门",
+                                "candidateStrategy": 36,
+                                "approveType": 1,
+                                "approveMethod": 1,
+                                "rejectHandler": { "type": 1 },
+                                "childNode": {
+                                  "id": "n_end",
+                                  "type": 1,
+                                  "name": "IPD 全流程结束"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               }

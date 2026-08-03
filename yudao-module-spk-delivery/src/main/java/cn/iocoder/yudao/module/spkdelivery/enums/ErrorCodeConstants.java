@@ -64,4 +64,34 @@ public interface ErrorCodeConstants {
     ErrorCode AGENT_SQUAD_MEMBER_DUPLICATE = new ErrorCode(1_050_109_004, "该智能体已在此编队中");
     ErrorCode AGENT_SQUAD_NO_MEMBER = new ErrorCode(1_050_109_005, "编队无可用成员，无法唤醒");
 
+    // ========== IPD Activity 定义（1-050-110-000） ==========
+    ErrorCode IPD_ACTIVITY_NOT_EXISTS = new ErrorCode(1_050_110_000, "IPD Activity 定义不存在");
+    ErrorCode IPD_ACTIVITY_DISABLED = new ErrorCode(1_050_110_001, "IPD Activity 定义已停用");
+    ErrorCode IPD_ACTIVITY_STAGE_INVALID = new ErrorCode(1_050_110_002, "IPD Activity 阶段非法");
+
+    // ========== Task Contract / Router（1-050-111-000） ==========
+    ErrorCode TASK_CONTRACT_NOT_EXISTS = new ErrorCode(1_050_111_000, "Task Contract 不存在");
+    ErrorCode TASK_ROUTER_NO_LEAD = new ErrorCode(1_050_111_001, "Task Router 找不到匹配能力标签的 Lead Agent");
+    ErrorCode TASK_ROUTER_LEAD_OVERLOADED = new ErrorCode(1_050_111_002, "Lead Agent 全部过载，无法承接 Activity");
+    ErrorCode TASK_CONTRACT_TERMINAL = new ErrorCode(1_050_111_003, "Task Contract 已终态，不可重复执行");
+    ErrorCode TASK_CONTRACT_THREE_PIECE_MISSING = new ErrorCode(1_050_111_004, "三件套缺失（ContextManifest/ArtifactManifest/RunReceipt），Activity 不得标记完成");
+
+    // ========== Artifact 产物（1-050-112-000） ==========
+    ErrorCode ARTIFACT_NOT_EXISTS = new ErrorCode(1_050_112_000, "Artifact Manifest 不存在");
+    ErrorCode ARTIFACT_HASH_MISMATCH = new ErrorCode(1_050_112_001, "Artifact hash 校验失败");
+    ErrorCode ARTIFACT_SECRET_SCAN_PENDING = new ErrorCode(1_050_112_002, "Artifact secret 扫描未通过");
+
+    // ========== Evidence 证据链（1-050-113-000） ==========
+    ErrorCode EVIDENCE_NOT_EXISTS = new ErrorCode(1_050_113_000, "证据记录不存在");
+    ErrorCode EVIDENCE_CHAIN_BROKEN = new ErrorCode(1_050_113_001, "证据哈希链断裂，回放校验失败");
+
+    // ========== Verification 验证（1-050-114-000） ==========
+    ErrorCode VERIFICATION_RECEIPT_NOT_EXISTS = new ErrorCode(1_050_114_000, "Verification Receipt 不存在");
+    ErrorCode VERIFICATION_FAIL = new ErrorCode(1_050_114_001, "独立验证失败");
+    ErrorCode VERIFIER_NOT_EXISTS = new ErrorCode(1_050_114_002, "无可用 Independent Verifier");
+
+    // ========== Model Capability（1-050-115-000） ==========
+    ErrorCode MODEL_CAPABILITY_NOT_EXISTS = new ErrorCode(1_050_115_000, "模型能力画像不存在");
+    ErrorCode MODEL_SNAPSHOT_NOT_EXISTS = new ErrorCode(1_050_115_001, "模型快照不存在");
+
 }

@@ -29,6 +29,34 @@ public class SpkAgentTaskDO extends BaseDO {
     @TableId
     private Long id;
     /**
+     * ActivityRun id（Cortext-IPD §4.6，一次 Activity 执行的唯一标识）
+     */
+    private String activityRunId;
+    /**
+     * Task Contract id
+     */
+    private String contractId;
+    /**
+     * Activity 定义 id
+     */
+    private String activityId;
+    /**
+     * 尝试次数（重试递增）
+     */
+    private Integer attemptNo;
+    /**
+     * 认领租约 id（fencing token 防陈旧写入）
+     */
+    private String claimId;
+    /**
+     * Fencing token（单调递增）
+     */
+    private Long fencingToken;
+    /**
+     * 父 activity_run_id，Worker 用
+     */
+    private String workerOf;
+    /**
      * 业务 taskId（外部 runtime 的任务 id）
      */
     private String taskId;
@@ -54,6 +82,18 @@ public class SpkAgentTaskDO extends BaseDO {
      * agent 产物（JSON）
      */
     private String result;
+    /**
+     * 产物 URI 列表 JSON（Artifact Registry 链接）
+     */
+    private String artifactUris;
+    /**
+     * RunReceipt id
+     */
+    private String runReceiptId;
+    /**
+     * 验证结论 PASS/CONDITIONAL/FAIL
+     */
+    private String verificationConclusion;
     /**
      * BPM 流程实例 id
      */

@@ -42,4 +42,16 @@ public interface SpkAgentDefMapper extends BaseMapperX<SpkAgentDefDO> {
                 .orderByAsc(SpkAgentDefDO::getId));
     }
 
+    default List<SpkAgentDefDO> selectListByAgentKind(String agentKind) {
+        return selectList(new LambdaQueryWrapperX<SpkAgentDefDO>()
+                .eq(SpkAgentDefDO::getAgentKind, agentKind)
+                .orderByAsc(SpkAgentDefDO::getId));
+    }
+
+    default List<SpkAgentDefDO> selectListByAgentKindAndVerifierType(String agentKind, String verifierType) {
+        return selectList(new LambdaQueryWrapperX<SpkAgentDefDO>()
+                .eq(SpkAgentDefDO::getAgentKind, agentKind)
+                .eq(SpkAgentDefDO::getVerifierType, verifierType)
+                .orderByAsc(SpkAgentDefDO::getId));
+    }
 }

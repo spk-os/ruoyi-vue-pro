@@ -4,6 +4,8 @@ import cn.iocoder.yudao.module.bpm.api.task.BpmProcessTaskApi;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agent.SpkAgentTaskDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agent.SpkAgentTaskMapper;
 import cn.iocoder.yudao.module.spkdelivery.enums.SpkAgentTaskStatusEnum;
+import cn.iocoder.yudao.module.spkdelivery.service.router.SpkRouteResult;
+import cn.iocoder.yudao.module.spkdelivery.service.router.SpkTaskRouterService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.engine.RuntimeService;
@@ -45,6 +47,8 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
     private RuntimeService runtimeService;
     @Resource
     private BpmProcessTaskApi processTaskApi;
+    @Resource
+    private SpkTaskRouterService taskRouterService;
 
     @Override
     public SpkAgentTaskDO dispatch(Long roleId, String prompt, String instanceId, String nodeKey, String receiveTaskKey) {
@@ -83,6 +87,21 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
             agentTaskMapper.updateById(task);
             throw exception(AGENT_TASK_DISPATCH_FAIL);
         }
+    }
+
+    @Override
+    public SpkRouteResult dispatchActivity(String activityId, String activityVersion, String instanceId,
+                                          String taskId, String businessKey, String nodeKey, List<String> inputRefs) {
+        log.info("[dispatchActivity][activityId={} instanceId={} nodeKey={}]", activityId, instanceId, nodeKey);
+        SpkRouteResult result = taskRouterService.route(activityId, activityVersion, instanceId,
+                taskId, businessKey, nodeKey, inputRefs);
+        // ⚠️ 不得在此处 runtimeService.setVariables 回写 agentResult：
+        //   本方法由 BPM HTTP 触发器（type 15 sync serviceTask）经 /admin-api/spk/agent-task/run 同步回调，
+        //   /run 处理线程（thread B）若 setVariables 会申请流程实例行锁，而 createProcessInstance 事务
+        //   （thread A，触发器父命令）正持有该锁等待 HTTP 响应 → 互锁。
+        //   agentResult 变量改由触发器 response 映射（spk-ipd-flow.json: response[{key=agentResult,value=result}]）
+        //   在 thread A 自身事务内回写，锁安全。dispatchActivity 只返回产物，不碰 Flowable 运行时。
+        return result;
     }
 
     @Override

@@ -38,9 +38,25 @@ public class SpkAgentDefDO extends BaseDO {
      */
     private String code;
     /**
+     * 智能体种类 lead/worker/verifier（Cortext-IPD §4.6）
+     */
+    private String agentKind;
+    /**
+     * Verifier 类型 TR/DCP/Audit，仅 verifier 用
+     */
+    private String verifierType;
+    /**
+     * 隔离级别 process/container/vm（P1 默认 process）
+     */
+    private String isolationLevel;
+    /**
      * 角色（自由文本，如"代码评审官"）
      */
     private String role;
+    /**
+     * 能力标签数组 JSON，Task Router 路由依据（GAP-9）
+     */
+    private String capabilityTags;
     /**
      * 会话路由标识（可空，本地实现可由 code 派生）
      */
