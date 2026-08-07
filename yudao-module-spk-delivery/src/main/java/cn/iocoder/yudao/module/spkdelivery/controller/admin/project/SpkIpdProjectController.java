@@ -1,16 +1,20 @@
 package cn.iocoder.yudao.module.spkdelivery.controller.admin.project;
 
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
+import cn.iocoder.yudao.module.spkdelivery.controller.admin.project.vo.SpkIpdIntakeReqVO;
+import cn.iocoder.yudao.module.spkdelivery.service.project.SpkIpdIntakeService;
 import cn.iocoder.yudao.module.spkdelivery.service.project.SpkIpdProjectService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
+import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,6 +29,7 @@ import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
  * 端点前缀 /spk/ipd/project（经 axios 全局注入 /admin-api）：
  * <ul>
  *   <li>POST /start —— 发起 IPD 主流程（businessKey + projectName）。</li>
+ *   <li>POST /intake —— 自然语言发起（hermes「说一句话就开跑」入口，LLM 抽取 projectName/payload 后转 /start）。</li>
  *   <li>GET  /{id} —— 项目总览（泳道 + 六阶段进度），id=processInstanceId。</li>
  *   <li>GET  /{id}/phases —— 各阶段 done/running/failed/total + 阶段状态。</li>
  *   <li>GET  /requirements —— Plane 需求代理（Dashboard 需求 Tab）。</li>
@@ -43,6 +48,16 @@ public class SpkIpdProjectController {
 
     @Resource
     private SpkIpdProjectService projectService;
+
+    @Resource
+    private SpkIpdIntakeService intakeService;
+
+    @PostMapping("/intake")
+    @Operation(summary = "自然语言发起 IPD 主流程（hermes「说一句话就开跑」入口）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:create')")
+    public CommonResult<Map<String, Object>> intake(@Valid @RequestBody SpkIpdIntakeReqVO reqVO) {
+        return success(intakeService.intake(reqVO.getRequest()));
+    }
 
     @PostMapping("/start")
     @Operation(summary = "发起 IPD 主流程（businessKey + projectName）")
