@@ -1,12 +1,13 @@
 <!--
-  IPD Activity 详情：业务叙事 + 技术数据折叠。
+  IPD Activity 详情：以「任务信息 · 输入 · 输出 · 执行过程 · 凭证溯源」叙事，技术字段折叠。
   0 · 节点 hero（中文名/状态/provider/验证结论/哈希链，一眼看跑没跑通，不显 ACT-xx 编号）
-  1 · 这个节点在做什么（contract.prompt 白话任务说明 + failureReason，MarkdownView 渲染）
-  2 · 跑出什么结果（验证结论 PASS/FAIL + 要点）
-  3 · 产物（每个 artifact 卡片：metadata md 渲染报告全文 + Gitea 文档链接 ↗）
-  4 · Plane 需求（本流程录入 Plane 的 issue 清单，需求来源上下文）
-  5 · Omnigent 实时会话（iframe 嵌入原生界面 + SSE 流；原始 session JSON 不展示）
-  6 · 凭证可信吗（默认折叠：证据链 + 哈希链 + 原始数据 ID/哈希/路径）
+  1 · 任务说明（contract.prompt 白话任务说明 + failureReason，MarkdownView 渲染）
+  2 · 输入（上游依赖 inputRefs + 上下文清单 + 模型快照 + 执行配置 + 输出规格）
+  3 · 输出（验证结论 PASS/FAIL + 要点；交付产物每个 artifact 卡片 metadata md 渲染报告全文 + Gitea 文档链接 ↗）
+  4 · 执行过程（状态进度条 queued→running→done/failed + 证据链 timeline 业务事件流，payload 提摘要）
+  5 · Plane 需求（本流程录入 Plane 的 issue 清单，需求来源上下文）
+  6 · Omnigent 实时会话（iframe 嵌入原生界面 + SSE 流；原始 session JSON 不展示）
+  7 · 凭证可信吗（默认折叠：三件套完整性 checklist + 哈希链 + 原始数据 ID/哈希/路径）
   文档链接由后端按 docs/{stage}/{activityRunId}.md 构造，不依赖 Flowable 历史变量。
   铁律 4：三件套缺失不得 completed —— 顶部告警。
 -->
@@ -81,8 +82,48 @@
       </div>
       <el-empty v-else description="无任务说明" :image-size="60" />
 
-      <!-- 2 · 跑出什么结果 -->
-      <div class="section-title">跑出什么结果</div>
+      <!-- 2 · 输入：这个节点接收什么（上游依赖 + 上下文清单 + 模型快照 + 执行配置 + 输出规格） -->
+      <div class="section-title">输入</div>
+      <el-descriptions :column="2" border size="small" class="input-desc">
+        <el-descriptions-item label="上游依赖" :span="2">
+          <span v-if="inputRefsList.length" class="ref-tags">
+            <el-tag
+              v-for="(r, i) in inputRefsList"
+              :key="i"
+              size="small"
+              type="info"
+              class="ref-tag"
+              @click="goToRef(r)"
+            >
+              {{ refLabel(r) }}
+            </el-tag>
+          </span>
+          <span v-else class="muted">无上游引用（首节点 / 触发器未传入）</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="输出规格">
+          {{ artifactTypeLabel(data.contract?.outputSpec) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="执行模式">
+          {{ executionModeLabel(data.contract?.executionMode) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="Worker / Verifier">
+          {{ data.contract?.workerRequired ? '需 Worker' : '无 Worker' }}
+          ·
+          {{ data.contract?.verifierRequired ? '需 Verifier' : 'Lead 自签' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="超时 / 重试">
+          {{ data.contract?.timeoutSeconds || '—' }}s · {{ retryLabel(data.contract?.retryPolicy) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="上下文清单" :span="2">
+          <span class="mono">{{ data.contract?.contextManifestUri || '—' }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="模型快照" :span="2">
+          <span class="mono">{{ data.contract?.modelSnapshotId || '—' }}</span>
+        </el-descriptions-item>
+      </el-descriptions>
+
+      <!-- 3 · 输出：跑出什么结果 -->
+      <div class="section-title">输出 · 跑出什么结果</div>
 
       <!-- 验证结论 -->
       <div v-if="data.verifications?.length" class="verdict-card">
@@ -130,27 +171,92 @@
       </div>
       <el-empty v-else description="无交付产物" :image-size="60" />
 
-      <!-- 3 · 凭证可信吗（默认折叠：证据链 + 哈希链 + 原始数据） -->
+      <!-- 4 · 执行过程：任务从入队到完成的事件流（状态进度条 + 证据链 timeline，payload 提业务摘要） -->
+      <div class="section-title">
+        执行过程
+        <el-tag
+          v-if="data.chainValid !== undefined && data.chainValid !== null"
+          size="small"
+          :type="data.chainValid ? 'success' : 'danger'"
+          class="ml-8px"
+        >
+          哈希链 {{ data.chainValid ? '完好' : '断裂' }}
+        </el-tag>
+      </div>
+      <div class="status-progress">
+        <div class="step" :class="stepClass('queued')">
+          <div class="step-dot"></div>
+          <div class="step-label">入队</div>
+          <div class="step-time">{{ fmt(data.contract?.queuedAt) }}</div>
+        </div>
+        <div class="step-line" :class="stepLineClass('running')"></div>
+        <div class="step" :class="stepClass('running')">
+          <div class="step-dot"></div>
+          <div class="step-label">执行</div>
+          <div class="step-time">{{ fmt(data.contract?.startedAt) }}</div>
+        </div>
+        <div class="step-line" :class="stepLineClass('done')"></div>
+        <div class="step" :class="stepClass(data.contract?.status)">
+          <div class="step-dot"></div>
+          <div class="step-label">{{ statusLabel(data.contract?.status) }}</div>
+          <div class="step-time">{{ fmt(data.contract?.finishedAt) }}</div>
+        </div>
+      </div>
+      <el-timeline v-if="(data.evidenceChain || []).length" class="proc-timeline">
+        <el-timeline-item
+          v-for="(ev, i) in data.evidenceChain || []"
+          :key="i"
+          :timestamp="fmt(ev.createTime)"
+          placement="top"
+        >
+          <el-tag size="small" type="info">{{ evidenceTypeLabel(ev.evidenceType) }}</el-tag>
+          <span class="ev-ref">ref：{{ shortHash(ev.refId) }}</span>
+          <div v-if="evidencePayloadSummary(ev.payload)" class="ev-summary">
+            {{ evidencePayloadSummary(ev.payload) }}
+          </div>
+          <div class="ev-hash">prev：{{ shortHash(ev.prevHash) }} → row：{{ shortHash(ev.rowHash) }}</div>
+        </el-timeline-item>
+      </el-timeline>
+      <el-empty v-else description="无执行过程记录" :image-size="60" />
+
+      <!-- 7 · 凭证可信吗（默认折叠：三件套完整性 + 哈希链 + 原始数据） -->
       <el-collapse class="audit-collapse">
-        <el-collapse-item title="凭证可信吗（证据链 · 哈希链）" name="audit">
+        <el-collapse-item title="凭证可信吗（三件套 · 哈希链）" name="audit">
           <div class="section-sub">
-            证据链（{{ (data.evidenceChain || []).length }} 条） · 哈希链
-            <el-tag size="small" :type="data.chainValid ? 'success' : 'danger'">
-              {{ data.chainValid ? '完好' : '断裂' }}
+            三件套完整性
+            <el-tag size="small" :type="hasThreePiece ? 'success' : 'danger'">
+              {{ hasThreePiece ? '齐全' : '缺失' }}
             </el-tag>
           </div>
-          <el-timeline>
-            <el-timeline-item
-              v-for="(ev, i) in data.evidenceChain || []"
-              :key="i"
-              :timestamp="fmt(ev.createTime)"
-              placement="top"
-            >
-              <el-tag size="small" type="info">{{ evidenceTypeLabel(ev.evidenceType) }}</el-tag>
-              <span class="ev-ref">ref：{{ ev.refId }}</span>
-              <div class="ev-hash">prev：{{ shortHash(ev.prevHash) }} → row：{{ shortHash(ev.rowHash) }}</div>
-            </el-timeline-item>
-          </el-timeline>
+          <div class="checklist">
+            <div class="check-row">
+              <el-tag size="small" :type="data.contract?.contextManifestUri ? 'success' : 'danger'">
+                {{ data.contract?.contextManifestUri ? '✓' : '✗' }}
+              </el-tag>
+              <span>ContextManifest 上下文清单</span>
+              <span v-if="data.contract?.contextManifestUri" class="check-uri mono">
+                {{ data.contract.contextManifestUri }}
+              </span>
+            </div>
+            <div class="check-row">
+              <el-tag
+                size="small"
+                :type="(data.artifacts || []).length ? 'success' : 'danger'"
+              >
+                {{ (data.artifacts || []).length ? '✓' : '✗' }}
+              </el-tag>
+              <span>ArtifactManifest 产物清单（{{ (data.artifacts || []).length }}）</span>
+            </div>
+            <div class="check-row">
+              <el-tag size="small" :type="data.runReceipt ? 'success' : 'danger'">
+                {{ data.runReceipt ? '✓' : '✗' }}
+              </el-tag>
+              <span>RunReceipt 执行回执</span>
+              <span v-if="data.runReceipt?.runId" class="check-uri mono">
+                {{ data.runReceipt.runId }}
+              </span>
+            </div>
+          </div>
         </el-collapse-item>
         <el-collapse-item title="原始数据（ID / 哈希 / 路径）" name="raw">
           <el-descriptions :column="1" border size="small">
@@ -334,6 +440,88 @@ const parsePoints = (json?: string): { point?: string; verdict?: string }[] => {
     return Array.isArray(parsed) ? parsed : []
   } catch {
     return []
+  }
+}
+
+// 输入区：解析 inputRefs JSON 字符串数组（route 调用方传入的上游产物引用）
+const inputRefsList = computed<string[]>(() => {
+  const raw = data.value?.contract?.inputRefs
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.map((x: any) => String(x)) : []
+  } catch {
+    return []
+  }
+})
+const refLabel = (r: string) => {
+  if (!r) return '—'
+  // inputRefs 通常为上游 activityRunId（run-xxx），取前 16 位作短标签避免撑爆布局
+  return r.length > 18 ? r.slice(0, 16) + '…' : r
+}
+const goToRef = (r: string) => {
+  // 点击上游引用：若是 run-xxx 形式，就地加载该 ActivityRun 详情
+  if (r && r.startsWith('run-')) {
+    runId.value = r
+    load()
+  }
+}
+const executionModeLabel = (m?: string) => {
+  const map: Record<string, string> = {
+    task_system: '任务系统派发',
+    lead_internal: 'Lead 内部执行',
+    omnigent: 'Omnigent 执行',
+    native_ai: '本地 AI 执行'
+  }
+  return map[m || ''] || m || '—'
+}
+const retryLabel = (p?: string) => {
+  if (!p || p === '{}' || p === 'null') return '默认策略'
+  try {
+    const o = JSON.parse(p)
+    const max = o.maxAttempts || o.max_attempts || o.retry
+    return max ? `重试 ${max} 次` : '默认策略'
+  } catch {
+    return '默认策略'
+  }
+}
+
+// 执行过程：状态进度条着色（queued → running → done/failed/timeout/cancelled）
+const STEP_ORDER: Record<string, number> = {
+  queued: 0, running: 1, done: 2, failed: 2, timeout: 2, cancelled: 2
+}
+const stepClass = (step?: string) => {
+  const s = data.value?.contract?.status
+  const target = STEP_ORDER[step || '']
+  const cur = STEP_ORDER[s || '']
+  if (target === undefined) return ''
+  if (step === s) return 'active'
+  return cur > target ? 'done' : ''
+}
+const stepLineClass = (step?: string) => {
+  const s = data.value?.contract?.status
+  const target = STEP_ORDER[step || '']
+  const cur = STEP_ORDER[s || '']
+  if (target === undefined) return ''
+  return cur > target ? 'done' : ''
+}
+
+// 证据 payload 业务摘要：从 evidenceService.append 的 payload JSON 提取
+// summary/conclusion/verdict/lead/status 等业务字段（不显引擎指标）
+const evidencePayloadSummary = (payload?: string): string => {
+  if (!payload) return ''
+  try {
+    const o = JSON.parse(payload)
+    const parts: string[] = []
+    if (o.summary) parts.push(`摘要：${o.summary}`)
+    if (o.conclusion) parts.push(`结论：${o.conclusion}`)
+    if (o.verificationConclusion) parts.push(`验证：${o.verificationConclusion}`)
+    if (o.lead || o.leadAgentCode) parts.push(`Lead：${o.lead || o.leadAgentCode}`)
+    if (o.error || o.reason) parts.push(`原因：${o.error || o.reason}`)
+    if (!parts.length && o.status) parts.push(`状态：${o.status}`)
+    return parts.join(' · ')
+  } catch {
+    return ''
   }
 }
 
@@ -639,6 +827,107 @@ onUnmounted(() => {
   color: var(--el-text-color-secondary);
 }
 .raw-artifact-uri {
+  color: var(--el-text-color-secondary);
+  word-break: break-all;
+}
+/* 输入区 */
+.input-desc {
+  margin-bottom: 10px;
+}
+.ref-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ref-tag {
+  cursor: pointer;
+}
+.muted {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+.mono {
+  font-family: monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+/* 执行过程 · 状态进度条 */
+.status-progress {
+  display: flex;
+  align-items: flex-start;
+  margin: 10px 0 14px;
+  padding: 14px 16px;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+}
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 84px;
+}
+.step-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--el-border-color);
+  border: 2px solid var(--el-border-color);
+}
+.step.active .step-dot {
+  background: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 4px var(--el-color-primary-light-8);
+}
+.step.done .step-dot {
+  background: var(--el-color-success);
+  border-color: var(--el-color-success);
+}
+.step-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.step-time {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  font-family: monospace;
+}
+.step-line {
+  flex: 1;
+  height: 2px;
+  background: var(--el-border-color);
+  margin: 6px 4px 0;
+}
+.step-line.done {
+  background: var(--el-color-success);
+}
+.proc-timeline {
+  margin-bottom: 10px;
+}
+.ev-summary {
+  font-size: 13px;
+  margin: 4px 0;
+  padding: 6px 8px;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+  border-left: 3px solid var(--el-color-primary);
+  line-height: 1.5;
+}
+/* 三件套 checklist */
+.checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.check-uri {
   color: var(--el-text-color-secondary);
   word-break: break-all;
 }
