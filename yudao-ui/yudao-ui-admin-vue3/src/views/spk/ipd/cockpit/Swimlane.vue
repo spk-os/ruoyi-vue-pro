@@ -1,8 +1,8 @@
 <!--
-  IPD 泳道图：横向 6 阶段泳道，每 Activity 一张卡片。
+  IPD 流程图：自上而下 6 阶段，每阶段一行卡片，卡片间 → 串接、阶段间 ↓ 串接。
+  卡片显示实际内容（activity def 中文名），不显示 ACT-xx 编号。
   状态色：queued 灰 / running 蓝 / done 绿 / failed 红 / timeout 橙 / cancelled 紫。
-  顶部按流程实例筛选；卡片点击 → 抽屉式跳 Activity 详情 Tab。
-  轮询 5s 刷新。
+  顶部按流程实例筛选；卡片点击 → 抽屉式节点详情。轮询 5s 刷新。
 -->
 <template>
   <div class="swimlane" v-loading="loading">
@@ -22,45 +22,62 @@
     <el-alert v-if="errorMsg" type="error" :title="errorMsg" :closable="false" show-icon />
     <el-empty v-else-if="!loading && total === 0" description="暂无 Activity（流程尚未推进或编号有误）" />
 
-    <div v-else class="lanes">
-      <div v-for="stage in orderedStages" :key="stage.name" class="lane">
-        <div class="lane-title">
-          <span class="stage-name">{{ stage.name }}</span>
-          <span class="stage-count">{{ stage.cards.length }}</span>
-        </div>
-        <div class="lane-body">
-          <div
-            v-for="c in stage.cards"
-            :key="c.activityRunId"
-            class="card"
-            :class="statusClass(c.status)"
-            @click="emit('show-detail', c.activityRunId)"
-          >
-            <div class="card-title">{{ c.activityId }}</div>
-            <div class="card-sub">Lead：{{ c.leadAgentCode || '-' }}</div>
-            <div class="card-tags">
-              <el-tag size="small" :type="statusTagType(c.status)">{{ statusLabel(c.status) }}</el-tag>
-              <el-tag v-if="c.verificationConclusion" size="small" :type="verdictType(c.verificationConclusion)">
-                {{ c.verificationConclusion }}
-              </el-tag>
-              <el-tag size="small" type="info">产物 {{ c.artifactCount }}</el-tag>
-            </div>
-            <div class="card-time">{{ fmt(c.queuedAt) }} → {{ fmt(c.finishedAt) }}</div>
+    <div v-else class="flow">
+      <template v-for="(stage, si) in orderedStages" :key="stage.name">
+        <div class="lane">
+          <div class="lane-title">
+            <span class="stage-name">{{ stage.name }}</span>
+            <span class="stage-count">{{ stage.cards.length }}</span>
           </div>
-          <span v-if="stage.cards.length === 0" class="empty-cell">—</span>
+          <div class="lane-body">
+            <template v-for="(c, ci) in stage.cards" :key="c.activityRunId">
+              <div
+                class="card"
+                :class="statusClass(c.status)"
+                @click="emit('show-detail', c.activityRunId)"
+              >
+                <div class="card-title">{{ c.name || c.activityId }}</div>
+                <div class="card-sub">Lead：{{ c.leadAgentCode || '-' }}</div>
+                <div class="card-tags">
+                  <el-tag size="small" :type="statusTagType(c.status)">{{ statusLabel(c.status) }}</el-tag>
+                  <el-tag v-if="c.verificationConclusion" size="small" :type="verdictType(c.verificationConclusion)">
+                    {{ c.verificationConclusion }}
+                  </el-tag>
+                  <el-tag size="small" type="info">产物 {{ c.artifactCount }}</el-tag>
+                </div>
+                <div class="card-time">{{ fmt(c.queuedAt) }} → {{ fmt(c.finishedAt) }}</div>
+              </div>
+              <span v-if="ci < stage.cards.length - 1" class="arrow-h">→</span>
+            </template>
+            <span v-if="stage.cards.length === 0" class="empty-cell">—</span>
+          </div>
         </div>
-      </div>
+        <div v-if="si < orderedStages.length - 1" class="arrow-v">↓</div>
+      </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { getSwimlane } from '@/api/spk/ipd/cockpit'
+
+const props = defineProps<{ externalPid?: string }>()
 
 const emit = defineEmits<{ (e: 'show-detail', activityRunId: string): void }>()
 
 const processInstanceId = ref('')
+
+// 外部注入流程实例编号（项目 Cockpit 总览 tab 复用本组件时用）
+watch(
+  () => props.externalPid,
+  (v) => {
+    if (v) {
+      processInstanceId.value = v
+      load()
+    }
+  }
+)
 const loading = ref(false)
 const errorMsg = ref('')
 const stages = ref<Record<string, any[]>>({})
@@ -148,10 +165,23 @@ onUnmounted(() => {
   color: var(--el-text-color-secondary);
   font-size: 13px;
 }
-.lanes {
+.lanes,
+.flow {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
+}
+.arrow-h {
+  align-self: center;
+  color: var(--el-text-color-placeholder);
+  font-size: 16px;
+}
+.arrow-v {
+  text-align: center;
+  color: var(--el-text-color-placeholder);
+  font-size: 16px;
+  line-height: 1;
+  margin: -2px 0;
 }
 .lane {
   border: 1px solid var(--el-border-color);

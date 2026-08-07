@@ -235,3 +235,41 @@ justauth:
     type: REDIS
     prefix: 'social_auth_state:' # 缓存前缀，目前只对 Redis 缓存生效，默认 JUSTAUTH::STATE::
     timeout: 24h # 超时时长，目前只对 Redis 缓存生效，默认 3 分钟
+
+# ==================== SPK-OS Cortext-IPD（dev profile 覆盖）====================
+# application-local.yaml 在 dev profile 下不加载，故在此显式覆盖。
+# auto-deploy=true：启动时把 resources/ipd/spk-ipd-flow.json（28 Activity + 5 Gate）部署为
+# spkIpdFlow 流程最新版本（幂等：仅 hash 变更才重新部署）。
+# fast-mode=false（P6）：真实调 LLM（ali_qwen3.7-max 经 new-api:3500），长文档落 Gitea，
+# 流程变量 agentResult 只存 {summary, conclusion, giteaUrl, artifactId}。回退桩模式改 true 即可。
+spk-delivery:
+  flow:
+    auto-deploy: true
+  execution:
+    # P7：切 omnigent 跑真实全链（验通后可改回 native-ai）
+    adapter: omnigent
+    fast-mode: false
+  # Omnigent 执行域（192.168.56.101:6767）。鉴权已由 drop-in 临时关闭（OMNIGENT_AUTH_ENABLED=0），cookie 留空。
+  # 跑完恢复鉴权后需重新注入 ap_session cookie（见 application-local.yaml omnigent.cookie）。
+  omnigent:
+    base-url: http://192.168.56.101:6767
+    # P7+：切单脑 spk-reporter（claude-sdk harness 直接产出简洁 IPD 报告，不分发子智能体）。
+    # 替代 debby（双头 fanout，首轮只产 preamble，240s 内不收敛）。
+    # spk-reporter 由 OMNIGENT_BUILTIN_AGENT_DIRS=/work/SPK-OS/env/omnigent-agents/spk-reporter 注册。
+    agent-id: 'cdb4db4d0819f4234ce13e94e0f80b7d'
+    # 在线 host_id（Ubuntu host，claude-sdk harness 已配置）；留空则动态解析
+    host-id: '5aa2437bcd684847bc7c7afd6b8fb76b'
+    # runner 工作目录（host 上必须真实存在）
+    workspace: /work/SPK-OS/Delivery/project/smart-home-hub
+    # 鉴权关闭模式无需 cookie
+    cookie: ''
+    # 调大至 300s：单脑 agent 收敛快（~10–30s），300s 留足余量兜底慢轮；
+    # yudao HTTP 触发器走全局 RestTemplate（无显式 read timeout），不会在 300s 处 clip。
+    timeout-ms: 300000
+    poll-interval-ms: 2000
+  # Gitea 凭证（dev profile 直读 env；run.sh / 集成用）
+  gitea:
+    base-url: ${GITEA_BASE_URL:http://192.168.56.101:3000}
+    token: ${GITEA_TOKEN:}
+    owner: spk-os
+    repo: smart-home-hub

@@ -72,7 +72,7 @@
           clearable
           placeholder="请选择"
         >
-          <el-option label="全部" :value="undefined" />
+          <el-option label="全部" :value="(undefined as any)" />
           <el-option label="显示" :value="0" />
           <el-option label="隐藏" :value="1" />
         </el-select>
@@ -307,9 +307,9 @@ const handleHide = async (row: AgentDefApi.AgentDefVO, hidden: number) => {
     const text = hidden === 1 ? '隐藏' : '取消隐藏'
     await message.confirm('确认要"' + text + '""' + row.name + '"智能体吗?')
     if (hidden === 1) {
-      await AgentDefApi.hideAgentDef(row.id)
+      await AgentDefApi.hideAgentDef(row.id!)
     } else {
-      await AgentDefApi.unhideAgentDef(row.id)
+      await AgentDefApi.unhideAgentDef(row.id!)
     }
     message.success(text + '成功')
     await getList()

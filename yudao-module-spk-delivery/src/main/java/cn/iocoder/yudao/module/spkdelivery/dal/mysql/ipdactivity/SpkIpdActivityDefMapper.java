@@ -7,6 +7,7 @@ import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdactivity.vo.SpkIp
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdactivity.SpkIpdActivityDefDO;
 import org.apache.ibatis.annotations.Mapper;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -21,6 +22,18 @@ public interface SpkIpdActivityDefMapper extends BaseMapperX<SpkIpdActivityDefDO
         return selectOne(new LambdaQueryWrapperX<SpkIpdActivityDefDO>()
                 .eq(SpkIpdActivityDefDO::getActivityId, activityId)
                 .eq(SpkIpdActivityDefDO::getVersion, version));
+    }
+
+    /**
+     * 按一组 activityId 批量查定义（取每条最新版本即可，Cockpit 只需中文名）。
+     * 同一 activityId 多版本时，由调用方按 activityId 去重保留首条。
+     */
+    default List<SpkIpdActivityDefDO> selectListByActivityIds(Collection<String> activityIds) {
+        if (activityIds == null || activityIds.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        return selectList(new LambdaQueryWrapperX<SpkIpdActivityDefDO>()
+                .in(SpkIpdActivityDefDO::getActivityId, activityIds));
     }
 
     default List<SpkIpdActivityDefDO> selectListByStage(String stage) {

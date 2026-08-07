@@ -5,20 +5,24 @@ import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.artifact.SpkArtifactMa
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.evidence.SpkEvidenceRecordDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.evidence.SpkRunReceiptDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.evidence.SpkVerificationReceiptDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdactivity.SpkIpdActivityDefDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.taskcontract.SpkTaskContractDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agentdef.SpkAgentDefMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.artifact.SpkArtifactManifestMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.evidence.SpkEvidenceRecordMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.evidence.SpkRunReceiptMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.evidence.SpkVerificationReceiptMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdactivity.SpkIpdActivityDefMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.taskcontract.SpkTaskContractMapper;
 import cn.iocoder.yudao.module.spkdelivery.enums.SpkAgentKindEnum;
 import cn.iocoder.yudao.module.spkdelivery.service.evidence.SpkEvidenceService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +54,17 @@ public class SpkIpdCockpitService {
     private SpkAgentDefMapper agentDefMapper;
     @Resource
     private SpkEvidenceService evidenceService;
+    @Resource
+    private SpkIpdActivityDefMapper activityDefMapper;
+
+    /** Gitea 文档链接构造（与 SpkGiteaIntegrationService 同源配置；Cockpit 只读拼接，不调 API）。
+     *  文档 path 规则见 SpkTaskRouterService L179：docs/{stage}/{activityRunId}.md */
+    @Value("${spk-delivery.gitea.base-url:http://192.168.56.101:3000}")
+    private String giteaBaseUrl;
+    @Value("${spk-delivery.gitea.owner:spk-os}")
+    private String giteaOwner;
+    @Value("${spk-delivery.gitea.repo:smart-home-hub}")
+    private String giteaRepo;
 
     /**
      * 泳道：按阶段聚合某流程实例的全部 Activity 合同。
@@ -57,6 +72,8 @@ public class SpkIpdCockpitService {
     public Map<String, Object> swimlane(String processInstanceId) {
         List<SpkTaskContractDO> contracts = contractMapper.selectListByProcessInstanceId(processInstanceId);
         List<SpkArtifactManifestDO> artifacts = artifactMapper.selectListByProcessInstanceId(processInstanceId);
+        // activityId → 中文名（spk_ipd_activity_def.name），卡片显示实际内容而非 ACT-xx 编号
+        Map<String, String> nameByActivityId = loadActivityNames(contracts);
         // 按 activityRunId 索引产物数与验证结论
         Map<String, Integer> artifactCount = new LinkedHashMap<>();
         Map<String, String> conclusion = new LinkedHashMap<>();
@@ -75,7 +92,8 @@ public class SpkIpdCockpitService {
             String stage = c.getPhase() != null ? c.getPhase() : "unknown";
             byStage.computeIfAbsent(stage, k -> new ArrayList<>()).add(activityCard(c,
                     artifactCount.getOrDefault(c.getActivityRunId(), 0),
-                    conclusion.get(c.getActivityRunId())));
+                    conclusion.get(c.getActivityRunId()),
+                    nameByActivityId.getOrDefault(c.getActivityId(), c.getActivityId())));
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("processInstanceId", processInstanceId);
@@ -85,7 +103,7 @@ public class SpkIpdCockpitService {
     }
 
     /**
-     * Activity 详情：三件套 + 证据链。
+     * Activity 详情：三件套 + 证据链 + 文档链接。
      */
     public Map<String, Object> activityDetail(String activityRunId) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -93,12 +111,16 @@ public class SpkIpdCockpitService {
         // Task Contract
         SpkTaskContractDO contract = contractMapper.selectByActivityRunId(activityRunId);
         result.put("contract", contract);
-        // ContextManifest URI
+        // 中文名（spk_ipd_activity_def.name）—— 替代 ACT-xx 编号显示
         if (contract != null) {
+            SpkIpdActivityDefDO def = activityDefMapper.selectByActivityIdAndVersion(
+                    contract.getActivityId(), contract.getActivityVersion());
+            result.put("activityName", def != null ? def.getName() : contract.getActivityId());
             result.put("contextManifestUri", contract.getContextManifestUri());
         }
-        // ArtifactManifest
-        result.put("artifacts", artifactMapper.selectListByActivityRunId(activityRunId));
+        // ArtifactManifest —— 附 Gitea 文档链接（docs/{stage}/{activityRunId}.md 可直接构造，无需读 Flowable 变量）
+        List<SpkArtifactManifestDO> artifacts = artifactMapper.selectListByActivityRunId(activityRunId);
+        result.put("artifacts", artifactListWithDocUrl(artifacts, contract));
         // RunReceipt
         result.put("runReceipt", runReceiptMapper.selectByActivityRunId(activityRunId));
         // VerificationReceipt
@@ -133,10 +155,11 @@ public class SpkIpdCockpitService {
         return result;
     }
 
-    private Map<String, Object> activityCard(SpkTaskContractDO c, int artifacts, String verdict) {
+    private Map<String, Object> activityCard(SpkTaskContractDO c, int artifacts, String verdict, String activityName) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("activityRunId", c.getActivityRunId());
         m.put("activityId", c.getActivityId());
+        m.put("name", activityName);
         m.put("nodeKey", c.getNodeKey());
         m.put("stage", c.getPhase());
         m.put("leadAgentCode", c.getLeadAgentCode());
@@ -146,6 +169,60 @@ public class SpkIpdCockpitService {
         m.put("queuedAt", c.getQueuedAt());
         m.put("finishedAt", c.getFinishedAt());
         return m;
+    }
+
+    /**
+     * 批量取 activityId → 中文名映射（同 activityId 多版本保留首条，Cockpit 只需展示名）。
+     */
+    private Map<String, String> loadActivityNames(List<SpkTaskContractDO> contracts) {
+        Map<String, String> map = new HashMap<>();
+        if (contracts == null || contracts.isEmpty()) {
+            return map;
+        }
+        List<String> ids = new ArrayList<>();
+        for (SpkTaskContractDO c : contracts) {
+            if (c.getActivityId() != null && !ids.contains(c.getActivityId())) {
+                ids.add(c.getActivityId());
+            }
+        }
+        for (SpkIpdActivityDefDO d : activityDefMapper.selectListByActivityIds(ids)) {
+            map.putIfAbsent(d.getActivityId(), d.getName());
+        }
+        return map;
+    }
+
+    /**
+     * 构造每个 artifact 的 Gitea 文档链接（docs/{stage}/{activityRunId}.md）。
+     * 一个 activityRunId 只产一篇 md（router L179 用 activityRunId 命名），多 artifact 共享同链。
+     */
+    private List<Map<String, Object>> artifactListWithDocUrl(List<SpkArtifactManifestDO> arts, SpkTaskContractDO contract) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        if (arts == null) {
+            return list;
+        }
+        String stage = contract != null ? contract.getPhase() : null;
+        String runId = contract != null ? contract.getActivityRunId() : null;
+        String docUrl = (stage != null && runId != null) ? composeDocUrl(stage, runId) : null;
+        for (SpkArtifactManifestDO a : arts) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("artifactId", a.getArtifactId());
+            m.put("artifactType", a.getArtifactType());
+            m.put("summary", a.getSummary());
+            m.put("metadata", a.getMetadata());
+            m.put("uri", a.getUri());
+            m.put("status", a.getStatus());
+            m.put("version", a.getVersion());
+            m.put("signedBy", a.getSignedBy());
+            m.put("contentHash", a.getContentHash());
+            m.put("giteaUrl", docUrl);
+            list.add(m);
+        }
+        return list;
+    }
+
+    private String composeDocUrl(String stage, String activityRunId) {
+        return giteaBaseUrl + "/" + giteaOwner + "/" + giteaRepo
+                + "/src/branch/main/docs/" + stage + "/" + activityRunId + ".md";
     }
 
     private Map<String, Object> agentRow(SpkAgentDefDO a) {

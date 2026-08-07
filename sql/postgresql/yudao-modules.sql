@@ -5984,6 +5984,25 @@ INSERT INTO system_role_menu (id, role_id, menu_id, creator, updater, deleted, t
 VALUES (6940, 1, 6840, 'admin', 'admin', 0, 1)
 ON CONFLICT (id) DO NOTHING;
 
+-- SPK 研发 -> IPD 项目 Cockpit（Cortext-IPD P4：发起 IPD + 六阶段进度 + 泳道 + Activity 详情/介入 + 集成 iframe + Gate 评审）
+-- 菜单 6850；按钮 6851-6853；超管 role_id=1 授权 6950-6953
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, updater, deleted)
+VALUES (6850, 'IPD 项目', 'spk-delivery:ipd-project:query', 2, 90, 6800, 'ipd-project', 'ep:set-up', 'spk/ipd/project/index', 'SpkIpdProject', 0, true, true, true, 'admin', 'admin', 0)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, updater, deleted)
+VALUES (6851, '发起 IPD', 'spk-delivery:ipd-project:create', 3, 1, 6850, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+       (6852, '人工介入', 'spk-delivery:agent:intervene', 3, 2, 6850, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0),
+       (6853, 'Omnigent 代理', 'spk-delivery:ipd-cockpit:query', 3, 3, 6850, '', '#', '', NULL, 0, true, true, true, 'admin', 'admin', 0)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO system_role_menu (id, role_id, menu_id, creator, updater, deleted, tenant_id)
+VALUES (6950, 1, 6850, 'admin', 'admin', 0, 1),
+       (6951, 1, 6851, 'admin', 'admin', 0, 1),
+       (6952, 1, 6852, 'admin', 'admin', 0, 1),
+       (6953, 1, 6853, 'admin', 'admin', 0, 1)
+ON CONFLICT (id) DO NOTHING;
+
 CREATE SEQUENCE IF NOT EXISTS spk_dcp_redirect_log_seq;
 
 -- =====================================================================

@@ -54,6 +54,14 @@ public class SpkIpdFlowDeployRunner implements ApplicationRunner {
     /** 部署/管理用的系统用户编号（须 ∈ managerUserIds） */
     @org.springframework.beans.factory.annotation.Value("${spk-delivery.self.system-user-id:1}")
     private Long systemUserId;
+    /**
+     * 是否启动时自动部署/刷新 IPD 流程模型。
+     * <p>
+     * P2-A 起默认 false：流程编排回归 yudao 原生「流程模型」设计器维护，由用户在界面建/改/部署，
+     * 不再启动时用资源文件 spk-ipd-flow.json 覆盖。需一次性恢复自动部署时（如重新初始化）置 true。
+     */
+    @org.springframework.beans.factory.annotation.Value("${spk-delivery.flow.auto-deploy:false}")
+    private boolean autoDeploy;
 
     @Resource
     private BpmModelService modelService;
@@ -64,6 +72,12 @@ public class SpkIpdFlowDeployRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        // P2-A：流程编排回归原生「流程模型」设计器。auto-deploy=false 时跳过自动部署，
+        // 避免启动时用资源文件覆盖用户在界面手改的 spkIpdFlow 模型。
+        if (!autoDeploy) {
+            log.info("[run][spk-delivery.flow.auto-deploy=false，跳过 IPD 流程自动部署；改由「流程模型」设计器维护]");
+            return;
+        }
         // SPK-OS 单租户(tenant=1)：启动时无租户上下文，显式设为 1，使流程部署到 tenant 1，
         // 实例继承 tenant 1，HTTP 触发器回写 tenant-id:1 头，/admin-api/spk/* 回调端点免 400。
         Long prevTenant = TenantContextHolder.getTenantId();

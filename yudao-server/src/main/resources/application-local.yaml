@@ -296,3 +296,47 @@ justauth:
     type: REDIS
     prefix: 'social_auth_state:' # 缓存前缀，目前只对 Redis 缓存生效，默认 JUSTAUTH::STATE::
     timeout: 24h # 超时时长，目前只对 Redis 缓存生效，默认 3 分钟
+
+# ==================== SPK-OS Cortext-IPD 交付子系统 ====================
+spk-delivery:
+  # 流程编排：P2-A 起回归 yudao 原生「流程模型」设计器维护，不在启动时用资源文件覆盖
+  flow:
+    auto-deploy: true
+  self:
+    system-user-id: 1
+  agent:
+    system-user-id: 1
+  execution:
+    # 默认 adapter：native-ai（yudao-module-ai 内核）/ omnigent（Omnigent 执行域）
+    adapter: native-ai     # native-ai 内核（fast-mode=true 时走桩，不实际调用）
+    # fast-mode：true 跳过真实 runtime 合成桩（默认，避免 LLM 超时撑爆 Flowable 同步事务）
+    fast-mode: true        # 桩模式，避免 LLM 超时撑爆 Flowable 同步事务（真实链路分阶段切）
+  # Omnigent 执行域（192.168.56.101:6767，accounts 鉴权模式：需 ap_session cookie）
+  omnigent:
+    base-url: http://192.168.56.101:6767
+    # agent-id 为裸 32 位 hex（非 ag_ 前缀）；debby=claude-sdk harness，验证用
+    agent-id: 'eac9e787e68ae6774d77e618031c287a'  # 【P1 临时：debby，验完改回空】
+    # ap_session cookie（accounts web 登录换，8h 有效；验完改回空）
+    cookie: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTc4NTg1NTE3MSwiZXhwIjoxNzg1ODgzOTcxLCJwcm92aWRlciI6ImFjY291bnRzIn0.wVB8E5RbaCuICTf3UJu1HoswvfT4QKNpIfwXywkqGQY'
+    # 在线 host_id（裸 32 位 hex，Ubuntu host=claude-sdk harness 已配置）；留空则动态解析
+    host-id: '5aa2437bcd684847bc7c7afd6b8fb76b'
+    # runner 工作目录（host 上必须真实存在）；POST /v1/hosts/{id}/runners 必填
+    workspace: /work/SPK-OS/Delivery/project/smart-home-hub
+    timeout-ms: 120000
+    poll-interval-ms: 2000
+  # 产物本地存储（过渡，P2 接 Knowledge Vault）
+  artifact:
+    base-dir: /work/SPK-OS/artifacts
+  # Plane 需求管理（凭证从 env/secrets/plane.env 注入）
+  plane:
+    base-url: http://192.168.56.101
+    api-key: ${PLANE_API_KEY:}
+    workspace: ${PLANE_WORKSPACE:spk-os}
+    # Plane project UUID（非 slug；SPK-OS 项目实测=d0159ae0-...，issues 端点必须用 UUID）
+    project-id: ${PLANE_PROJECT_ID:d0159ae0-5d9f-45d0-bc23-e3e459101b68}
+  # Gitea 代码/PR/CI/Release（凭证从 env/secrets/gitea.env 注入）
+  gitea:
+    base-url: http://192.168.56.101:3000
+    token: ${GITEA_TOKEN:}
+    owner: ${GITEA_OWNER:spk-os}
+    repo: ${GITEA_REPO:smart-home-hub}

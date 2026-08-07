@@ -2,19 +2,28 @@ package cn.iocoder.yudao.module.spkdelivery.service.agent;
 
 import cn.iocoder.yudao.module.bpm.api.task.BpmProcessTaskApi;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agent.SpkAgentTaskDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agentdef.SpkAgentDefDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.artifact.SpkArtifactManifestDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.taskcontract.SpkTaskContractDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agent.SpkAgentTaskMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agentdef.SpkAgentDefMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.artifact.SpkArtifactManifestMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.taskcontract.SpkTaskContractMapper;
 import cn.iocoder.yudao.module.spkdelivery.enums.SpkAgentTaskStatusEnum;
 import cn.iocoder.yudao.module.spkdelivery.service.router.SpkRouteResult;
 import cn.iocoder.yudao.module.spkdelivery.service.router.SpkTaskRouterService;
+import cn.iocoder.yudao.module.spkdelivery.service.feedback.SpkFeedbackService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.engine.RuntimeService;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.AGENT_TASK_ALREADY_DONE;
@@ -41,7 +50,7 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
 
     @Resource
     private SpkAgentTaskMapper agentTaskMapper;
-    @Resource
+    @Resource(name = "native-ai")
     private FrameworkAdapter frameworkAdapter;
     @Resource
     private RuntimeService runtimeService;
@@ -49,6 +58,14 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
     private BpmProcessTaskApi processTaskApi;
     @Resource
     private SpkTaskRouterService taskRouterService;
+    @Resource
+    private SpkTaskContractMapper taskContractMapper;
+    @Resource
+    private SpkArtifactManifestMapper artifactManifestMapper;
+    @Resource
+    private SpkAgentDefMapper agentDefMapper;
+    @Resource
+    private SpkFeedbackService feedbackService;
 
     @Override
     public SpkAgentTaskDO dispatch(Long roleId, String prompt, String instanceId, String nodeKey, String receiveTaskKey) {
@@ -139,7 +156,113 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
 
     @Override
     public List<SpkAgentTaskDO> getListByInstanceId(String instanceId) {
-        return agentTaskMapper.selectListByInstanceId(instanceId);
+        // P1 新路径：Agent 产物落在 spk_task_contract + spk_artifact_manifest，spk_agent_task 不再写入。
+        // 为兼容前端「IPD 产物」tab（按 SpkAgentTaskDO 形态消费 nodeKey/roleId/status/taskId/result），
+        // 这里把 contract + artifact 聚合成 SpkAgentTaskDO 列表返回；同时并入旧路径 spk_agent_task 行（按 nodeKey 去重）。
+        List<SpkTaskContractDO> contracts = taskContractMapper.selectListByProcessInstanceId(instanceId);
+        List<SpkAgentTaskDO> rows = new ArrayList<>();
+        if (contracts != null && !contracts.isEmpty()) {
+            // 批量解析 Lead Agent -> roleId
+            List<Long> leadIds = contracts.stream()
+                    .map(SpkTaskContractDO::getLeadAgentId)
+                    .filter(java.util.Objects::nonNull)
+                    .distinct()
+                    .collect(Collectors.toList());
+            Map<Long, SpkAgentDefDO> leadMap = new HashMap<>();
+            if (!leadIds.isEmpty()) {
+                List<SpkAgentDefDO> leads = agentDefMapper.selectBatchIds(leadIds);
+                if (leads != null) {
+                    for (SpkAgentDefDO d : leads) {
+                        leadMap.put(d.getId(), d);
+                    }
+                }
+            }
+            for (SpkTaskContractDO c : contracts) {
+                // 该 activityRunId 下的产物清单
+                List<SpkArtifactManifestDO> arts = artifactManifestMapper.selectListByActivityRunId(c.getActivityRunId());
+                String resultText = null;
+                String artifactUris = null;
+                if (arts != null && !arts.isEmpty()) {
+                    resultText = arts.stream()
+                            .map(a -> a.getSummary() != null ? a.getSummary() : a.getUri())
+                            .collect(Collectors.joining(" | "));
+                    artifactUris = arts.stream()
+                            .map(SpkArtifactManifestDO::getUri)
+                            .filter(java.util.Objects::nonNull)
+                            .collect(Collectors.joining(","));
+                }
+                Long roleId = null;
+                if (c.getLeadAgentId() != null) {
+                    SpkAgentDefDO lead = leadMap.get(c.getLeadAgentId());
+                    if (lead != null) {
+                        roleId = lead.getRoleId();
+                    }
+                }
+                SpkAgentTaskDO t = SpkAgentTaskDO.builder()
+                        .activityRunId(c.getActivityRunId())
+                        .contractId(c.getContractId())
+                        .activityId(c.getActivityId())
+                        .roleId(roleId != null ? roleId : c.getLeadAgentId())
+                        .prompt(c.getPrompt())
+                        .status(c.getStatus())
+                        .result(resultText)
+                        .artifactUris(artifactUris)
+                        .instanceId(c.getProcessInstanceId())
+                        .nodeKey(c.getNodeKey())
+                        .taskId(c.getTaskId() != null ? c.getTaskId() : null)
+                        .build();
+                rows.add(t);
+            }
+        }
+        // 并入旧路径 spk_agent_task 行（按 nodeKey 去重，新路径优先）
+        List<SpkAgentTaskDO> legacy = agentTaskMapper.selectListByInstanceId(instanceId);
+        if (legacy != null && !legacy.isEmpty()) {
+            java.util.Set<String> seen = rows.stream()
+                    .map(SpkAgentTaskDO::getNodeKey)
+                    .filter(java.util.Objects::nonNull)
+                    .collect(Collectors.toSet());
+            for (SpkAgentTaskDO t : legacy) {
+                if (t.getNodeKey() == null || !seen.contains(t.getNodeKey())) {
+                    rows.add(t);
+                }
+            }
+        }
+        return rows;
+    }
+
+    @Override
+    public SpkRouteResult intervene(String activityRunId, String action, String note) {
+        SpkTaskContractDO contract = taskContractMapper.selectByActivityRunId(activityRunId);
+        if (contract == null) {
+            throw exception(AGENT_TASK_NOT_EXISTS);
+        }
+        log.info("[intervene][activityRunId={} action={} note={}]", activityRunId, action, note);
+        String act = action == null ? "note" : action.toLowerCase();
+        switch (act) {
+            case "rerun": {
+                // 按 contract 上的 activityId 重新路由派发（生成新 activityRunId + 三件套）。
+                // 注意：本方法不在 BPM 触发器事务上下文，setVariables 由 route 内部不触碰 Flowable 运行时（同 dispatchActivity 铁律）。
+                return taskRouterService.route(contract.getActivityId(), contract.getActivityVersion(),
+                        contract.getProcessInstanceId(), null, contract.getBusinessKey(),
+                        contract.getNodeKey(), java.util.Collections.emptyList());
+            }
+            case "abort": {
+                contract.setStatus("failed");
+                if (note != null && !note.isBlank()) {
+                    contract.setFailureReason(note);
+                }
+                taskContractMapper.updateById(contract);
+                feedbackService.collect(contract.getProcessInstanceId(), "intervene-abort",
+                        "abort " + activityRunId + "：" + note, note, false);
+                return null;
+            }
+            case "note":
+            default: {
+                feedbackService.collect(contract.getProcessInstanceId(), "intervene-note",
+                        "note " + activityRunId + "：" + note, note, false);
+                return null;
+            }
+        }
     }
 
     /**

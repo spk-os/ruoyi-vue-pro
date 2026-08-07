@@ -50,7 +50,7 @@ public class SpkVerifierService {
     private SpkEvidenceService evidenceService;
     @Resource
     private SpkModelCapabilityRegistry capabilityRegistry;
-    @Resource
+    @Resource(name = "native-ai")
     private FrameworkAdapter frameworkAdapter;
 
     /**

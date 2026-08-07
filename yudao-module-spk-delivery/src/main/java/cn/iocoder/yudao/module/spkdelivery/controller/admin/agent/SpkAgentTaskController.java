@@ -14,6 +14,7 @@ import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -88,6 +89,28 @@ public class SpkAgentTaskController {
     public CommonResult<List<SpkAgentTaskDO>> listByInstance(
             @Parameter(description = "流程实例编号") @RequestParam("processInstanceId") String processInstanceId) {
         return success(agentTaskService.getListByInstanceId(processInstanceId));
+    }
+
+    @PostMapping("/{id}/intervene")
+    @Operation(summary = "人工介入 Activity 运行（rerun 重新派发 / abort 标记失败 / note 落反馈）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:agent:intervene')")
+    public CommonResult<Map<String, Object>> intervene(
+            @Parameter(description = "Activity 运行实例编号") @PathVariable("id") String activityRunId,
+            @Parameter(description = "介入动作 rerun/abort/note") @RequestParam(value = "action", defaultValue = "note") String action,
+            @Parameter(description = "介入备注") @RequestParam(value = "note", required = false) String note) {
+        SpkRouteResult result = agentTaskService.intervene(activityRunId, action, note);
+        Map<String, Object> data = new HashMap<>();
+        if (result != null) {
+            data.put("activityRunId", result.getActivityRunId());
+            data.put("contractId", result.getContractId());
+            data.put("artifactId", result.getArtifactId());
+            data.put("status", result.getStatus());
+            data.put("result", result.getAgentResult());
+        } else {
+            data.put("action", action);
+            data.put("activityRunId", activityRunId);
+        }
+        return success(data);
     }
 
 }

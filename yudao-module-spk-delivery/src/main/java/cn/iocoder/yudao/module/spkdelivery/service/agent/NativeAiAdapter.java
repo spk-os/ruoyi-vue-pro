@@ -7,6 +7,7 @@ import cn.iocoder.yudao.module.ai.dal.dataobject.model.AiChatRoleDO;
 import cn.iocoder.yudao.module.ai.service.chat.AiChatConversationService;
 import cn.iocoder.yudao.module.ai.service.chat.AiChatMessageService;
 import cn.iocoder.yudao.module.ai.service.model.AiChatRoleService;
+import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.module.spkdelivery.enums.SpkAgentTaskStatusEnum;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author SPK-OS
  */
 @Slf4j
-@Component
+@Component("native-ai")
 public class NativeAiAdapter implements FrameworkAdapter {
 
     public static final String NAME = "native-ai";
@@ -78,21 +80,63 @@ public class NativeAiAdapter implements FrameworkAdapter {
         // 2. 取/建会话（roleId 绑定模型/工具/MCP/知识库）
         Long conversationId = getOrCreateConversation(req);
         result.setConversationId(conversationId);
-        // 3. 同步发送消息
+        // 3. 构造发送内容：
+        //    - Verifier（nodeKey 以 verify: 开头）：保持原 prompt，LLM 返回 JSON 结论，route 不解析文档
+        //    - Lead：末尾追加分隔符格式约束，LLM 按三段输出，route 解析后全文落 Gitea、只存摘要+链接
+        String nodeKey = req.getNodeKey() == null ? "" : req.getNodeKey();
+        boolean isVerify = nodeKey.startsWith("verify:");
+        String prompt = req.getPrompt();
+        if (!isVerify && prompt != null) {
+            prompt = prompt + "\n\n【输出格式约束（必须严格遵循）】\n"
+                    + "请按以下三段分隔符格式输出，每个分隔符独占一行：\n"
+                    + "<<<DOCUMENT>>>\n{完整的 Markdown 文档正文（含标题、章节、表格等）}\n"
+                    + "<<<SUMMARY>>>\n{200 字以内的中文摘要}\n"
+                    + "<<<CONCLUSION>>>\n{结论：PASS 或 FAIL，加一句话说明}\n";
+        }
+        // 4. 同步发送消息
         AiChatMessageSendReqVO sendReqVO = new AiChatMessageSendReqVO();
         sendReqVO.setConversationId(conversationId);
-        sendReqVO.setContent(req.getPrompt());
+        sendReqVO.setContent(prompt);
         sendReqVO.setUseContext(Boolean.TRUE);
         AiChatMessageSendRespVO respVO = chatMessageService.sendMessage(sendReqVO, systemUserId);
-        // 4. 取 receive.content 作为产物
+        // 5. 取 receive.content 作为产物
         String content = (respVO != null && respVO.getReceive() != null) ? respVO.getReceive().getContent() : null;
-        result.setResult(content);
+        // Verifier 原样返回 LLM JSON（parseVerdict 解析 overall/summary/evidencePoints）；Lead 封装三段 JSON 供 route 解析
+        result.setResult(isVerify ? content : parseDocumentPayload(content));
         result.setStatus(SpkAgentTaskStatusEnum.DONE.getLabel());
         // taskId 用 conversationId#sendMsgId 作为外部任务编号（native 同步执行）
         Long sendMsgId = (respVO != null && respVO.getSend() != null) ? respVO.getSend().getId() : null;
         result.setTaskId(conversationId + "#" + sendMsgId);
         log.info("[dispatchTask][instanceId={} nodeKey={} roleId={} taskId={} done]", req.getInstanceId(), req.getNodeKey(), req.getRoleId(), result.getTaskId());
         return result;
+    }
+
+    /**
+     * 把 LLM 返回按 {@code <<<DOCUMENT>>>/<SUMMARY>>/<CONCLUSION>>>} 分隔符解析为
+     * {@code {document, summary, conclusion}} JSON。LLM 未遵循格式时 fallback：整段当文档、摘要取前 200 字。
+     */
+    private String parseDocumentPayload(String content) {
+        Map<String, String> m = new LinkedHashMap<>();
+        if (content == null || content.isBlank()) {
+            m.put("document", "");
+            m.put("summary", "LLM 返回空");
+            m.put("conclusion", "FAIL: 无产物");
+            return JsonUtils.toJsonString(m);
+        }
+        int iDoc = content.indexOf("<<<DOCUMENT>>>");
+        int iSum = content.indexOf("<<<SUMMARY>>>");
+        int iCon = content.indexOf("<<<CONCLUSION>>>");
+        if (iDoc >= 0 && iSum > iDoc && iCon > iSum) {
+            m.put("document", content.substring(iDoc + "<<<DOCUMENT>>>".length(), iSum).trim());
+            m.put("summary", content.substring(iSum + "<<<SUMMARY>>>".length(), iCon).trim());
+            m.put("conclusion", content.substring(iCon + "<<<CONCLUSION>>>".length()).trim());
+        } else {
+            // fallback：LLM 未遵循格式，整段当文档
+            m.put("document", content);
+            m.put("summary", content.length() > 200 ? content.substring(0, 200) : content);
+            m.put("conclusion", "未提取（LLM 未遵循分隔符格式）");
+        }
+        return JsonUtils.toJsonString(m);
     }
 
     /**

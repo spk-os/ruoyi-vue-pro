@@ -66,4 +66,18 @@ public interface SpkAgentTaskService {
      */
     List<SpkAgentTaskDO> getListByInstanceId(String instanceId);
 
+    /**
+     * 人工介入某 Activity 运行（Cockpit「介入」按钮）。
+     * <ul>
+     *   <li>rerun —— 按 contract 上的 activityId 重新路由派发（生成新 activityRunId + 三件套）。</li>
+     *   <li>abort —— 标记当前合同 failed（死信，等人工兜底）。</li>
+     *   <li>note —— 仅落 R7 反馈，不改变运行态。</li>
+     * </ul>
+     *
+     * @param activityRunId Activity 运行实例编号
+     * @param action        rerun / abort / note
+     * @param note          介入备注（写反馈/失败原因）
+     */
+    SpkRouteResult intervene(String activityRunId, String action, String note);
+
 }
