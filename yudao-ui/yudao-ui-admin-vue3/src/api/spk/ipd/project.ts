@@ -4,13 +4,32 @@ import request from '@/config/axios'
 // 复用 yudao CommonResult 剥壳（request 已自动解包 data）
 
 // 发起 IPD 主流程
-export const startProject = async (params: { businessKey?: string; projectName?: string; payload?: string }) => {
+// mode: 'test'=fast 桩仅测试不落真实交付物；'product'=真实建 Gitea 分支/PR + Plane 需求（concept 阶段起）
+export const startProject = async (params: { businessKey?: string; projectName?: string; payload?: string; mode?: string }) => {
   return await request.post({ url: '/spk/ipd/project/start', params })
+}
+
+// 一句话发起 IPD 主流程（hermes「说一句话就开跑」入口）
+// 后端 SpkIpdIntakeService：LLM 抽取 projectName/payload → 启动 spkIpdFlow
+// 注意：参数名勿用 request，否则遮蔽 import 的 axios 实例 request → request.post is not a function
+// mode 透传：test/product（默认 test）
+export const intakeProject = async (req: string, mode: string = 'test') => {
+  return await request.post({ url: '/spk/ipd/project/intake', data: { request: req, mode } })
 }
 
 // 项目总览：泳道 + 六阶段进度
 export const getProject = async (processInstanceId: string) => {
   return await request.get({ url: `/spk/ipd/project/${processInstanceId}` })
+}
+
+// 最新 IPD 流程实例（进入项目页/监控台默认载入）：status=ok/not_found + processInstanceId/businessKey/projectName/startTime/running
+export const getLatestProject = async () => {
+  return await request.get({ url: '/spk/ipd/project/latest' })
+}
+
+// 按 businessKey 查发起态（异步发起后轮询）：starting / done / failed / not_found
+export const getProjectByBusinessKey = async (businessKey: string) => {
+  return await request.get({ url: `/spk/ipd/project/by-key/${businessKey}` })
 }
 
 // 各阶段进度

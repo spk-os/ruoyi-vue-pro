@@ -22,4 +22,8 @@ public class SpkIpdIntakeReqVO {
     @NotBlank(message = "诉求原文不能为空")
     private String request;
 
+    @Schema(description = "运行模式：test=桩仅测试 / product=真实交付（建 Gitea 分支/PR + Plane 需求）",
+            example = "test")
+    private String mode;
+
 }

@@ -245,10 +245,15 @@ justauth:
 spk-delivery:
   flow:
     auto-deploy: true
+    # Activity 定义重载脚本路径：指向仓库源文件，改完 init.sql 直接调
+    # POST /admin-api/spk/ipd-activity-def/reload 即刷 DB，无需 mvn install / 重启后端。
+    def-init-sql-path: file:/work/SPK-OS/soft/basic/ruoyi/yudao-module-spk-delivery/src/main/resources/sql/spk_ipd_activity_def_init.sql
   execution:
     # P7：切 omnigent 跑真实全链（验通后可改回 native-ai）
     adapter: omnigent
     fast-mode: false
+    # 默认运行模式 test=桩仅测试 / product=真实交付。发起时前端可选 mode 覆盖；未传归 test。
+    default-mode: test
   # Omnigent 执行域（192.168.56.101:6767）。鉴权已由 drop-in 临时关闭（OMNIGENT_AUTH_ENABLED=0），cookie 留空。
   # 跑完恢复鉴权后需重新注入 ap_session cookie（见 application-local.yaml omnigent.cookie）。
   omnigent:

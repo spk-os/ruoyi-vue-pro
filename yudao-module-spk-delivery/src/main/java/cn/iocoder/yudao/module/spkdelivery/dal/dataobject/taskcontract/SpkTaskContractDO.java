@@ -59,6 +59,11 @@ public class SpkTaskContractDO extends BaseDO {
      */
     private String nodeKey;
     /**
+     * 紧随的 receiveTask key（type=2 HTTP_CALLBACK 触发器注入的 taskDefineKey，部署时随机 UUID 不可推导，
+     * 持久化以供失败后 intervene rerun 成功时 triggerTask 推进卡住的 receiveTask）。
+     */
+    private String receiveTaskKey;
+    /**
      * 执行模式 task_system/lead_internal
      */
     private String executionMode;
@@ -104,5 +109,15 @@ public class SpkTaskContractDO extends BaseDO {
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
     private String failureReason;
+    /**
+     * fencing 令牌：每次（重新）认领/换 Lead +1；回调回写时 presented token < current 视为陈旧回写，
+     * 拒绝落库（设计 §15.5.4「换人」旧 session 终态写入被拒 409）。
+     */
+    private Long fencingToken;
+    /**
+     * 重试次数：超时 Job 按 {@code retry_policy.max_attempts} 限重试（设计 §15.5.3 + §9.3）。
+     * 初次派发=0；intervene(rerun) 生成的新合同继承 +1。
+     */
+    private Integer attemptNo;
 
 }

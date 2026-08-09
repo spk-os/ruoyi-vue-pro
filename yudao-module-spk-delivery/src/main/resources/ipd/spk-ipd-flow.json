@@ -7,7 +7,7 @@
     "type": 15,
     "name": "概念阶段·需求洞察",
     "triggerSetting": {
-      "type": 1,
+      "type": 2,
       "httpRequestSetting": {
         "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
         "body": [
@@ -26,12 +26,6 @@
             "key": "nodeKey",
             "value": "n_concept_1"
           }
-        ],
-        "response": [
-          {
-            "key": "agentResult",
-            "value": "result"
-          }
         ]
       }
     },
@@ -40,7 +34,7 @@
       "type": 15,
       "name": "概念阶段·概念选项集",
       "triggerSetting": {
-        "type": 1,
+        "type": 2,
         "httpRequestSetting": {
           "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
           "body": [
@@ -59,12 +53,6 @@
               "key": "nodeKey",
               "value": "n_concept_2"
             }
-          ],
-          "response": [
-            {
-              "key": "agentResult",
-              "value": "result"
-            }
           ]
         }
       },
@@ -73,7 +61,7 @@
         "type": 15,
         "name": "概念阶段·可行性分析",
         "triggerSetting": {
-          "type": 1,
+          "type": 2,
           "httpRequestSetting": {
             "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
             "body": [
@@ -92,12 +80,6 @@
                 "key": "nodeKey",
                 "value": "n_concept_3"
               }
-            ],
-            "response": [
-              {
-                "key": "agentResult",
-                "value": "result"
-              }
             ]
           }
         },
@@ -106,7 +88,7 @@
           "type": 15,
           "name": "概念阶段·商业案例",
           "triggerSetting": {
-            "type": 1,
+            "type": 2,
             "httpRequestSetting": {
               "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
               "body": [
@@ -125,12 +107,6 @@
                   "key": "nodeKey",
                   "value": "n_concept_4"
                 }
-              ],
-              "response": [
-                {
-                  "key": "agentResult",
-                  "value": "result"
-                }
               ]
             }
           },
@@ -139,7 +115,7 @@
             "type": 15,
             "name": "概念阶段·概念决策准备",
             "triggerSetting": {
-              "type": 1,
+              "type": 2,
               "httpRequestSetting": {
                 "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                 "body": [
@@ -157,12 +133,6 @@
                     "type": 1,
                     "key": "nodeKey",
                     "value": "n_concept_5"
-                  }
-                ],
-                "response": [
-                  {
-                    "key": "agentResult",
-                    "value": "result"
                   }
                 ]
               }
@@ -182,7 +152,7 @@
                 "type": 15,
                 "name": "计划阶段·项目计划",
                 "triggerSetting": {
-                  "type": 1,
+                  "type": 2,
                   "httpRequestSetting": {
                     "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                     "body": [
@@ -201,12 +171,6 @@
                         "key": "nodeKey",
                         "value": "n_plan_1"
                       }
-                    ],
-                    "response": [
-                      {
-                        "key": "agentResult",
-                        "value": "result"
-                      }
                     ]
                   }
                 },
@@ -215,7 +179,7 @@
                   "type": 15,
                   "name": "计划阶段·架构设计",
                   "triggerSetting": {
-                    "type": 1,
+                    "type": 2,
                     "httpRequestSetting": {
                       "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                       "body": [
@@ -234,12 +198,6 @@
                           "key": "nodeKey",
                           "value": "n_plan_2"
                         }
-                      ],
-                      "response": [
-                        {
-                          "key": "agentResult",
-                          "value": "result"
-                        }
                       ]
                     }
                   },
@@ -248,7 +206,7 @@
                     "type": 15,
                     "name": "计划阶段·风险评估",
                     "triggerSetting": {
-                      "type": 1,
+                      "type": 2,
                       "httpRequestSetting": {
                         "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                         "body": [
@@ -267,12 +225,6 @@
                             "key": "nodeKey",
                             "value": "n_plan_3"
                           }
-                        ],
-                        "response": [
-                          {
-                            "key": "agentResult",
-                            "value": "result"
-                          }
                         ]
                       }
                     },
@@ -281,7 +233,7 @@
                       "type": 15,
                       "name": "计划阶段·计划排期",
                       "triggerSetting": {
-                        "type": 1,
+                        "type": 2,
                         "httpRequestSetting": {
                           "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                           "body": [
@@ -300,12 +252,6 @@
                               "key": "nodeKey",
                               "value": "n_plan_4"
                             }
-                          ],
-                          "response": [
-                            {
-                              "key": "agentResult",
-                              "value": "result"
-                            }
                           ]
                         }
                       },
@@ -314,7 +260,7 @@
                         "type": 15,
                         "name": "计划阶段·IP策略",
                         "triggerSetting": {
-                          "type": 1,
+                          "type": 2,
                           "httpRequestSetting": {
                             "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                             "body": [
@@ -332,12 +278,6 @@
                                 "type": 1,
                                 "key": "nodeKey",
                                 "value": "n_plan_5"
-                              }
-                            ],
-                            "response": [
-                              {
-                                "key": "agentResult",
-                                "value": "result"
                               }
                             ]
                           }
@@ -357,7 +297,7 @@
                             "type": 15,
                             "name": "开发阶段·详细设计",
                             "triggerSetting": {
-                              "type": 1,
+                              "type": 2,
                               "httpRequestSetting": {
                                 "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                 "body": [
@@ -376,12 +316,6 @@
                                     "key": "nodeKey",
                                     "value": "n_dev_1"
                                   }
-                                ],
-                                "response": [
-                                  {
-                                    "key": "agentResult",
-                                    "value": "result"
-                                  }
                                 ]
                               }
                             },
@@ -390,7 +324,7 @@
                               "type": 15,
                               "name": "开发阶段·编码实现",
                               "triggerSetting": {
-                                "type": 1,
+                                "type": 2,
                                 "httpRequestSetting": {
                                   "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                   "body": [
@@ -409,12 +343,6 @@
                                       "key": "nodeKey",
                                       "value": "n_dev_2"
                                     }
-                                  ],
-                                  "response": [
-                                    {
-                                      "key": "agentResult",
-                                      "value": "result"
-                                    }
                                   ]
                                 }
                               },
@@ -423,7 +351,7 @@
                                 "type": 15,
                                 "name": "开发阶段·单元测试",
                                 "triggerSetting": {
-                                  "type": 1,
+                                  "type": 2,
                                   "httpRequestSetting": {
                                     "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                     "body": [
@@ -442,12 +370,6 @@
                                         "key": "nodeKey",
                                         "value": "n_dev_3"
                                       }
-                                    ],
-                                    "response": [
-                                      {
-                                        "key": "agentResult",
-                                        "value": "result"
-                                      }
                                     ]
                                   }
                                 },
@@ -456,7 +378,7 @@
                                   "type": 15,
                                   "name": "开发阶段·代码评审",
                                   "triggerSetting": {
-                                    "type": 1,
+                                    "type": 2,
                                     "httpRequestSetting": {
                                       "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                       "body": [
@@ -475,12 +397,6 @@
                                           "key": "nodeKey",
                                           "value": "n_dev_4"
                                         }
-                                      ],
-                                      "response": [
-                                        {
-                                          "key": "agentResult",
-                                          "value": "result"
-                                        }
                                       ]
                                     }
                                   },
@@ -489,7 +405,7 @@
                                     "type": 15,
                                     "name": "开发阶段·集成构建",
                                     "triggerSetting": {
-                                      "type": 1,
+                                      "type": 2,
                                       "httpRequestSetting": {
                                         "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                         "body": [
@@ -508,12 +424,6 @@
                                             "key": "nodeKey",
                                             "value": "n_dev_5"
                                           }
-                                        ],
-                                        "response": [
-                                          {
-                                            "key": "agentResult",
-                                            "value": "result"
-                                          }
                                         ]
                                       }
                                     },
@@ -522,7 +432,7 @@
                                       "type": 15,
                                       "name": "开发阶段·开发文档",
                                       "triggerSetting": {
-                                        "type": 1,
+                                        "type": 2,
                                         "httpRequestSetting": {
                                           "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                           "body": [
@@ -540,12 +450,6 @@
                                               "type": 1,
                                               "key": "nodeKey",
                                               "value": "n_dev_6"
-                                            }
-                                          ],
-                                          "response": [
-                                            {
-                                              "key": "agentResult",
-                                              "value": "result"
                                             }
                                           ]
                                         }
@@ -565,7 +469,7 @@
                                           "type": 15,
                                           "name": "验证阶段·集成验证",
                                           "triggerSetting": {
-                                            "type": 1,
+                                            "type": 2,
                                             "httpRequestSetting": {
                                               "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                               "body": [
@@ -584,12 +488,6 @@
                                                   "key": "nodeKey",
                                                   "value": "n_qual_1"
                                                 }
-                                              ],
-                                              "response": [
-                                                {
-                                                  "key": "agentResult",
-                                                  "value": "result"
-                                                }
                                               ]
                                             }
                                           },
@@ -598,7 +496,7 @@
                                             "type": 15,
                                             "name": "验证阶段·系统测试",
                                             "triggerSetting": {
-                                              "type": 1,
+                                              "type": 2,
                                               "httpRequestSetting": {
                                                 "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                                 "body": [
@@ -617,12 +515,6 @@
                                                     "key": "nodeKey",
                                                     "value": "n_qual_2"
                                                   }
-                                                ],
-                                                "response": [
-                                                  {
-                                                    "key": "agentResult",
-                                                    "value": "result"
-                                                  }
                                                 ]
                                               }
                                             },
@@ -631,7 +523,7 @@
                                               "type": 15,
                                               "name": "验证阶段·性能测试",
                                               "triggerSetting": {
-                                                "type": 1,
+                                                "type": 2,
                                                 "httpRequestSetting": {
                                                   "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                                   "body": [
@@ -650,12 +542,6 @@
                                                       "key": "nodeKey",
                                                       "value": "n_qual_3"
                                                     }
-                                                  ],
-                                                  "response": [
-                                                    {
-                                                      "key": "agentResult",
-                                                      "value": "result"
-                                                    }
                                                   ]
                                                 }
                                               },
@@ -664,7 +550,7 @@
                                                 "type": 15,
                                                 "name": "验证阶段·安全测试",
                                                 "triggerSetting": {
-                                                  "type": 1,
+                                                  "type": 2,
                                                   "httpRequestSetting": {
                                                     "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                                     "body": [
@@ -683,12 +569,6 @@
                                                         "key": "nodeKey",
                                                         "value": "n_qual_4"
                                                       }
-                                                    ],
-                                                    "response": [
-                                                      {
-                                                        "key": "agentResult",
-                                                        "value": "result"
-                                                      }
                                                     ]
                                                   }
                                                 },
@@ -697,7 +577,7 @@
                                                   "type": 15,
                                                   "name": "验证阶段·Beta 验证",
                                                   "triggerSetting": {
-                                                    "type": 1,
+                                                    "type": 2,
                                                     "httpRequestSetting": {
                                                       "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                                       "body": [
@@ -715,12 +595,6 @@
                                                           "type": 1,
                                                           "key": "nodeKey",
                                                           "value": "n_qual_5"
-                                                        }
-                                                      ],
-                                                      "response": [
-                                                        {
-                                                          "key": "agentResult",
-                                                          "value": "result"
                                                         }
                                                       ]
                                                     }
@@ -740,7 +614,7 @@
                                                       "type": 15,
                                                       "name": "发布阶段·上市发布",
                                                       "triggerSetting": {
-                                                        "type": 1,
+                                                        "type": 2,
                                                         "httpRequestSetting": {
                                                           "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                                           "body": [
@@ -759,12 +633,6 @@
                                                               "key": "nodeKey",
                                                               "value": "n_launch_1"
                                                             }
-                                                          ],
-                                                          "response": [
-                                                            {
-                                                              "key": "agentResult",
-                                                              "value": "result"
-                                                            }
                                                           ]
                                                         }
                                                       },
@@ -773,7 +641,7 @@
                                                         "type": 15,
                                                         "name": "发布阶段·发布包",
                                                         "triggerSetting": {
-                                                          "type": 1,
+                                                          "type": 2,
                                                           "httpRequestSetting": {
                                                             "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                                             "body": [
@@ -792,12 +660,6 @@
                                                                 "key": "nodeKey",
                                                                 "value": "n_launch_2"
                                                               }
-                                                            ],
-                                                            "response": [
-                                                              {
-                                                                "key": "agentResult",
-                                                                "value": "result"
-                                                              }
                                                             ]
                                                           }
                                                         },
@@ -806,7 +668,7 @@
                                                           "type": 15,
                                                           "name": "发布阶段·部署上线",
                                                           "triggerSetting": {
-                                                            "type": 1,
+                                                            "type": 2,
                                                             "httpRequestSetting": {
                                                               "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                                               "body": [
@@ -825,12 +687,6 @@
                                                                   "key": "nodeKey",
                                                                   "value": "n_launch_3"
                                                                 }
-                                                              ],
-                                                              "response": [
-                                                                {
-                                                                  "key": "agentResult",
-                                                                  "value": "result"
-                                                                }
                                                               ]
                                                             }
                                                           },
@@ -839,7 +695,7 @@
                                                             "type": 15,
                                                             "name": "发布阶段·GA签署",
                                                             "triggerSetting": {
-                                                              "type": 1,
+                                                              "type": 2,
                                                               "httpRequestSetting": {
                                                                 "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                                                 "body": [
@@ -858,12 +714,6 @@
                                                                     "key": "nodeKey",
                                                                     "value": "n_launch_4"
                                                                   }
-                                                                ],
-                                                                "response": [
-                                                                  {
-                                                                    "key": "agentResult",
-                                                                    "value": "result"
-                                                                  }
                                                                 ]
                                                               }
                                                             },
@@ -872,7 +722,7 @@
                                                               "type": 15,
                                                               "name": "生命周期阶段·运营反馈",
                                                               "triggerSetting": {
-                                                                "type": 1,
+                                                                "type": 2,
                                                                 "httpRequestSetting": {
                                                                   "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                                                   "body": [
@@ -891,12 +741,6 @@
                                                                       "key": "nodeKey",
                                                                       "value": "n_life_1"
                                                                     }
-                                                                  ],
-                                                                  "response": [
-                                                                    {
-                                                                      "key": "agentResult",
-                                                                      "value": "result"
-                                                                    }
                                                                   ]
                                                                 }
                                                               },
@@ -905,7 +749,7 @@
                                                                 "type": 15,
                                                                 "name": "生命周期阶段·运营监控",
                                                                 "triggerSetting": {
-                                                                  "type": 1,
+                                                                  "type": 2,
                                                                   "httpRequestSetting": {
                                                                     "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                                                     "body": [
@@ -924,12 +768,6 @@
                                                                         "key": "nodeKey",
                                                                         "value": "n_life_2"
                                                                       }
-                                                                    ],
-                                                                    "response": [
-                                                                      {
-                                                                        "key": "agentResult",
-                                                                        "value": "result"
-                                                                      }
                                                                     ]
                                                                   }
                                                                 },
@@ -938,7 +776,7 @@
                                                                   "type": 15,
                                                                   "name": "生命周期阶段·改进计划",
                                                                   "triggerSetting": {
-                                                                    "type": 1,
+                                                                    "type": 2,
                                                                     "httpRequestSetting": {
                                                                       "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
                                                                       "body": [
@@ -956,12 +794,6 @@
                                                                           "type": 1,
                                                                           "key": "nodeKey",
                                                                           "value": "n_life_3"
-                                                                        }
-                                                                      ],
-                                                                      "response": [
-                                                                        {
-                                                                          "key": "agentResult",
-                                                                          "value": "result"
                                                                         }
                                                                       ]
                                                                     }

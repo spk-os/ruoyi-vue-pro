@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.spkdelivery.controller.admin.agent;
 
+import cn.iocoder.yudao.framework.apilog.core.annotation.ApiAccessLog;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.agent.vo.SpkAgentTaskCallbackReqVO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agent.SpkAgentTaskDO;
@@ -43,28 +44,28 @@ public class SpkAgentTaskController {
 
     @PostMapping("/run")
     @PermitAll
-    @Operation(summary = "派发 Agent 任务（BPM HTTP_REQUEST 触发器调用，同步执行并回写 agentResult 变量）")
+    @ApiAccessLog(operateModule = "SPK IPD", operateName = "派发Agent任务")
+    @Operation(summary = "派发 Agent 任务（BPM HTTP_CALLBACK 触发器调用，异步派发即返回，LLM 后台跑完回调推进 receiveTask）")
     public CommonResult<Map<String, Object>> run(
             @Parameter(description = "流程实例编号") @RequestParam("processInstanceId") String processInstanceId,
             @Parameter(description = "agent 角色编号") @RequestParam(value = "roleId", required = false) Long roleId,
             @Parameter(description = "派发 prompt") @RequestParam(value = "prompt", required = false) String prompt,
             @Parameter(description = "BPM 节点 key") @RequestParam(value = "nodeKey", required = false) String nodeKey,
             @Parameter(description = "紧随的 receiveTask key（异步 runtime 回调推进用）") @RequestParam(value = "receiveTaskKey", required = false) String receiveTaskKey,
+            @Parameter(description = "HTTP_CALLBACK 触发器自动注入的 receiveTask key（异步派发回调推进用）") @RequestParam(value = "taskDefineKey", required = false) String taskDefineKey,
             @Parameter(description = "IPD Activity 业务标识（Cortext-IPD 路由路径）") @RequestParam(value = "activityId", required = false) String activityId,
             @Parameter(description = "IPD Activity 版本") @RequestParam(value = "activityVersion", required = false) String activityVersion,
             @Parameter(description = "业务 key") @RequestParam(value = "businessKey", required = false) String businessKey) {
         Map<String, Object> data = new HashMap<>();
-        // IPD 路由路径：按 Activity 定义派发，落三件套
+        // IPD 路由路径：按 Activity 定义异步派发，落三件套
         if (activityId != null && !activityId.isBlank()) {
-            SpkRouteResult result = agentTaskService.dispatchActivity(activityId, activityVersion,
-                    processInstanceId, null, businessKey, nodeKey, java.util.Collections.emptyList());
-            data.put("result", result.getAgentResult());
-            data.put("activityRunId", result.getActivityRunId());
-            data.put("contractId", result.getContractId());
-            data.put("artifactId", result.getArtifactId());
-            data.put("runReceiptId", result.getRunReceiptId());
-            data.put("verificationConclusion", result.getVerificationConclusion());
-            data.put("status", result.getStatus());
+            // 方案 A 异步派发：type=2 HTTP_CALLBACK 触发器发请求即卡 receiveTask 等回调推进；
+            // 立即返回 dispatched，LLM 后台跑（不阻塞审批接口）。agentResult 由后台线程写变量 + trigger。
+            agentTaskService.dispatchActivityAsync(activityId, activityVersion, processInstanceId,
+                    null, businessKey, nodeKey, taskDefineKey, java.util.Collections.emptyList());
+            data.put("status", "dispatched");
+            data.put("activityId", activityId);
+            data.put("nodeKey", nodeKey);
             return success(data);
         }
         // 兼容旧路径：roleId + prompt 直派
@@ -92,6 +93,7 @@ public class SpkAgentTaskController {
     }
 
     @PostMapping("/{id}/intervene")
+    @ApiAccessLog(operateModule = "SPK IPD", operateName = "人工介入Activity")
     @Operation(summary = "人工介入 Activity 运行（rerun 重新派发 / abort 标记失败 / note 落反馈）")
     @PreAuthorize("@ss.hasPermission('spk-delivery:agent:intervene')")
     public CommonResult<Map<String, Object>> intervene(

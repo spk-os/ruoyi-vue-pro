@@ -302,6 +302,8 @@ spk-delivery:
   # 流程编排：P2-A 起回归 yudao 原生「流程模型」设计器维护，不在启动时用资源文件覆盖
   flow:
     auto-deploy: true
+    # Activity 定义重载脚本路径：改完 init.sql 直接调 POST /admin-api/spk/ipd-activity-def/reload 即刷 DB。
+    def-init-sql-path: file:/work/SPK-OS/soft/basic/ruoyi/yudao-module-spk-delivery/src/main/resources/sql/spk_ipd_activity_def_init.sql
   self:
     system-user-id: 1
   agent:
@@ -311,6 +313,9 @@ spk-delivery:
     adapter: native-ai     # native-ai 内核（fast-mode=true 时走桩，不实际调用）
     # fast-mode：true 跳过真实 runtime 合成桩（默认，避免 LLM 超时撑爆 Flowable 同步事务）
     fast-mode: true        # 桩模式，避免 LLM 超时撑爆 Flowable 同步事务（真实链路分阶段切）
+    # 默认运行模式：test=桩仅测试不落真实交付物 / product=真实建 Gitea 分支/PR + Plane 需求。
+    # 发起时前端可选 mode 覆盖；未传时归 test。route 内只读 spk_mode 流程变量分支。
+    default-mode: test
   # Omnigent 执行域（192.168.56.101:6767，accounts 鉴权模式：需 ap_session cookie）
   omnigent:
     base-url: http://192.168.56.101:6767

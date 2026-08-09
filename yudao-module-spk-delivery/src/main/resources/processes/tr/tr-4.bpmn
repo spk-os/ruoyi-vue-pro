@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:flowable="http://flowable.org/bpmn"
+  targetNamespace="http://spk-os/ipd">
+  <process id="tr-4" name="技术评审 TR4" isExecutable="true">
+    <startEvent id="start"/>
+    <sequenceFlow id="sf1" sourceRef="start" targetRef="verif"/>
+    <serviceTask id="verif" name="TR 独立核证" flowable:delegateExpression="${spkVerifierDelegate}">
+      <extensionElements>
+        <flowable:executionListener event="start" expression="${execution.setVariable('verifierType','TR')}"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="sf2" sourceRef="verif" targetRef="gw"/>
+    <exclusiveGateway id="gw" name="verification_conclusion"/>
+    <sequenceFlow id="sf_pass" sourceRef="gw" targetRef="end_pass"><conditionExpression>${verificationConclusion == 'PASS'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_cond" sourceRef="gw" targetRef="ut"><conditionExpression>${verificationConclusion == 'CONDITIONAL'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_fail" sourceRef="gw" targetRef="end_fail"><conditionExpression>${verificationConclusion == 'FAIL'}</conditionExpression></sequenceFlow>
+    <userTask id="ut" name="TR Chair 裁决" flowable:candidateGroups="TR"/>
+    <sequenceFlow id="sf3" sourceRef="ut" targetRef="gw2"/>
+    <exclusiveGateway id="gw2" name="chair_decision"/>
+    <sequenceFlow id="sf_rel" sourceRef="gw2" targetRef="end_pass"><conditionExpression>${decision == 'release'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_rej" sourceRef="gw2" targetRef="end_fail"><conditionExpression>${decision == 'reject'}</conditionExpression></sequenceFlow>
+    <endEvent id="end_pass" name="通过"/>
+    <endEvent id="end_fail" name="打回"/>
+  </process>
+</definitions>

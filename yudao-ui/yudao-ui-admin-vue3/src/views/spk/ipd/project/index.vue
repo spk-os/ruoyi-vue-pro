@@ -13,6 +13,12 @@
         <el-form-item label="项目名">
           <el-input v-model="form.projectName" placeholder="智能家居中控" style="width: 220px" />
         </el-form-item>
+        <el-form-item label="模式">
+          <el-radio-group v-model="form.mode">
+            <el-radio value="test">test（桩，仅测试）</el-radio>
+            <el-radio value="product">product（真实交付）</el-radio>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="starting" @click="onStart">发起 IPD</el-button>
         </el-form-item>
@@ -20,6 +26,22 @@
           <el-input v-model="instanceId" placeholder="processInstanceId" style="width: 300px" @keyup.enter="loadProject" />
           <el-button class="ml-8px" @click="loadProject">载入</el-button>
           <el-switch v-model="autoRefresh" active-text="自动刷新(5s)" class="ml-8px" />
+        </el-form-item>
+      </el-form>
+      <el-form :inline="true" @submit.prevent class="mt-8px">
+        <el-form-item label="一句话发起">
+          <el-input
+            v-model="intakeRequest"
+            type="textarea"
+            :autosize="{ minRows: 1, maxRows: 3 }"
+            placeholder="说一句话启动 IPD 全流程，例如：做一个智能家居中控 App，统一控制灯/空调/窗帘，支持语音和定时场景"
+            style="width: 720px"
+            @keyup.ctrl.enter="onIntake"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="success" :loading="starting" @click="onIntake">说一句话发起</el-button>
+          <span class="intake-hint ml-8px">Ctrl+Enter 提交（LLM 自动抽取项目名/需求→启动流程）</span>
         </el-form-item>
       </el-form>
       <el-alert v-if="startMsg" :type="startOk ? 'success' : 'error'" :title="startMsg" :closable="false" show-icon class="mt-8px" />
@@ -126,7 +148,10 @@ import Swimlane from '../cockpit/Swimlane.vue'
 import ActivityDetail from '../cockpit/ActivityDetail.vue'
 import {
   startProject,
+  intakeProject,
   getProject,
+  getLatestProject,
+  getProjectByBusinessKey,
   getRequirements,
   getGitPr,
   getGitRelease,
@@ -138,7 +163,8 @@ defineOptions({ name: 'SpkIpdProject' })
 
 const activeTab = ref('overview')
 const iframeTab = ref('plane')
-const form = reactive({ businessKey: '', projectName: '' })
+const form = reactive({ businessKey: '', projectName: '', mode: 'test' })
+const intakeRequest = ref('')
 const starting = ref(false)
 const startMsg = ref('')
 const startOk = ref(false)
@@ -179,22 +205,115 @@ const phaseTagType = (s?: string): any => {
 const onStart = async () => {
   starting.value = true
   startMsg.value = ''
+  startOk.value = false
   try {
     const data: any = await startProject({
       businessKey: form.businessKey || undefined,
-      projectName: form.projectName || undefined
+      projectName: form.projectName || undefined,
+      mode: form.mode
     })
-    instanceId.value = data?.processInstanceId || ''
-    startOk.value = true
-    startMsg.value = `已发起 IPD 流程：businessKey=${data?.businessKey} processInstanceId=${data?.processInstanceId}`
-    ElMessage.success('IPD 流程已发起')
-    loadProject()
+    const bk = data?.businessKey
+    if (!bk) {
+      startMsg.value = '发起失败：未返回 businessKey'
+      starting.value = false
+      return
+    }
+    // 兼容同步返回 processInstanceId 的旧路径（理论上不再走）
+    if (data?.processInstanceId) {
+      instanceId.value = data.processInstanceId
+      startOk.value = true
+      startMsg.value = `已发起 IPD 流程：businessKey=${bk} processInstanceId=${data.processInstanceId}`
+      ElMessage.success('IPD 流程已发起')
+      loadProject()
+      starting.value = false
+      return
+    }
+    startMsg.value = `流程后台发起中（businessKey=${bk}），同步执行至 CDCP 门约 3 分钟，请勿刷新…`
+    pollByBusinessKey(bk)
   } catch (e: any) {
     startOk.value = false
     startMsg.value = e?.message || '发起失败'
-  } finally {
     starting.value = false
   }
+}
+
+const onIntake = async () => {
+  if (!intakeRequest.value.trim()) {
+    ElMessage.warning('请输入一句话需求')
+    return
+  }
+  starting.value = true
+  startMsg.value = ''
+  startOk.value = false
+  try {
+    const data: any = await intakeProject(intakeRequest.value, form.mode)
+    const bk = data?.businessKey
+    if (!bk) {
+      startMsg.value = '发起失败：未返回 businessKey'
+      starting.value = false
+      return
+    }
+    if (data?.processInstanceId) {
+      instanceId.value = data.processInstanceId
+      startOk.value = true
+      startMsg.value = `已发起 IPD 流程：projectName=${data?.projectName || '-'} processInstanceId=${data.processInstanceId}`
+      ElMessage.success('IPD 流程已发起')
+      loadProject()
+      starting.value = false
+      return
+    }
+    startMsg.value = `流程后台发起中（projectName=${data?.projectName || '-'} businessKey=${bk}，LLM 抽取后同步跑至 CDCP 门约 3 分钟，请勿刷新）`
+    pollByBusinessKey(bk)
+  } catch (e: any) {
+    startOk.value = false
+    startMsg.value = e?.message || '发起失败'
+    starting.value = false
+  }
+}
+
+// 异步发起后按 businessKey 轮询发起态：done 取 processInstanceId 载入泳道；failed 报错；超时提示
+let pollTimer: any = null
+const pollByBusinessKey = (bk: string) => {
+  const startedAt = Date.now()
+  const POLL_INTERVAL = 5000
+  const POLL_TIMEOUT = 6 * 60 * 1000
+  if (pollTimer) {
+    clearTimeout(pollTimer)
+    pollTimer = null
+  }
+  const tick = async () => {
+    try {
+      const st: any = await getProjectByBusinessKey(bk)
+      if (st?.status === 'done' && st?.processInstanceId) {
+        instanceId.value = st.processInstanceId
+        startOk.value = true
+        startMsg.value = `已发起 IPD 流程：businessKey=${bk} processInstanceId=${st.processInstanceId}`
+        ElMessage.success('IPD 流程已发起')
+        loadProject()
+        starting.value = false
+        return
+      }
+      if (st?.status === 'failed') {
+        startOk.value = false
+        startMsg.value = `发起失败：${st?.error || '后台执行异常'}`
+        starting.value = false
+        return
+      }
+      // starting / not_found → 继续轮询，直到超时
+      if (Date.now() - startedAt > POLL_TIMEOUT) {
+        startOk.value = false
+        startMsg.value = `发起超时（businessKey=${bk}，>6 分钟仍未到 done），请到 BPM 审批中心查看或稍后载入`
+        starting.value = false
+        return
+      }
+      pollTimer = setTimeout(tick, POLL_INTERVAL)
+    } catch (e: any) {
+      startOk.value = false
+      startMsg.value = `轮询失败：${e?.message || ''}`
+      starting.value = false
+    }
+  }
+  tick()
 }
 
 const loadProject = async () => {
@@ -295,13 +414,29 @@ const toggleSse = () => {
 }
 
 onMounted(() => {
+  // 进入界面默认载入最新 IPD 流程实例（无则等用户手动发起/载入）
+  loadLatest()
   const tick = () => {
     if (autoRefresh.value && instanceId.value) loadProject()
   }
   timer = setInterval(tick, 5000)
 })
+
+// 拉最新实例自动填入：status=ok 则载入泳道，not_found 静默（等用户发起）
+const loadLatest = async () => {
+  try {
+    const data: any = await getLatestProject()
+    if (data?.status === 'ok' && data?.processInstanceId) {
+      instanceId.value = data.processInstanceId
+      loadProject()
+    }
+  } catch {
+    // 静默：默认载入失败不阻塞页面
+  }
+}
 onUnmounted(() => {
   if (timer) clearInterval(timer)
+  if (pollTimer) clearTimeout(pollTimer)
   evtSource?.close()
 })
 </script>
@@ -364,5 +499,9 @@ onUnmounted(() => {
 .sse-line {
   border-bottom: 1px dashed var(--el-border-color);
   padding: 2px 0;
+}
+.intake-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>

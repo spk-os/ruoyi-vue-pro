@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:flowable="http://flowable.org/bpmn"
+  targetNamespace="http://spk-os/ipd">
+  <process id="ipd-launch" name="IPD 发布阶段" isExecutable="true">
+    <startEvent id="start_launch"/>
+    <sequenceFlow id="sf_l_s1" sourceRef="start_launch" targetRef="n_launch_1"/>
+    <serviceTask id="n_launch_1" name="上市发布" flowable:delegateExpression="${bpmAgentTaskDelegate}">
+      <extensionElements>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityId','ACT-03-06-01')}"/>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityVersion','1.0.0')}"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="sf_l_1w" sourceRef="n_launch_1" targetRef="n_launch_1_wait"/>
+    <receiveTask id="n_launch_1_wait" name="等待 Agent 完成"/>
+    <sequenceFlow id="sf_l_we" sourceRef="n_launch_1_wait" targetRef="end_launch"/>
+    <endEvent id="end_launch"/>
+  </process>
+</definitions>

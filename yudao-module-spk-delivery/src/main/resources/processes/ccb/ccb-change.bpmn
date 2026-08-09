@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:flowable="http://flowable.org/bpmn"
+  targetNamespace="http://spk-os/ipd">
+  <process id="ccb-change" name="CCB 变更控制" isExecutable="true">
+    <startEvent id="start"/>
+    <sequenceFlow id="sf1" sourceRef="start" targetRef="ana"/>
+    <serviceTask id="ana" name="影响分析 Agent" flowable:delegateExpression="${bpmAgentTaskDelegate}">
+      <extensionElements>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityId','CCB-IMPACT-ANALYSIS')}"/>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityVersion','1.0.0')}"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="sf2" sourceRef="ana" targetRef="ver"/>
+    <serviceTask id="ver" name="Audit-Verifier 复算" flowable:delegateExpression="${spkVerifierDelegate}">
+      <extensionElements>
+        <flowable:executionListener event="start" expression="${execution.setVariable('verifierType','AUDIT')}"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="sf3" sourceRef="ver" targetRef="ut"/>
+    <userTask id="ut" name="CCB Chair 审批" flowable:candidateGroups="CCB"/>
+    <sequenceFlow id="sf4" sourceRef="ut" targetRef="gw"/>
+    <exclusiveGateway id="gw" name="decision"/>
+    <sequenceFlow id="sf_appr" sourceRef="gw" targetRef="imp"><conditionExpression>${decision == 'approve'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_rej" sourceRef="gw" targetRef="end_close"><conditionExpression>${decision == 'reject'}</conditionExpression></sequenceFlow>
+    <serviceTask id="imp" name="更新基线+通知" flowable:delegateExpression="${bpmAgentTaskDelegate}">
+      <extensionElements>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityId','CCB-BASELINE-UPDATE')}"/>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityVersion','1.0.0')}"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="sf5" sourceRef="imp" targetRef="end_ok"/>
+    <endEvent id="end_ok" name="批准"/>
+    <endEvent id="end_close" name="关闭"/>
+  </process>
+</definitions>

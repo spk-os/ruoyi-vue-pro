@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:flowable="http://flowable.org/bpmn"
+  targetNamespace="http://spk-os/ipd">
+  <process id="ipd-qualify" name="IPD 验证阶段" isExecutable="true">
+    <startEvent id="start_qual"/>
+    <sequenceFlow id="sf_q_s1" sourceRef="start_qual" targetRef="n_qual_1"/>
+    <serviceTask id="n_qual_1" name="集成验证" flowable:delegateExpression="${bpmAgentTaskDelegate}">
+      <extensionElements>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityId','ACT-03-05-01')}"/>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityVersion','1.0.0')}"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="sf_q_1w" sourceRef="n_qual_1" targetRef="n_qual_1_wait"/>
+    <receiveTask id="n_qual_1_wait" name="等待 Agent 完成"/>
+    <sequenceFlow id="sf_q_w2" sourceRef="n_qual_1_wait" targetRef="n_qual_5"/>
+    <serviceTask id="n_qual_5" name="Beta 验证" flowable:delegateExpression="${bpmAgentTaskDelegate}">
+      <extensionElements>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityId','ACT-03-05-02')}"/>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityVersion','1.0.0')}"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="sf_q_5w" sourceRef="n_qual_5" targetRef="n_qual_5_wait"/>
+    <receiveTask id="n_qual_5_wait" name="等待 Agent 完成"/>
+    <sequenceFlow id="sf_q_we" sourceRef="n_qual_5_wait" targetRef="end_qual"/>
+    <endEvent id="end_qual"/>
+  </process>
+</definitions>

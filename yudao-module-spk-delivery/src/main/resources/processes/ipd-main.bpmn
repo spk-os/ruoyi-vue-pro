@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:flowable="http://flowable.org/bpmn"
+  targetNamespace="http://spk-os/ipd">
+  <process id="ipd-main" name="SPK-OS IPD 主流程" isExecutable="true">
+    <startEvent id="start" name="立项申请"/>
+    <sequenceFlow id="sf1" sourceRef="start" targetRef="ca_concept"/>
+    <callActivity id="ca_concept" name="概念阶段" flowable:calledElement="ipd-concept" flowable:inheritVariables="true"/>
+    <sequenceFlow id="sf2" sourceRef="ca_concept" targetRef="ca_cdcp"/>
+    <callActivity id="ca_cdcp" name="CDCP" flowable:calledElement="dcp-cdcp" flowable:inheritVariables="true"/>
+    <sequenceFlow id="sf3" sourceRef="ca_cdcp" targetRef="gw_cdcp"/>
+    <exclusiveGateway id="gw_cdcp" name="CDCP decision"/>
+    <sequenceFlow id="sf_cdcp_go" sourceRef="gw_cdcp" targetRef="ca_plan"><conditionExpression>${decision == 'Go'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_cdcp_ng" sourceRef="gw_cdcp" targetRef="end_ng"><conditionExpression>${decision == 'No-Go'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_cdcp_rd" sourceRef="gw_cdcp" targetRef="ca_concept"><conditionExpression>${decision == 'Redirect'}</conditionExpression></sequenceFlow>
+    <callActivity id="ca_plan" name="计划阶段" flowable:calledElement="ipd-plan" flowable:inheritVariables="true"/>
+    <sequenceFlow id="sf4" sourceRef="ca_plan" targetRef="ca_pdcp"/>
+    <callActivity id="ca_pdcp" name="PDCP" flowable:calledElement="dcp-pdcp" flowable:inheritVariables="true"/>
+    <sequenceFlow id="sf5" sourceRef="ca_pdcp" targetRef="gw_pdcp"/>
+    <exclusiveGateway id="gw_pdcp" name="PDCP decision"/>
+    <sequenceFlow id="sf_pdcp_go" sourceRef="gw_pdcp" targetRef="ca_develop"><conditionExpression>${decision == 'Go'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_pdcp_ng" sourceRef="gw_pdcp" targetRef="end_ng"><conditionExpression>${decision == 'No-Go'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_pdcp_rd" sourceRef="gw_pdcp" targetRef="ca_plan"><conditionExpression>${decision == 'Redirect'}</conditionExpression></sequenceFlow>
+    <callActivity id="ca_develop" name="开发阶段" flowable:calledElement="ipd-develop" flowable:inheritVariables="true"/>
+    <sequenceFlow id="sf6" sourceRef="ca_develop" targetRef="ca_adcp"/>
+    <callActivity id="ca_adcp" name="ADCP" flowable:calledElement="dcp-adcp" flowable:inheritVariables="true"/>
+    <sequenceFlow id="sf7" sourceRef="ca_adcp" targetRef="gw_adcp"/>
+    <exclusiveGateway id="gw_adcp" name="ADCP decision"/>
+    <sequenceFlow id="sf_adcp_go" sourceRef="gw_adcp" targetRef="ca_qualify"><conditionExpression>${decision == 'Go'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_adcp_rd" sourceRef="gw_adcp" targetRef="ca_develop"><conditionExpression>${decision == 'Redirect'}</conditionExpression></sequenceFlow>
+    <callActivity id="ca_qualify" name="验证阶段" flowable:calledElement="ipd-qualify" flowable:inheritVariables="true"/>
+    <sequenceFlow id="sf8" sourceRef="ca_qualify" targetRef="ca_launch"/>
+    <callActivity id="ca_launch" name="发布阶段" flowable:calledElement="ipd-launch" flowable:inheritVariables="true"/>
+    <sequenceFlow id="sf9" sourceRef="ca_launch" targetRef="ut_ga"/>
+    <userTask id="ut_ga" name="GA 决策" flowable:candidateGroups="IPMT"/>
+    <sequenceFlow id="sf10" sourceRef="ut_ga" targetRef="gw_ga"/>
+    <exclusiveGateway id="gw_ga" name="GA decision"/>
+    <sequenceFlow id="sf_ga_go" sourceRef="gw_ga" targetRef="ca_lifecycle"><conditionExpression>${decision == 'Go'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_ga_ng" sourceRef="gw_ga" targetRef="end_ng"><conditionExpression>${decision == 'No-Go'}</conditionExpression></sequenceFlow>
+    <callActivity id="ca_lifecycle" name="生命周期阶段" flowable:calledElement="ipd-lifecycle" flowable:inheritVariables="true"/>
+    <sequenceFlow id="sf11" sourceRef="ca_lifecycle" targetRef="ca_ldcp"/>
+    <callActivity id="ca_ldcp" name="LDCP" flowable:calledElement="dcp-ldcp" flowable:inheritVariables="true"/>
+    <sequenceFlow id="sf12" sourceRef="ca_ldcp" targetRef="gw_ldcp"/>
+    <exclusiveGateway id="gw_ldcp" name="LDCP decision"/>
+    <sequenceFlow id="sf_ldcp_eol" sourceRef="gw_ldcp" targetRef="end_eol"><conditionExpression>${decision == 'EOL'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_ldcp_cont" sourceRef="gw_ldcp" targetRef="ca_lifecycle"><conditionExpression>${decision == 'Redirect'}</conditionExpression></sequenceFlow>
+    <endEvent id="end_ng" name="终止"/>
+    <endEvent id="end_eol" name="退市"/>
+  </process>
+</definitions>

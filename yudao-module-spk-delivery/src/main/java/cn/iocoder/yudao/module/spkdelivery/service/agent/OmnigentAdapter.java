@@ -63,6 +63,20 @@ public class OmnigentAdapter implements FrameworkAdapter {
     private long pollIntervalMs;
 
     /**
+     * D8（设计 §15.5.3）SSE 订阅→落库闭环开关。
+     * <p>
+     * true 时 dispatchTask 走 SSE 路径：createSession + launchRunner 后，开
+     * {@code GET /v1/sessions/{id}/events} SSE 流（{@code text/event-stream}），
+     * 逐行解析 {@code data: <json>} 累积 assistant 文本与终态事件，至 runner.completed /
+     * 超时收口，返回 DispatchResult。落库（contract/artifact/Flowable 推进）仍由上层
+     * SpkAgentTaskService 既有路径完成——SSE 只换传输，闭环不破。
+     * <p>
+     * 默认 false（poll 兼容旧路径）；Omnigent events 端点稳定后置 true。
+     */
+    @Value("${spk-delivery.omnigent.sse-mode:false}")
+    private boolean sseMode;
+
+    /**
      * Omnigent 在线 host_id（裸 32 位 hex）。留空则首次真实派发时 GET /v1/hosts 动态解析
      * 首个 status=online 且 configured_harnesses 含 claude-sdk=true 的 host（缓存到本字段）。
      */
@@ -101,11 +115,11 @@ public class OmnigentAdapter implements FrameworkAdapter {
         }
         try {
             String convId = createSession(req);
-            log.info("[dispatchTask][omnigent instanceId={} nodeKey={} convId={}]",
-                    req.getInstanceId(), req.getNodeKey(), convId);
+            log.info("[dispatchTask][omnigent instanceId={} nodeKey={} convId={} sse={}]",
+                    req.getInstanceId(), req.getNodeKey(), convId, sseMode);
             // 关键：create session 只种 seed 消息，必须 launch runner 才真正触发 agent 执行
             launchRunner(convId);
-            String assistantText = pollAssistantText(convId);
+            String assistantText = sseMode ? subscribeAssistantText(convId) : pollAssistantText(convId);
             String files = listFilesText(convId);
             String resultText = assistantText;
             if (files != null && !files.isBlank()) {
@@ -257,6 +271,101 @@ public class OmnigentAdapter implements FrameworkAdapter {
             Thread.sleep(pollIntervalMs);
         }
         return lastText;
+    }
+
+    /**
+     * D8（设计 §15.5.3）SSE 订阅→落库闭环。
+     * <p>
+     * 开 {@code GET /v1/sessions/{id}/events}（{@code text/event-stream}）SSE 流，
+     * 逐行解析 {@code data: <json>} 事件：
+     * <ul>
+     *   <li>assistant message 文本（item.type=message + role=assistant + content[].text）→ 累积；</li>
+     *   <li>runner.completed / session.completed / status=terminal → 收口返回；</li>
+     *   <li>runner.failed / error → 抛异常（上层降级）；</li>
+     *   <li>读取超时（{@link #timeoutMs}）或流关闭 → 返回已累积文本（兼容多智能体单轮不收敛）。</li>
+     * </ul>
+     * 用 {@link java.net.http.HttpResponse.BodyHandlers#ofLines()} 取 {@code Stream<String>}
+     * 逐行消费，避免轮询空耗。落库仍由上层 dispatchTask 返回后走既有 contract/artifact 路径。
+     */
+    private String subscribeAssistantText(String convId) throws Exception {
+        HttpRequest.Builder b = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/v1/sessions/" + convId + "/events"))
+                .header("Accept", "text/event-stream")
+                .timeout(Duration.ofMillis(timeoutMs));
+        applyAuth(b);
+        HttpRequest request = b.GET().build();
+        // SSE 长流：用 ofLines() 拿逐行 Stream，onReadError 透传为 CompletionException
+        java.util.concurrent.CompletableFuture<String> future = http.sendAsync(request,
+                HttpResponse.BodyHandlers.ofLines()).thenApply(resp -> {
+            if (resp.statusCode() >= 400) {
+                throw new RuntimeException("SSE GET /v1/sessions/" + convId
+                        + "/events -> " + resp.statusCode());
+            }
+            StringBuilder sb = new StringBuilder();
+            // SSE 行：以 "data:" 前缀负载 JSON，空行分隔事件；其它（event:/id:/注释）跳过。
+            resp.body().filter(line -> line != null && line.startsWith("data:")).forEach(line -> {
+                String payload = line.substring(5).trim();
+                if (payload.isEmpty() || "[DONE]".equals(payload)) {
+                    return;
+                }
+                try {
+                    JsonNode ev = JsonUtils.parseTree(payload);
+                    // 终态事件收口
+                    String type = textOf(ev.get("type"));
+                    String status = textOf(ev.get("status"));
+                    if (type != null && (type.contains("completed") || type.contains("terminal"))) {
+                        return;
+                    }
+                    if (status != null && (status.contains("fail") || status.contains("error"))) {
+                        throw new RuntimeException("Omnigent runner 失败：" + truncate(payload, 300));
+                    }
+                    // assistant 文本事件
+                    JsonNode item = ev.has("item") ? ev.get("item") : ev;
+                    if ("message".equals(textOf(item.get("type")))) {
+                        JsonNode d = item.get("data");
+                        String role = (d != null) ? textOf(d.get("role")) : textOf(item.get("role"));
+                        if (d == null) {
+                            d = item;
+                        }
+                        if ("assistant".equals(role)) {
+                            JsonNode content = d.get("content");
+                            if (content != null && content.isArray()) {
+                                for (JsonNode block : content) {
+                                    String t = textOf(block.get("text"));
+                                    if (t != null && !t.isBlank()) {
+                                        if (sb.length() > 0) {
+                                            sb.append('\n');
+                                        }
+                                        sb.append(t);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (RuntimeException re) {
+                    throw re;
+                } catch (Exception pe) {
+                    // 单行解析失败不致命，跳过继续
+                    log.debug("[subscribeAssistantText][convId={} 非 JSON SSE 行：{}]", convId, truncate(payload, 80));
+                }
+            });
+            return sb.length() == 0 ? null : sb.toString();
+        });
+        try {
+            // SSE 流无显式终态时靠 timeout 收口；sendAsync 本身受 timeoutMs 限制
+            return future.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException te) {
+            future.cancel(true);
+            log.warn("[subscribeAssistantText][convId={} SSE 超时>{}}ms，按已收文本收口]", convId, timeoutMs);
+            return null;
+        } catch (java.util.concurrent.ExecutionException ee) {
+            // 内层抛的 RuntimeException 透传
+            Throwable cause = ee.getCause() != null ? ee.getCause() : ee;
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw new RuntimeException("Omnigent SSE 订阅失败：" + cause.getMessage(), cause);
+        }
     }
 
     /**

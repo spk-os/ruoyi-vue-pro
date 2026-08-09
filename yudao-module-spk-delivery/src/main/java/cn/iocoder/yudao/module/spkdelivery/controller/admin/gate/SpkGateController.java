@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.spkdelivery.controller.admin.gate;
 
+import cn.iocoder.yudao.framework.apilog.core.annotation.ApiAccessLog;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.gate.SpkGateRecordDO;
 import cn.iocoder.yudao.module.spkdelivery.service.gate.SpkGateService;
@@ -39,6 +40,7 @@ public class SpkGateController {
 
     @PostMapping("/dispatch")
     @PermitAll
+    @ApiAccessLog(operateModule = "SPK IPD", operateName = "门禁派发应答")
     @Operation(summary = "门禁派发应答（BPM HTTP_CALLBACK 触发器调用，仅应答不推进；生产转发 Gitea Actions）")
     public CommonResult<Boolean> dispatch(
             @RequestHeader(value = "X-Spk-Token", required = false) String token,

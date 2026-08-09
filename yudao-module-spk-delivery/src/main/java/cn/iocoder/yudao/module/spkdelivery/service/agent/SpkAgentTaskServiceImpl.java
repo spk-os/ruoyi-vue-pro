@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.spkdelivery.service.agent;
 
+import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.bpm.api.task.BpmProcessTaskApi;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agent.SpkAgentTaskDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agentdef.SpkAgentDefDO;
@@ -10,6 +11,7 @@ import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agentdef.SpkAgentDefMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.artifact.SpkArtifactManifestMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.taskcontract.SpkTaskContractMapper;
 import cn.iocoder.yudao.module.spkdelivery.enums.SpkAgentTaskStatusEnum;
+import cn.iocoder.yudao.module.spkdelivery.enums.SpkTaskContractStatusEnum;
 import cn.iocoder.yudao.module.spkdelivery.service.router.SpkRouteResult;
 import cn.iocoder.yudao.module.spkdelivery.service.router.SpkTaskRouterService;
 import cn.iocoder.yudao.module.spkdelivery.service.feedback.SpkFeedbackService;
@@ -48,6 +50,29 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
     /** 流程变量名：派发 prompt */
     public static final String VAR_TASK_PROMPT = "taskPrompt";
 
+    /**
+     * fencing 令牌单调计数器（单实例足够；多实例需换 DB sequence）。
+     * 每次 dispatch/claim 发一个新 token，回调回写时校验 presented token == 当前，
+     * 不匹配（旧 token < 当前）视为陈旧回写，拒绝落库（设计 §15.5.4）。
+     */
+    private final java.util.concurrent.atomic.AtomicLong fencingCounter =
+            new java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis());
+
+    private long nextFencingToken() {
+        return fencingCounter.incrementAndGet();
+    }
+
+    /**
+     * 校验回调回写是否陈旧：presented token 小于任务当前 token → 已被后续 claim 覆盖，拒绝。
+     * presented token 为 null（同步派发/无 token 回调）时不阻拦，兼容既有路径。
+     */
+    private boolean isStaleCallback(SpkAgentTaskDO task, Long presentedToken) {
+        if (presentedToken == null || task.getFencingToken() == null) {
+            return false;
+        }
+        return presentedToken < task.getFencingToken();
+    }
+
     @Resource
     private SpkAgentTaskMapper agentTaskMapper;
     @Resource(name = "native-ai")
@@ -83,6 +108,8 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
                 .instanceId(instanceId)
                 .nodeKey(nodeKey)
                 .receiveTaskKey(receiveTaskKey)
+                .attemptNo(1)
+                .fencingToken(nextFencingToken())
                 .build();
         agentTaskMapper.insert(task);
         try {
@@ -111,7 +138,7 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
                                           String taskId, String businessKey, String nodeKey, List<String> inputRefs) {
         log.info("[dispatchActivity][activityId={} instanceId={} nodeKey={}]", activityId, instanceId, nodeKey);
         SpkRouteResult result = taskRouterService.route(activityId, activityVersion, instanceId,
-                taskId, businessKey, nodeKey, inputRefs);
+                taskId, businessKey, nodeKey, null, inputRefs);
         // ⚠️ 不得在此处 runtimeService.setVariables 回写 agentResult：
         //   本方法由 BPM HTTP 触发器（type 15 sync serviceTask）经 /admin-api/spk/agent-task/run 同步回调，
         //   /run 处理线程（thread B）若 setVariables 会申请流程实例行锁，而 createProcessInstance 事务
@@ -119,6 +146,58 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
         //   agentResult 变量改由触发器 response 映射（spk-ipd-flow.json: response[{key=agentResult,value=result}]）
         //   在 thread A 自身事务内回写，锁安全。dispatchActivity 只返回产物，不碰 Flowable 运行时。
         return result;
+    }
+
+    @Override
+    public void dispatchActivityAsync(String activityId, String activityVersion, String instanceId,
+                                     String taskId, String businessKey, String nodeKey,
+                                     String receiveTaskKey, List<String> inputRefs) {
+        log.info("[dispatchActivityAsync][activityId={} instanceId={} nodeKey={} receiveTaskKey={}]",
+                activityId, instanceId, nodeKey, receiveTaskKey);
+        // 捕获主线程租户：supplyAsync 默认走 ForkJoinPool.commonPool，未包装 TTL，
+        // TenantContextHolder 不自动传到子线程 → route 内部写库/查配置丢租户（[[spk-ipd-intake-three-fixes]]）。
+        final Long tenantId = TenantContextHolder.getTenantId();
+        // fire-and-forget：立即返回，LLM 派发到独立线程池后台跑。/run 线程（thread B）不阻塞 →
+        // 触发器发请求即毫秒级返回 → 流程卡 receiveTask（wait state）→ complete 事务提交 → approve 接口毫秒级返回。
+        java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            Long prev = TenantContextHolder.getTenantId();
+            if (tenantId != null) {
+                TenantContextHolder.setTenantId(tenantId);
+            } else {
+                TenantContextHolder.clear();
+            }
+            try {
+                // 独立线程跑 route（同步 LLM 落三件套）。后台线程独立，setVariables+triggerTask 不与
+                // 触发器线程互锁（[[flowable-sync-trigger-deadlock]]：互锁仅在触发器线程内 setVariables 时发生）。
+                // complete 事务毫秒级提交，LLM 数十秒~3min，trigger 时 receiveTask 已落库可见。
+                SpkRouteResult result = taskRouterService.route(activityId, activityVersion, instanceId,
+                        taskId, businessKey, nodeKey, receiveTaskKey, inputRefs);
+                // 流程严格性：仅 activity 成功才推进 receiveTask；failed 不 trigger，流程卡在该节点，
+                // 等 scanTimeout 周期 rerun（attempt<max）或人工 intervene 兜底——避免"前面没完成就跑后面"。
+                if (SpkTaskContractStatusEnum.FAILED.getLabel().equalsIgnoreCase(result.getStatus())) {
+                    log.warn("[dispatchActivityAsync][activity failed status={} 不推进 receiveTask={} activityRunId={}，等 scanTimeout/人工介入]",
+                            result.getStatus(), receiveTaskKey, result.getActivityRunId());
+                } else {
+                    applyResultAndTrigger(instanceId, receiveTaskKey, result.getAgentResult());
+                    log.info("[dispatchActivityAsync][后台 route 完成 activityId={} activityRunId={} instanceId={}]",
+                            activityId, result.getActivityRunId(), instanceId);
+                }
+                return result;
+            } catch (Exception e) {
+                // LLM 失败/超时：receiveTask 永久卡住，流程停滞，由 Cockpit「介入」(rerun/abort) 人工兜底
+                // （[[cortext-ipd-d2-d8-gap-impl]] 的 TimeoutJob 兜底待后续补）。
+                log.error("[dispatchActivityAsync][后台 route 失败 activityId={} instanceId={} nodeKey={}]",
+                        activityId, instanceId, nodeKey, e);
+                return null;
+            } finally {
+                if (prev != null) {
+                    TenantContextHolder.setTenantId(prev);
+                } else {
+                    TenantContextHolder.clear();
+                }
+            }
+        });
+        // 立即返回，不等 LLM；receiveTask 卡住流程等本后台回调推进
     }
 
     @Override
@@ -242,9 +321,36 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
             case "rerun": {
                 // 按 contract 上的 activityId 重新路由派发（生成新 activityRunId + 三件套）。
                 // 注意：本方法不在 BPM 触发器事务上下文，setVariables 由 route 内部不触碰 Flowable 运行时（同 dispatchActivity 铁律）。
-                return taskRouterService.route(contract.getActivityId(), contract.getActivityVersion(),
+                // D5 fencing：新合同继承旧 fencing_token+1 / attempt_no+1，使旧合同的陈旧回调（token<current）被拒。
+                long oldFence = contract.getFencingToken() == null ? 0L : contract.getFencingToken();
+                int oldAttempt = contract.getAttemptNo() == null ? 0 : contract.getAttemptNo();
+                SpkRouteResult reran = taskRouterService.route(contract.getActivityId(), contract.getActivityVersion(),
                         contract.getProcessInstanceId(), null, contract.getBusinessKey(),
-                        contract.getNodeKey(), java.util.Collections.emptyList());
+                        contract.getNodeKey(), contract.getReceiveTaskKey(), java.util.Collections.emptyList());
+                SpkTaskContractDO next = taskContractMapper.selectByActivityRunId(reran.getActivityRunId());
+                if (next != null) {
+                    next.setFencingToken(oldFence + 1);
+                    next.setAttemptNo(oldAttempt + 1);
+                    taskContractMapper.updateById(next);
+                    log.info("[intervene][rerun activityRunId={} → newRunId={} fence={}→{} attempt={}→{}]",
+                            activityRunId, reran.getActivityRunId(), oldFence, oldFence + 1,
+                            oldAttempt, oldAttempt + 1);
+                }
+                // 恢复闭环：rerun 成功则推进卡住的 receiveTask；仍 failed 则继续卡住（严格流程，前面没完成不跑后面）。
+                if (SpkTaskContractStatusEnum.DONE.getLabel().equalsIgnoreCase(reran.getStatus())) {
+                    String effKey = resolveReceiveTaskKey(contract.getProcessInstanceId(),
+                            next != null ? next.getReceiveTaskKey() : contract.getReceiveTaskKey());
+                    if (effKey != null) {
+                        applyResultAndTrigger(contract.getProcessInstanceId(), effKey, reran.getAgentResult());
+                        log.info("[intervene][rerun 成功推进 receiveTask={} pid={}]", effKey, contract.getProcessInstanceId());
+                    } else {
+                        log.warn("[intervene][rerun 成功但未找到 pending receiveTask，无法推进 pid={}]", contract.getProcessInstanceId());
+                    }
+                } else {
+                    log.warn("[intervene][rerun 仍 failed status={} 流程继续卡住 activityRunId={}]",
+                            reran.getStatus(), activityRunId);
+                }
+                return reran;
             }
             case "abort": {
                 contract.setStatus("failed");
@@ -275,6 +381,42 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
         if (task.getReceiveTaskKey() != null) {
             processTaskApi.triggerTask(task.getInstanceId(), task.getReceiveTaskKey());
         }
+    }
+
+    /**
+     * 异步派发路径回写：独立线程跑完 route 后，用 instanceId/receiveTaskKey/agentResult 直接
+     * 写流程变量并 trigger receiveTask 推进（不经 SpkAgentTaskDO，P1 新路径产物落在 contract/artifact）。
+     */
+    private void applyResultAndTrigger(String instanceId, String receiveTaskKey, String agentResult) {
+        Map<String, Object> vars = new HashMap<>();
+        vars.put(VAR_AGENT_RESULT, agentResult);
+        runtimeService.setVariables(instanceId, vars);
+        if (receiveTaskKey != null) {
+            processTaskApi.triggerTask(instanceId, receiveTaskKey);
+        }
+    }
+
+    /**
+     * 解析用于推进的 receiveTask key：
+     * <ul>
+     *   <li>新实例：contract 持久化了 {@code receiveTaskKey}（type=2 HTTP_CALLBACK 触发器注入的 taskDefineKey）。</li>
+     *   <li>legacy 实例（receiveTaskKey 未持久化，如修复前已卡死的 05116b7d）：查 Flowable runtime
+     *       当前等待活动，IPD 顺序流唯一活动即卡住的 receiveTask，其 id 形如 {@code "Activity_<uuid>"}
+     *       （{@code SimpleModelUtils:767}：{@code receiveTask.setId("Activity_"+UUID)}）。</li>
+     * </ul>
+     */
+    private String resolveReceiveTaskKey(String processInstanceId, String storedKey) {
+        if (storedKey != null && !storedKey.isBlank()) {
+            return storedKey;
+        }
+        List<String> activeIds = runtimeService.getActiveActivityIds(processInstanceId);
+        if (activeIds == null || activeIds.isEmpty()) {
+            return null;
+        }
+        return activeIds.stream()
+                .filter(id -> id != null && id.startsWith("Activity_"))
+                .findFirst()
+                .orElse(activeIds.get(0));
     }
 
 }

@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.spkdelivery.service.cockpit;
 
+import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agentdef.SpkAgentDefDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.artifact.SpkArtifactManifestDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.evidence.SpkEvidenceRecordDO;
@@ -86,9 +87,17 @@ public class SpkIpdCockpitService {
                 conclusion.put(c.getActivityRunId(), rs.get(0).getOverallConclusion());
             }
         }
+        // 按 nodeKey 去重：intervene rerun 会生成新合同（新 activityRunId，同 nodeKey），
+        // 只保留每个节点最新的合同，避免已 rerun 恢复的节点仍显示旧的 failed 卡片造成误判。
+        // contracts 已按 queuedAt ASC 排序，后者覆盖前者 = 最新；LinkedHashMap 保留首次出现顺序（= 流程编排顺序）。
+        Map<String, SpkTaskContractDO> latestByNode = new LinkedHashMap<>();
+        for (SpkTaskContractDO c : contracts) {
+            String key = c.getNodeKey() != null ? c.getNodeKey() : c.getActivityRunId();
+            latestByNode.put(key, c);
+        }
         // 按阶段分组
         Map<String, List<Map<String, Object>>> byStage = new LinkedHashMap<>();
-        for (SpkTaskContractDO c : contracts) {
+        for (SpkTaskContractDO c : latestByNode.values()) {
             String stage = c.getPhase() != null ? c.getPhase() : "unknown";
             byStage.computeIfAbsent(stage, k -> new ArrayList<>()).add(activityCard(c,
                     artifactCount.getOrDefault(c.getActivityRunId(), 0),
@@ -98,7 +107,7 @@ public class SpkIpdCockpitService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("processInstanceId", processInstanceId);
         result.put("stages", byStage);
-        result.put("total", contracts.size());
+        result.put("total", latestByNode.size());
         return result;
     }
 
@@ -118,15 +127,18 @@ public class SpkIpdCockpitService {
             result.put("activityName", def != null ? def.getName() : contract.getActivityId());
             result.put("contextManifestUri", contract.getContextManifestUri());
         }
-        // ArtifactManifest —— 附 Gitea 文档链接（docs/{stage}/{activityRunId}.md 可直接构造，无需读 Flowable 变量）
+        // ArtifactManifest —— 附 Gitea 文档链接
+        // product 模式文档落在 concept/{runId} 分支，真值在 delivery evidence（giteaDocUrl/prUrl/branch）；
+        // test 模式文档落在 main，无 delivery evidence → fallback composeDocUrl(main)。
         List<SpkArtifactManifestDO> artifacts = artifactMapper.selectListByActivityRunId(activityRunId);
-        result.put("artifacts", artifactListWithDocUrl(artifacts, contract));
+        // Evidence chain 提前查，供 artifactListWithDocUrl 取 delivery 真值
+        List<SpkEvidenceRecordDO> chain = evidenceMapper.selectListByActivityRunId(activityRunId);
+        result.put("artifacts", artifactListWithDocUrl(artifacts, contract, chain));
         // RunReceipt
         result.put("runReceipt", runReceiptMapper.selectByActivityRunId(activityRunId));
         // VerificationReceipt
         result.put("verifications", verificationReceiptMapper.selectListByActivityRunId(activityRunId));
         // Evidence chain
-        List<SpkEvidenceRecordDO> chain = evidenceMapper.selectListByActivityRunId(activityRunId);
         result.put("evidenceChain", chain);
         result.put("chainValid", evidenceService.verifyChain(activityRunId));
         return result;
@@ -192,17 +204,51 @@ public class SpkIpdCockpitService {
     }
 
     /**
-     * 构造每个 artifact 的 Gitea 文档链接（docs/{stage}/{activityRunId}.md）。
+     * 构造每个 artifact 的 Gitea 文档链接。
      * 一个 activityRunId 只产一篇 md（router L179 用 activityRunId 命名），多 artifact 共享同链。
+     * product 模式文档在 concept/{runId} 分支，真值取自 delivery evidence（route doProductDelivery 落）；
+     * test 模式文档在 main 分支，无 delivery evidence → fallback composeDocUrl(main)。
      */
-    private List<Map<String, Object>> artifactListWithDocUrl(List<SpkArtifactManifestDO> arts, SpkTaskContractDO contract) {
+    private List<Map<String, Object>> artifactListWithDocUrl(List<SpkArtifactManifestDO> arts,
+                                                              SpkTaskContractDO contract,
+                                                              List<SpkEvidenceRecordDO> chain) {
         List<Map<String, Object>> list = new ArrayList<>();
         if (arts == null) {
             return list;
         }
         String stage = contract != null ? contract.getPhase() : null;
         String runId = contract != null ? contract.getActivityRunId() : null;
-        String docUrl = (stage != null && runId != null) ? composeDocUrl(stage, runId) : null;
+        // product 模式真值：从 delivery evidence payload 取 giteaDocUrl/prUrl/branch
+        String docUrl = null;
+        String prUrl = null;
+        String branch = null;
+        if (chain != null) {
+            for (SpkEvidenceRecordDO e : chain) {
+                String p = e.getPayload();
+                if (p == null || !p.contains("giteaDocUrl")) {
+                    continue;
+                }
+                try {
+                    Map<String, Object> d = JsonUtils.parseObject(p, Map.class);
+                    if (d != null && d.get("giteaDocUrl") instanceof String s && !s.isBlank()) {
+                        docUrl = s;
+                        if (d.get("prUrl") instanceof String ps && !ps.isBlank()) {
+                            prUrl = ps;
+                        }
+                        if (d.get("branch") instanceof String bs && !bs.isBlank()) {
+                            branch = bs;
+                        }
+                        break;
+                    }
+                } catch (Exception ignore) {
+                    // payload 非 JSON，跳过本条
+                }
+            }
+        }
+        // fallback: test 模式文档在 main，按 docs/{stage}/{runId}.md 构造
+        if (docUrl == null && stage != null && runId != null) {
+            docUrl = composeDocUrl(stage, runId);
+        }
         for (SpkArtifactManifestDO a : arts) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("artifactId", a.getArtifactId());
@@ -215,6 +261,12 @@ public class SpkIpdCockpitService {
             m.put("signedBy", a.getSignedBy());
             m.put("contentHash", a.getContentHash());
             m.put("giteaUrl", docUrl);
+            if (prUrl != null) {
+                m.put("prUrl", prUrl);
+            }
+            if (branch != null) {
+                m.put("branch", branch);
+            }
             list.add(m);
         }
         return list;

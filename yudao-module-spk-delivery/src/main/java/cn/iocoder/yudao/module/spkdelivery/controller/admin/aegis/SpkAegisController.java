@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.spkdelivery.controller.admin.aegis;
 
+import cn.iocoder.yudao.framework.apilog.core.annotation.ApiAccessLog;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.aegis.SpkAegisReviewDO;
 import cn.iocoder.yudao.module.spkdelivery.service.aegis.SpkAegisReviewService;
@@ -40,6 +41,7 @@ public class SpkAegisController {
 
     @PostMapping("/review")
     @PermitAll
+    @ApiAccessLog(operateModule = "SPK IPD", operateName = "Aegis同步审查")
     @Operation(summary = "Aegis 同步审查（BPM HTTP_REQUEST 触发器调用，回写 aegisVerdict/aegisReport）")
     public CommonResult<Map<String, Object>> review(
             @Parameter(description = "流程实例编号") @RequestParam("processInstanceId") String processInstanceId,

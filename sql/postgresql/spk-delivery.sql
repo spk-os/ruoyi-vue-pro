@@ -285,6 +285,7 @@ CREATE TABLE IF NOT EXISTS "spk_task_contract" (
     "business_key" varchar(64) NULL,
     "phase" varchar(16) NULL,
     "node_key" varchar(64) NULL,
+    "receive_task_key" varchar(64) NULL,
     "execution_mode" varchar(16) NOT NULL,
     "lead_agent_id" int8 NOT NULL,
     "lead_agent_code" varchar(64) NOT NULL,
@@ -304,6 +305,8 @@ CREATE TABLE IF NOT EXISTS "spk_task_contract" (
     "started_at" timestamp NULL,
     "finished_at" timestamp NULL,
     "failure_reason" text NULL,
+    "fencing_token" int8 NOT NULL DEFAULT 0,
+    "attempt_no" int4 NOT NULL DEFAULT 0,
     "creator" varchar(64) NULL DEFAULT '',
     "create_time" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updater" varchar(64) NULL DEFAULT '',
@@ -313,9 +316,16 @@ CREATE TABLE IF NOT EXISTS "spk_task_contract" (
     PRIMARY KEY ("id")
 );
 COMMENT ON TABLE "spk_task_contract" IS 'Task Router 与 Lead Agent 执行合同';
+COMMENT ON COLUMN "spk_task_contract"."node_key" IS 'BPM 节点 key（触发器所在 serviceTask）';
+COMMENT ON COLUMN "spk_task_contract"."receive_task_key" IS '紧随的 receiveTask key（type=2 HTTP_CALLBACK 注入的 taskDefineKey，部署随机 UUID 不可推导，供失败后 intervene rerun 推进）';
 COMMENT ON COLUMN "spk_task_contract"."execution_mode" IS '执行模式 task_system/lead_internal';
 COMMENT ON COLUMN "spk_task_contract"."status" IS '状态 queued/running/done/failed/timeout/cancelled';
+COMMENT ON COLUMN "spk_task_contract"."fencing_token" IS 'fencing 令牌：换 Lead/重派时 +1，旧回调 token<current 视为过期回写(409)';
+COMMENT ON COLUMN "spk_task_contract"."attempt_no" IS '重试次数：超时 Job 按 retry_policy.max_attempts 限重试';
 CREATE SEQUENCE IF NOT EXISTS spk_task_contract_seq;
+
+-- 兼容已部署库：补 receive_task_key 列（幂等）
+ALTER TABLE "spk_task_contract" ADD COLUMN IF NOT EXISTS "receive_task_key" varchar(64) NULL;
 
 -- ----------------------------
 -- 12. spk_artifact_manifest：Artifact 不可变登记中心（GAP-4）

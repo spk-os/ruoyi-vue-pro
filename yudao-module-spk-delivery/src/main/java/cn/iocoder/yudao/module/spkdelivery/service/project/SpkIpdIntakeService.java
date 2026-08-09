@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.spkdelivery.service.project;
 
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
+import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.conversation.AiChatConversationCreateMyReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.message.AiChatMessageSendReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.message.AiChatMessageSendRespVO;
@@ -61,13 +62,16 @@ public class SpkIpdIntakeService {
      * 自然语言发起 IPD 主流程。
      *
      * @param request 诉求原文
+     * @param mode    运行模式 test/product（透传给 projectService.start 写入流程变量 spk_mode）；
+     *                空/null 归一为 test
      * @return {processInstanceId, businessKey, projectName, payload, intakeMode}
      *         intakeMode=real（LLM 抽取成功）/ fallback（LLM 失败降级）
      */
-    public Map<String, Object> intake(String request) {
+    public Map<String, Object> intake(String request, String mode) {
         if (request == null || request.isBlank()) {
             throw new IllegalArgumentException("诉求原文不能为空");
         }
+        String normMode = (mode == null || mode.isBlank()) ? "test" : mode.trim().toLowerCase();
         String projectName;
         String payload;
         String intakeMode = "real";
@@ -82,28 +86,45 @@ public class SpkIpdIntakeService {
                 intakeMode = "fallback";
             }
         } catch (Exception e) {
-            log.warn("[intake][LLM 抽取失败，降级 fallback：{}]", e.getMessage());
+            // 打根因而非包装消息：原日志只显 "LLM 抽取执行异常，降级 fallback" 看不到真实失败原因
+            Throwable root = e;
+            while (root.getCause() != null && root.getCause() != root) {
+                root = root.getCause();
+            }
+            log.warn("[intake][LLM 抽取失败，降级 fallback：{}]", root.toString());
             projectName = truncate(request, 30);
             payload = request;
             intakeMode = "fallback";
         }
-        // 发起流程（businessKey 留空让 projectService 自动生成）
-        Map<String, Object> startResult = projectService.start(null, projectName, payload);
+        // 发起流程（businessKey 留空让 projectService 自动生成；start 现为异步，立即返 businessKey+starting）
+        Map<String, Object> startResult = projectService.start(null, projectName, payload, normMode);
         Map<String, Object> result = new LinkedHashMap<>(startResult);
         result.put("projectName", projectName);
         result.put("payload", payload);
         result.put("rawRequest", truncate(request, 200));
         result.put("intakeMode", intakeMode);
-        log.info("[intake][mode={} projectName={} instanceId={} 已发起]",
-                intakeMode, projectName, startResult.get("processInstanceId"));
+        log.info("[intake][mode={} projectName={} businessKey={} status={} 已提交后台发起]",
+                normMode, projectName, startResult.get("businessKey"), startResult.get("status"));
         return result;
     }
+
+    /** 抽取调用最长等待秒数：上游模型不响应时强制降级 fallback，避免入口被 LLM 挂死。 */
+    @Value("${spk-delivery.intake.llm-timeout-seconds:30}")
+    private long llmTimeoutSeconds;
 
     /**
      * 调 yudao-module-ai 内核做一次性抽取：建会话 → 发消息 → 解析返回 JSON。
      * 复用 NativeAiAdapter 的 chat 装配模式，但不走 fast-mode。
+     * <p>
+     * <b>硬超时兜底</b>：用 CompletableFuture + timeout 包住 sendMessage，上游模型不响应时
+     * 超时抛 TimeoutException → 由 {@link #intake} catch 降级 fallback，保证流程仍能发起。
      */
     private Map<String, Object> extractViaLlm(String request) {
+        // 快速失败守卫：role/model 未配置（PG 两表空）时立即抛，由 intake() 降级 fallback，
+        // 避免无模型时 chatMessageService 长时间挂起把入口卡死。
+        if (chatRoleService.getChatRole(intakeRoleId) == null) {
+            throw new RuntimeException("AI chat role 不存在（id=" + intakeRoleId + "），未配置模型，降级 fallback");
+        }
         AiChatConversationCreateMyReqVO createReqVO = new AiChatConversationCreateMyReqVO();
         createReqVO.setRoleId(intakeRoleId);
         Long conversationId = chatConversationService.createChatConversationMy(createReqVO, systemUserId);
@@ -113,8 +134,42 @@ public class SpkIpdIntakeService {
         sendReqVO.setConversationId(conversationId);
         sendReqVO.setContent(prompt);
         sendReqVO.setUseContext(Boolean.FALSE);
-        AiChatMessageSendRespVO respVO = chatMessageService.sendMessage(sendReqVO, systemUserId);
-        String content = (respVO != null && respVO.getReceive() != null) ? respVO.getReceive().getContent() : null;
+
+        String content;
+        // 捕获主线程租户：CompletableFuture.supplyAsync 默认走 ForkJoinPool.commonPool，
+        // 该线程池未包装 TTL，TenantContextHolder 不会自动传到子线程 → sendMessage 内部
+        // 查 ai_model/ai_api_key（带 tenant 过滤）返回空 → ~14ms 内快速失败降级 fallback。
+        // 这里在 lambda 内显式 setTenantId，finally 恢复，保证 LLM 抽取真能命中配置。
+        final Long tenantId = TenantContextHolder.getTenantId();
+        try {
+            AiChatMessageSendRespVO respVO = java.util.concurrent.CompletableFuture
+                    .supplyAsync(() -> {
+                        Long prev = TenantContextHolder.getTenantId();
+                        if (tenantId != null) {
+                            TenantContextHolder.setTenantId(tenantId);
+                        } else {
+                            TenantContextHolder.clear();
+                        }
+                        try {
+                            return chatMessageService.sendMessage(sendReqVO, systemUserId);
+                        } finally {
+                            if (prev != null) {
+                                TenantContextHolder.setTenantId(prev);
+                            } else {
+                                TenantContextHolder.clear();
+                            }
+                        }
+                    })
+                    .get(llmTimeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+            content = (respVO != null && respVO.getReceive() != null) ? respVO.getReceive().getContent() : null;
+        } catch (java.util.concurrent.TimeoutException te) {
+            throw new RuntimeException("LLM 抽取超时（>" + llmTimeoutSeconds + "s），降级 fallback", te);
+        } catch (java.util.concurrent.ExecutionException ee) {
+            throw new RuntimeException("LLM 抽取执行异常，降级 fallback", ee.getCause() != null ? ee.getCause() : ee);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("LLM 抽取被中断，降级 fallback", ie);
+        }
         if (content == null || content.isBlank()) {
             throw new RuntimeException("LLM 返回空");
         }

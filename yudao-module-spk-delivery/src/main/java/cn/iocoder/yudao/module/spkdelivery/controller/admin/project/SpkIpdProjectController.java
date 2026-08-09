@@ -56,7 +56,7 @@ public class SpkIpdProjectController {
     @Operation(summary = "自然语言发起 IPD 主流程（hermes「说一句话就开跑」入口）")
     @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:create')")
     public CommonResult<Map<String, Object>> intake(@Valid @RequestBody SpkIpdIntakeReqVO reqVO) {
-        return success(intakeService.intake(reqVO.getRequest()));
+        return success(intakeService.intake(reqVO.getRequest(), reqVO.getMode()));
     }
 
     @PostMapping("/start")
@@ -65,8 +65,24 @@ public class SpkIpdProjectController {
     public CommonResult<Map<String, Object>> start(
             @Parameter(description = "项目业务 key") @RequestParam(value = "businessKey", required = false) String businessKey,
             @Parameter(description = "项目名") @RequestParam(value = "projectName", required = false) String projectName,
-            @Parameter(description = "附加 payload") @RequestParam(value = "payload", required = false) String payload) {
-        return success(projectService.start(businessKey, projectName, payload));
+            @Parameter(description = "附加 payload") @RequestParam(value = "payload", required = false) String payload,
+            @Parameter(description = "运行模式 test/product") @RequestParam(value = "mode", required = false) String mode) {
+        return success(projectService.start(businessKey, projectName, payload, mode));
+    }
+
+    @GetMapping("/by-key/{businessKey}")
+    @Operation(summary = "按 businessKey 查发起态")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:query')")
+    public CommonResult<Map<String, Object>> getByBusinessKey(
+            @Parameter(description = "项目业务 key") @PathVariable("businessKey") String businessKey) {
+        return success(projectService.getByBusinessKey(businessKey));
+    }
+
+    @GetMapping("/latest")
+    @Operation(summary = "最新 IPD 流程实例（项目页/监控台进入界面默认载入）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:query')")
+    public CommonResult<Map<String, Object>> getLatest() {
+        return success(projectService.getLatest());
     }
 
     @GetMapping("/{id}")

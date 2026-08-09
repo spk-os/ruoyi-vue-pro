@@ -21,12 +21,14 @@ import cn.iocoder.yudao.module.spkdelivery.service.artifact.SpkArtifactService;
 import cn.iocoder.yudao.module.spkdelivery.service.context.SpkContextBuilderService;
 import cn.iocoder.yudao.module.spkdelivery.service.evidence.SpkEvidenceService;
 import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkGiteaIntegrationService;
+import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkPlaneIntegrationService;
 import cn.iocoder.yudao.module.spkdelivery.service.modelcapability.SpkModelCapabilityRegistry;
 import cn.iocoder.yudao.module.spkdelivery.service.verifier.SpkVerifierService;
 import cn.iocoder.yudao.module.spkdelivery.framework.monitoring.SpkIpdMetrics;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.flowable.engine.RuntimeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -76,6 +78,10 @@ public class SpkTaskRouterService {
     private SpkVerifierService verifierService;
     @Resource
     private SpkGiteaIntegrationService giteaService;
+    @Resource
+    private SpkPlaneIntegrationService planeService;
+    @Resource
+    private RuntimeService runtimeService;
     @Autowired
     private List<FrameworkAdapter> adapterList;
     /** 适配器名 → 适配器实例（按 FrameworkAdapter.getName() 索引；PostConstruct 装配） */
@@ -90,7 +96,7 @@ public class SpkTaskRouterService {
      */
     public SpkRouteResult route(String activityId, String activityVersion,
                                 String processInstanceId, String taskId, String businessKey,
-                                String nodeKey, List<String> inputRefs) {
+                                String nodeKey, String receiveTaskKey, List<String> inputRefs) {
         // 1. 加载 Activity 定义
         SpkIpdActivityDefDO def = activityDefMapper.selectByActivityIdAndVersion(activityId,
                 activityVersion != null ? activityVersion : "1.0.0");
@@ -100,6 +106,13 @@ public class SpkTaskRouterService {
         if (!"active".equals(def.getStatus())) {
             throw exception(IPD_ACTIVITY_DISABLED);
         }
+        // 1.1 读运行模式（test/product）并按模式装配派发 prompt：
+        //   product → 真实 prompt（剥离 DB 里可能残留的【测试场景】轻量化后缀，让 agent 做完整真实交付）；
+        //   test → 真实 prompt + 轻量化后缀（≤400字、不分发子智能体，控成本/时延）。
+        //   铁律：prompt 必须随模式分叉——否则 product 仍拿 DB 里的测试桩 prompt 产浅报告，与 test 无区别。
+        String mode = readMode(processInstanceId);
+        boolean product = "product".equalsIgnoreCase(mode);
+        String prompt = buildPrompt(def.getPromptTemplate(), product);
         // 2. 生成 activityRunId + 选 Lead
         String activityRunId = "run-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         SpkAgentDefDO lead = selectLead(def);
@@ -122,6 +135,7 @@ public class SpkTaskRouterService {
                 .businessKey(businessKey)
                 .phase(def.getStage())
                 .nodeKey(nodeKey)
+                .receiveTaskKey(receiveTaskKey)
                 .executionMode(def.getExecutionLocation())
                 .leadAgentId(lead.getId())
                 .leadAgentCode(lead.getCode())
@@ -133,10 +147,12 @@ public class SpkTaskRouterService {
                 .inputRefs(JsonUtils.toJsonString(inputRefs))
                 .outputSpec(def.getOutputArtifactType())
                 .timeoutSeconds(600)
-                .retryPolicy("{}")
-                .prompt(def.getPromptTemplate())
+                .retryPolicy("{\"max_attempts\":3}")
+                .prompt(prompt)
                 .status(SpkTaskContractStatusEnum.QUEUED.getLabel())
                 .queuedAt(LocalDateTime.now())
+                .fencingToken(0L)
+                .attemptNo(0)
                 .build();
         contractMapper.insert(contract);
         // 6. 派发 Lead（标记 running）
@@ -151,7 +167,7 @@ public class SpkTaskRouterService {
         try {
             SpkAgentDispatchReq req = new SpkAgentDispatchReq()
                     .setRoleId(lead.getRoleId())
-                    .setPrompt(def.getPromptTemplate())
+                    .setPrompt(prompt)
                     .setInstanceId(processInstanceId)
                     .setNodeKey(nodeKey);
             FrameworkAdapter adapter = selectAdapter(def);
@@ -172,10 +188,14 @@ public class SpkTaskRouterService {
                     truncate(def.getName() + " 产物", 200));
             result.setArtifactId(artifact.getArtifactId());
             // 9. 长文档提交 Gitea，失败不阻断 Activity done（agentResult 存 giteaUrl:null + error）
+            //    test 模式：commit 到 main（既有路径）。
+            //    product 模式：建 concept 分支 + commit 到分支 + 开 PR + Plane 录入需求（见 doProductDelivery），
+            //    不重复 commit main 以免 PR 为空。每个交付动作独立 try/catch，失败降级不阻断 Activity done。
+            //    mode/product 在方法顶部已读（供 prompt 装配与本处交付分支共用，触发器线程只读安全）。
             String giteaUrl = null;
             String giteaError = null;
             try {
-                if (payload.document != null && !payload.document.isBlank()) {
+                if (!product && payload.document != null && !payload.document.isBlank()) {
                     String path = "docs/" + def.getStage() + "/" + activityRunId + ".md";
                     giteaUrl = giteaService.createFile(path, payload.document, "main",
                             "docs(ipd): " + def.getName());
@@ -183,6 +203,15 @@ public class SpkTaskRouterService {
             } catch (Exception ge) {
                 giteaError = truncate(ge.getMessage(), 200);
                 log.warn("[route][activityRunId={} gitea createFile 失败：{}]", activityRunId, giteaError);
+            }
+            // 9.1 product 模式 concept 阶段真实交付动作（建 Gitea 分支/PR + Plane 需求）
+            Map<String, Object> delivery = null;
+            if (product) {
+                delivery = doProductDelivery(def, activityRunId, processInstanceId, payload);
+                Object docUrl = delivery.get("giteaDocUrl");
+                if (docUrl instanceof String s && !s.isBlank()) {
+                    giteaUrl = s;
+                }
             }
             // 10. agentResult 只存摘要+结论+链接（不存长文档，避免 Flowable 变量膨胀）
             Map<String, Object> agentResultObj = new LinkedHashMap<>();
@@ -192,6 +221,9 @@ public class SpkTaskRouterService {
             agentResultObj.put("artifactId", artifact.getArtifactId());
             if (giteaError != null) {
                 agentResultObj.put("giteaError", giteaError);
+            }
+            if (delivery != null) {
+                agentResultObj.put("delivery", delivery);
             }
             result.setAgentResult(JsonUtils.toJsonString(agentResultObj));
             SpkRunReceiptDO receipt = writeRunReceipt(activityRunId, contractId, lead, dispatch,
@@ -224,6 +256,7 @@ public class SpkTaskRouterService {
                     evidencePayload(result, def));
             log.info("[route][activityRunId={} activityId={} lead={} verdict={} done]",
                     activityRunId, activityId, lead.getCode(), result.getVerificationConclusion());
+            result.setStatus(SpkTaskContractStatusEnum.DONE.getLabel());
             return result;
         } catch (Exception e) {
             log.error("[route][activityRunId={} fail]", activityRunId, e);
@@ -491,6 +524,171 @@ public class SpkTaskRouterService {
             return null;
         }
         return m.group(1).trim();
+    }
+
+    /**
+     * 只读流程变量 spk_mode（test/product）。触发器线程内 getVariable 只读不持写锁，
+     * 遵守 [[flowable-sync-trigger-deadlock]] 互锁铁律（仅禁 setVariables）。读取失败/空归一为 test。
+     */
+    private String readMode(String processInstanceId) {
+        if (processInstanceId == null || processInstanceId.isBlank()) {
+            return "test";
+        }
+        try {
+            Object m = runtimeService.getVariable(processInstanceId, "spk_mode");
+            if (m == null) {
+                return "test";
+            }
+            String s = m.toString().trim().toLowerCase();
+            return s.isBlank() ? "test" : s;
+        } catch (Exception e) {
+            log.warn("[readMode][processInstanceId={} 读取 spk_mode 失败，归 test：{}]",
+                    processInstanceId, truncate(e.getMessage(), 200));
+            return "test";
+        }
+    }
+
+    /** test 模式附加的轻量化指令（控成本/时延）：≤400 字、不分发子智能体、直接作答。 */
+    private static final String TEST_PROMPT_OVERRIDE =
+            "\n\n【测试场景】请直接给出简洁快速的简要报告（中文，不超过 400 字，3-5 段，结构清晰）。"
+            + "不要分发或调用子智能体/伙伴，不要异步派发，直接作答即可。";
+
+    /**
+     * 匹配 DB prompt_template 里可能残留的【测试场景】…直接作答即可。轻量化后缀
+     * （旧版 init.sql 曾把该后缀烘入正文，导致 product 模式仍走测试桩）。运行时剥离，恢复真实 prompt。
+     * 非贪婪匹配到首个「直接作答即可。」收尾，不会误伤正文（正文不含该收束句）。
+     */
+    private static final java.util.regex.Pattern TEST_OVERRIDE_PATTERN = java.util.regex.Pattern.compile(
+            "\\s*【测试场景】[\\s\\S]*?直接作答即可。", java.util.regex.Pattern.DOTALL);
+
+    /**
+     * 按运行模式装配派发 prompt。
+     * <p>
+     * DB 的 prompt_template 在旧版 init.sql 里曾把【测试场景】轻量化后缀烘入正文（导致 product 模式
+     * 仍拿测试桩 prompt、产出浅报告，与 test 无区别）。这里先剥离该残留，再按模式决定是否追加：
+     * <ul>
+     *   <li>product：真实 prompt，agent 做完整交付（WBS/甘特/架构… 详尽产物）。</li>
+     *   <li>test：真实 prompt + 轻量化后缀（≤400 字、不分发），快速冒烟。</li>
+     * </ul>
+     */
+    private String buildPrompt(String template, boolean product) {
+        String base = template == null ? "" : TEST_OVERRIDE_PATTERN.matcher(template).replaceAll("");
+        return product ? base : base + TEST_PROMPT_OVERRIDE;
+    }
+
+    /**
+     * product 模式 concept 阶段真实交付动作：建 Gitea concept 分支 → 报告文档 commit 到该分支 →
+     * 开 PR（head=concept/{runId} base=main）→ Plane 录入需求清单。每个动作独立 try/catch，
+     * 失败记 *Error 降级、不阻断 Activity done（同既有 gitea createFile 降级模式）。
+     * <p>
+     * 不重复 commit main：test 模式已走 main 路径，product 走分支+PR，避免 PR diff 为空被 Gitea 拒。
+     */
+    private Map<String, Object> doProductDelivery(SpkIpdActivityDefDO def, String activityRunId,
+                                                   String processInstanceId, Payload payload) {
+        Map<String, Object> d = new LinkedHashMap<>();
+        d.put("mode", "product");
+        d.put("stage", def.getStage());
+        String branch = "concept/" + activityRunId;
+        // 1) 建 concept 分支（Gitea 仓库须先有 main 与初始 commit，见 [[plane-gitea-integration-contract]]）
+        try {
+            giteaService.createBranch(branch, "main");
+            d.put("branch", branch);
+        } catch (Exception e) {
+            d.put("branchError", truncate(e.getMessage(), 200));
+            log.warn("[doProductDelivery][activityRunId={} 建 branch={} 失败：{}]",
+                    activityRunId, branch, truncate(e.getMessage(), 200));
+        }
+        // 2) 报告文档 commit 到该分支
+        try {
+            if (payload.document != null && !payload.document.isBlank()) {
+                String path = "docs/" + def.getStage() + "/" + activityRunId + ".md";
+                String docUrl = giteaService.createFile(path, payload.document, branch,
+                        "docs(ipd-product): " + def.getName());
+                d.put("giteaDocUrl", docUrl);
+            }
+        } catch (Exception e) {
+            d.put("docError", truncate(e.getMessage(), 200));
+            log.warn("[doProductDelivery][activityRunId={} commit doc 失败：{}]",
+                    activityRunId, truncate(e.getMessage(), 200));
+        }
+        // 3) 开 PR head=concept/{runId} base=main
+        try {
+            String title = "feat(" + def.getStage() + "): " + def.getName() + " " + activityRunId;
+            String body = (payload.summary != null && !payload.summary.isBlank())
+                    ? payload.summary
+                    : ("IPD " + def.getStage() + " 产物 " + activityRunId);
+            String prUrl = giteaService.createPR(branch, "main", title, body);
+            d.put("prUrl", prUrl);
+        } catch (Exception e) {
+            d.put("prError", truncate(e.getMessage(), 200));
+            log.warn("[doProductDelivery][activityRunId={} 开 PR 失败：{}]",
+                    activityRunId, truncate(e.getMessage(), 200));
+        }
+        // 4) Plane 录入需求（concept 阶段需求洞察报告末尾 ```requirements JSON 块；projectId 配置就绪时）
+        try {
+            List<SpkPlaneIntegrationService.PlaneRequirementReq> reqs = parseRequirements(payload.document);
+            if (!reqs.isEmpty()) {
+                Map<String, String> issueMap = planeService.importRequirements(reqs);
+                d.put("planeIssues", issueMap);
+            } else {
+                d.put("planeSkipped", "无 requirements 块或为空");
+            }
+        } catch (Exception e) {
+            d.put("planeError", truncate(e.getMessage(), 200));
+            log.warn("[doProductDelivery][activityRunId={} Plane 录入失败：{}]",
+                    activityRunId, truncate(e.getMessage(), 200));
+        }
+        // 记 delivery 证据（失败不阻断）
+        try {
+            evidenceService.append(activityRunId, processInstanceId,
+                    SpkEvidenceTypeEnum.RUN.getLabel(), activityRunId, d);
+        } catch (Exception e) {
+            log.warn("[doProductDelivery][activityRunId={} 记 delivery 证据失败：{}]",
+                    activityRunId, truncate(e.getMessage(), 200));
+        }
+        log.info("[doProductDelivery][activityRunId={} stage={} product 交付完成 keys={}]",
+                activityRunId, def.getStage(), d.keySet());
+        return d;
+    }
+
+    /**
+     * 从 Lead 产物 markdown 中提取 ```requirements 代码块的 JSON 需求清单，
+     * 反序列化为 {@link SpkPlaneIntegrationService.PlaneRequirementReq}（level 默认 IR）。
+     * 解析失败 / 无块 / 非数组一律返回空列表（降级，不阻断 PR/Activity done）。
+     * 约定：concept 阶段需求洞察 Activity prompt 末尾要求输出该块（见 spk_ipd_activity_def_init.sql）。
+     */
+    private static List<SpkPlaneIntegrationService.PlaneRequirementReq> parseRequirements(String document) {
+        List<SpkPlaneIntegrationService.PlaneRequirementReq> res = new ArrayList<>();
+        if (document == null || document.isBlank()) {
+            return res;
+        }
+        java.util.regex.Pattern pat = java.util.regex.Pattern.compile(
+                "```requirements\\s*([\\s\\S]*?)```", java.util.regex.Pattern.CASE_INSENSITIVE);
+        java.util.regex.Matcher m = pat.matcher(document);
+        if (!m.find()) {
+            return res;
+        }
+        String json = m.group(1).trim();
+        JsonNode arr;
+        try {
+            arr = JsonUtils.parseTree(json);
+        } catch (Exception e) {
+            return res;
+        }
+        if (arr == null || !arr.isArray()) {
+            return res;
+        }
+        for (JsonNode n : arr) {
+            String name = n.has("name") ? n.get("name").asText() : null;
+            if (name == null || name.isBlank()) {
+                continue;
+            }
+            String key = n.has("key") && !n.get("key").isNull() ? n.get("key").asText() : null;
+            String level = n.has("level") && !n.get("level").isNull() ? n.get("level").asText() : "IR";
+            String desc = n.has("description") && !n.get("description").isNull() ? n.get("description").asText() : null;
+            res.add(new SpkPlaneIntegrationService.PlaneRequirementReq(key, level, name, desc, null));
+        }
+        return res;
     }
 
     private static class Payload {

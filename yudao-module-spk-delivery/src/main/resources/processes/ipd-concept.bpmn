@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:flowable="http://flowable.org/bpmn"
+  targetNamespace="http://spk-os/ipd">
+  <process id="ipd-concept" name="IPD 概念阶段" isExecutable="true">
+    <startEvent id="start_concept"/>
+    <sequenceFlow id="sf_c_s1" sourceRef="start_concept" targetRef="n_concept_1"/>
+    <serviceTask id="n_concept_1" name="需求洞察" flowable:delegateExpression="${bpmAgentTaskDelegate}">
+      <extensionElements>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityId','ACT-03-02-01')}"/>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityVersion','1.0.0')}"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="sf_c_1w" sourceRef="n_concept_1" targetRef="n_concept_1_wait"/>
+    <receiveTask id="n_concept_1_wait" name="等待 Agent 完成"/>
+    <sequenceFlow id="sf_c_w2" sourceRef="n_concept_1_wait" targetRef="n_concept_2"/>
+    <serviceTask id="n_concept_2" name="概念选项集" flowable:delegateExpression="${bpmAgentTaskDelegate}">
+      <extensionElements>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityId','ACT-03-02-02')}"/>
+        <flowable:executionListener event="start" expression="${execution.setVariable('activityVersion','1.0.0')}"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="sf_c_2w" sourceRef="n_concept_2" targetRef="n_concept_2_wait"/>
+    <receiveTask id="n_concept_2_wait" name="等待 Agent 完成"/>
+    <sequenceFlow id="sf_c_we" sourceRef="n_concept_2_wait" targetRef="end_concept"/>
+    <endEvent id="end_concept"/>
+  </process>
+</definitions>

@@ -20,7 +20,7 @@ INSERT INTO "spk_ipd_activity_def"
 "output_artifact_type","flowable_node_id","prompt_template","status","tenant_id")
 VALUES
 (nextval('spk_ipd_activity_def_seq'),'ACT-03-02-01','1.0.0','需求洞察','concept','lead-req-insight','task_system',0,0,NULL,'["req-analysis"]','req-insight-report','n_concept_1',
- '你是 IPD 概念阶段需求洞察 Lead。基于项目立项输入，识别目标用户、核心痛点、关键场景与隐性需求，输出结构化《需求洞察报告》：用户画像、痛点排序、场景清单、需求条目（含优先级与验收标准）。示例项目=智能家居中控。','active',1),
+ '你是 IPD 概念阶段需求洞察 Lead。基于项目立项输入，识别目标用户、核心痛点、关键场景与隐性需求，输出结构化《需求洞察报告》：用户画像、痛点排序、场景清单、需求条目（含优先级与验收标准）。示例项目=智能家居中控。\n\n【product 模式必填】报告末尾必须以如下 fenced code block 输出 IR 需求清单（供后端录入 Plane，缺块则跳过录入不报错）：\n```requirements\n[{\"key\":\"IR-1\",\"level\":\"IR\",\"name\":\"需求名(<=40字)\",\"description\":\"目标用户/场景/验收标准简述\"}]\n```\n每条 IR 一行，key 用 IR-N 连续编号，level 固定 IR，name 精炼，description 含验收标准。','active',1),
 
 (nextval('spk_ipd_activity_def_seq'),'ACT-03-02-02','1.0.0','概念选项集','concept','lead-concept-options','task_system',0,1,'TR','["concept-design"]','concept-options-set','n_concept_2',
  '你是 IPD 概念阶段概念选项 Lead。基于需求洞察报告，生成 2~3 个差异化的产品概念方案（含价值主张、关键功能、技术路线、风险），对比优劣并给出推荐项，输出《概念选项集》。','active',1),

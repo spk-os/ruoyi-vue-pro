@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:flowable="http://flowable.org/bpmn"
+  targetNamespace="http://spk-os/ipd">
+  <process id="dcp-pdcp" name="计划决策检查点 PDCP" isExecutable="true">
+    <startEvent id="start"/>
+    <sequenceFlow id="sf1" sourceRef="start" targetRef="prep"/>
+    <serviceTask id="prep" name="Evidence Pack 完整性检查" flowable:delegateExpression="${spkVerifierDelegate}">
+      <extensionElements>
+        <flowable:executionListener event="start" expression="${execution.setVariable('verifierType','COMPLETENESS')}"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="sf2" sourceRef="prep" targetRef="verif"/>
+    <serviceTask id="verif" name="DCP 独立核证" flowable:delegateExpression="${spkVerifierDelegate}">
+      <extensionElements>
+        <flowable:executionListener event="start" expression="${execution.setVariable('verifierType','DCP')}"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="sf3" sourceRef="verif" targetRef="ut"/>
+    <userTask id="ut" name="IPMT Chair 审批" flowable:candidateGroups="IPMT"/>
+    <sequenceFlow id="sf4" sourceRef="ut" targetRef="gw"/>
+    <exclusiveGateway id="gw" name="decision"/>
+    <sequenceFlow id="sf_go" sourceRef="gw" targetRef="end_ok"><conditionExpression>${decision == 'Go'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_ng" sourceRef="gw" targetRef="end_ng"><conditionExpression>${decision == 'No-Go'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_rd" sourceRef="gw" targetRef="end_rd"><conditionExpression>${decision == 'Redirect'}</conditionExpression></sequenceFlow>
+    <sequenceFlow id="sf_cg" sourceRef="gw" targetRef="end_cg"><conditionExpression>${decision == 'Conditional-Go'}</conditionExpression></sequenceFlow>
+    <endEvent id="end_ok" name="放行"/>
+    <endEvent id="end_ng" name="终止"/>
+    <endEvent id="end_rd" name="重定向"/>
+    <endEvent id="end_cg" name="条件放行"/>
+  </process>
+</definitions>

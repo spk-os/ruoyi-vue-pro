@@ -48,6 +48,35 @@ public interface SpkAgentTaskService {
                                     String taskId, String businessKey, String nodeKey, List<String> inputRefs);
 
     /**
+     * 按 Activity 定义异步派发任务（Cortext-IPD 审批异步化路径，方案 A）
+     * <p>
+     * 由 BPM HTTP_CALLBACK 触发器（type=2）调用：触发器发请求即卡 receiveTask 等回调推进，
+     * 故本方法<b>不得同步跑 LLM</b>——立即落"已派发"占位并返回，LLM 派发到独立线程池后台跑。
+     * 后台线程跑完 route（落三件套）后，写 {@code agentResult} 变量 + trigger
+     * {@code receiveTaskKey} 推进流程。
+     * <p>
+     * 锁安全：本方法在 /run servlet 线程（thread B）执行，与触发器父事务（thread A）不同线程、
+     * 事务不传播；后台线程独立，{@code setVariables + triggerTask} 不与触发器互锁
+     * （[[flowable-sync-trigger-deadlock]]：触发器线程互锁，独立线程安全）。complete 事务毫秒级提交，
+     * LLM 数十秒~3min，trigger 时 receiveTask 已落库可见。
+     * <p>
+     * 租户：supplyAsync 走 ForkJoinPool 不带 TTL，lambda 内显式 setTenantId
+     * （[[spk-ipd-intake-three-fixes]]：子线程丢租户会查空配置）。
+     *
+     * @param activityId      Activity 业务标识
+     * @param activityVersion Activity 版本（可空，默认 1.0.0）
+     * @param instanceId      BPM 流程实例 id
+     * @param taskId          BPM task id（可空）
+     * @param businessKey     业务 key（ipd_project_id，可空）
+     * @param nodeKey         BPM 节点 key（触发器所在 serviceTask）
+     * @param receiveTaskKey  紧随的 receiveTask key（HTTP_CALLBACK 触发器自动注入的 taskDefineKey）
+     * @param inputRefs       输入产物 artifactId 列表（可空）
+     */
+    void dispatchActivityAsync(String activityId, String activityVersion, String instanceId,
+                              String taskId, String businessKey, String nodeKey,
+                              String receiveTaskKey, List<String> inputRefs);
+
+    /**
      * 回调更新 agent 任务（由 /spk/agent-task/callback 调用）
      *
      * @param taskId    外部 runtime 任务编号

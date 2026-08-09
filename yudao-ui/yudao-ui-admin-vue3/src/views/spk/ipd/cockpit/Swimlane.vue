@@ -46,6 +46,14 @@
                   <el-tag size="small" type="info">产物 {{ c.artifactCount }}</el-tag>
                 </div>
                 <div class="card-time">{{ fmt(c.queuedAt) }} → {{ fmt(c.finishedAt) }}</div>
+                <div v-if="['failed', 'running', 'timeout'].includes(c.status)" class="card-actions">
+                  <el-button
+                    size="small"
+                    type="warning"
+                    :loading="rerunning[c.activityRunId]"
+                    @click="(e) => onRerun(e, c.activityRunId)"
+                  >重试</el-button>
+                </div>
               </div>
               <span v-if="ci < stage.cards.length - 1" class="arrow-h">→</span>
             </template>
@@ -60,7 +68,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { getSwimlane } from '@/api/spk/ipd/cockpit'
+import { getLatestProject, interveneTask } from '@/api/spk/ipd/project'
 
 const props = defineProps<{ externalPid?: string }>()
 
@@ -143,12 +153,44 @@ const fmt = (t?: string) => (t ? String(t).slice(5, 16).replace('T', ' ') : '—
 
 onMounted(() => {
   if (processInstanceId.value) load()
+  else loadLatest()
   // 自动刷新开关变化时启停
   const tick = () => {
     if (autoRefresh.value && processInstanceId.value) load()
   }
   timer = setInterval(tick, 5000)
 })
+
+// 无外部注入实例时，默认载入最新 IPD 流程实例（监控台进入即展示最新泳道）
+const loadLatest = async () => {
+  try {
+    const data: any = await getLatestProject()
+    if (data?.status === 'ok' && data?.processInstanceId) {
+      processInstanceId.value = data.processInstanceId
+      load()
+    }
+  } catch {
+    // 静默
+  }
+}
+
+// 卡片内联介入重试：failed/running/timeout 卡片显示「重试」按钮，免去手填 ActivityRunId
+const rerunning = ref<Record<string, boolean>>({})
+const onRerun = async (e: Event, runId: string) => {
+  e.stopPropagation()
+  if (!runId) return
+  rerunning.value[runId] = true
+  try {
+    await interveneTask(runId, 'rerun', '监控台卡片介入重试')
+    ElMessage.success(`已重试 ${runId}，稍候自动刷新查看结果`)
+    // rerun 在服务端同步跑 LLM（数十秒~3min），延迟刷新
+    setTimeout(() => { if (processInstanceId.value) load() }, 8000)
+  } catch (err: any) {
+    ElMessage.error(err?.message || '介入失败')
+  } finally {
+    rerunning.value[runId] = false
+  }
+}
 onUnmounted(() => {
   if (timer) clearInterval(timer)
 })
@@ -238,6 +280,11 @@ onUnmounted(() => {
 .card-time {
   font-size: 11px;
   color: var(--el-text-color-secondary);
+}
+.card-actions {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-end;
 }
 .st-done {
   border-left: 3px solid var(--el-color-success);
