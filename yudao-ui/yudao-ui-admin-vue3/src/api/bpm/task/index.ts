@@ -57,21 +57,19 @@ export const getTaskManagerPage = async (params: any) => {
   return await request.get({ url: '/bpm/task/manager-page', params })
 }
 
-// SPK-OS 扩展：approve/reject 单请求超时上调到 600s（10min 上限）。
-// 根因：IPD 流程审批（含 n_start 发起人节点 / CDCP 之后 plan 阶段）会同步跑后续 service tasks
-// （HTTP 触发器→LLM，单 stage 5 个任务 ~2-3.5min）。yudao 默认 axios 超时 30s（config.ts:19）
-// 远小于此 → 前端 30s 报"接口请求超时" → 用户以为失败重复点击 → 同一 task 上并发 approve/reject
-// tx 末尾 setVariableLocal(TASK_STATUS) 撞 Flowable 乐观锁 → 回滚 → 任务停开。
-// 调高超时让单次审批在 ~3min 内自然完成，杜绝重复点击并发，从根上消除乐观锁回滚。
-// 此为纯前端配置扩展：不改 BPMN 流程、不改 yudao 审批逻辑；快速审批仍即时返回（超时只是上限）。
-const APPROVE_REJECT_TIMEOUT = 600000
-
+// 复用 yudao 原生 approve/reject（默认 axios 超时 30s，不单独上调）。
+// 历史：曾因 IPD 审批同步跑后续 type1 serviceTask（HTTP 触发器→LLM ~3min）导致 30s 超时→重复点击→
+// TASK_STATUS 乐观锁回滚，故临时把单请求超时上调到 600s 兜底。现 spk-ipd-flow.json 全部触发器已改
+// type=2（HTTP_CALLBACK）：serviceTask 发请求即返回（/run 调 dispatchActivityAsync 立即返 dispatched），
+// 流程卡 receiveTask 等 LLM 后台回调推进——complete() 不再阻塞等 LLM，审批毫秒级返回（实测 n_start
+// userTask complete→serviceTask→receiveTask pause 共 0.1s）。根因消除，恢复原生 30s 默认即可。
+// 详见 SPK-OS-Cortext-IPD-Core.md §17 + [[spk-ipd-approve-timeout-optimistic-lock]]。
 export const approveTask = async (data: any) => {
-  return await request.put({ url: '/bpm/task/approve', data, timeout: APPROVE_REJECT_TIMEOUT })
+  return await request.put({ url: '/bpm/task/approve', data })
 }
 
 export const rejectTask = async (data: any) => {
-  return await request.put({ url: '/bpm/task/reject', data, timeout: APPROVE_REJECT_TIMEOUT })
+  return await request.put({ url: '/bpm/task/reject', data })
 }
 
 export const getTaskListByProcessInstanceId = async (processInstanceId: string) => {
