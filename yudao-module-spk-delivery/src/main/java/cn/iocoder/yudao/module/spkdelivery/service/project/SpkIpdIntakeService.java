@@ -96,15 +96,17 @@ public class SpkIpdIntakeService {
             payload = request;
             intakeMode = "fallback";
         }
-        // 发起流程（businessKey 留空让 projectService 自动生成；start 现为异步，立即返 businessKey+starting）
+        // 发起流程（businessKey 留空让 projectService 自动生成；start 同步返 businessKey+processInstanceId，
+        // type2 触发器后 ~0.06s 到首 receiveTask 即返）。intake 的 LLM 抽取 ≤30s 硬超时兜底，
+        // 前端 intake 请求单独设 60s 超时覆盖 30s LLM（approve 仍原生 30s 不动）。
         Map<String, Object> startResult = projectService.start(null, projectName, payload, normMode);
         Map<String, Object> result = new LinkedHashMap<>(startResult);
         result.put("projectName", projectName);
         result.put("payload", payload);
         result.put("rawRequest", truncate(request, 200));
         result.put("intakeMode", intakeMode);
-        log.info("[intake][mode={} projectName={} businessKey={} status={} 已提交后台发起]",
-                normMode, projectName, startResult.get("businessKey"), startResult.get("status"));
+        log.info("[intake][mode={} projectName={} businessKey={} processInstanceId={} 同步发起完成]",
+                normMode, projectName, startResult.get("businessKey"), startResult.get("processInstanceId"));
         return result;
     }
 

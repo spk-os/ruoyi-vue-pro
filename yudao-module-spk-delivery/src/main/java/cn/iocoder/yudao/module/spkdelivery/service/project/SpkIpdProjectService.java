@@ -8,8 +8,6 @@ import cn.iocoder.yudao.module.spkdelivery.dal.mysql.taskcontract.SpkTaskContrac
 import cn.iocoder.yudao.module.spkdelivery.service.cockpit.SpkIpdCockpitService;
 import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkGiteaIntegrationService;
 import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkPlaneIntegrationService;
-import com.alibaba.ttl.threadpool.TtlExecutors;
-import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.engine.HistoryService;
@@ -23,12 +21,6 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 /**
  * SPK-OS Cortext-IPD 项目服务
@@ -65,154 +57,58 @@ public class SpkIpdProjectService {
     private HistoryService historyService;
 
     /**
-     * 后台发起 IPD 流程的线程池：用 {@link TtlExecutors} 包装，自动传播租户上下文
-     * （{@code TenantContextHolder} 是 {@code TransmittableThreadLocal}）到后台线程，
-     * 否则 Flowable 同步执行的服务任务查 spk_* 表会丢租户过滤返回空。
+     * 发起 IPD 主流程（同步）。
      * <p>
-     * 单线程队列串行发起：dev/demo 流量足够，且避免并发 process start 对同一流程定义的部署竞争。
-     */
-    private final ExecutorService startExecutor = TtlExecutors.getTtlExecutorService(
-            new ThreadPoolExecutor(1, 1, 60, TimeUnit.SECONDS,
-                    new LinkedBlockingQueue<>(200),
-                    r -> { Thread t = new Thread(r, "spk-ipd-start-async"); t.setDaemon(true); return t; }));
-
-    /** 发起中流程的状态表（businessKey → StartRecord）。内存态，进程重启即失。 */
-    private final ConcurrentMap<String, StartRecord> startRecords = new ConcurrentHashMap<>();
-
-    /**
-     * 流程发起态记录。
-     * <ul>
-     *   <li>{@code starting} —— createProcessInstance 在后台线程同步执行至第一个 wait state（CDCP 门，约 3 分钟）。</li>
-     *   <li>{@code done} —— 已到 wait state，{@link #processInstanceId} 可用。</li>
-     *   <li>{@code failed} —— 后台发起异常，{@link #error} 为根因。</li>
-     * </ul>
-     */
-    private static final class StartRecord {
-        final String status;
-        final String businessKey;
-        final String processInstanceId;
-        final String error;
-
-        static StartRecord starting(String bk) { return new StartRecord("starting", bk, null, null); }
-        static StartRecord done(String bk, String pid) { return new StartRecord("done", bk, pid, null); }
-        static StartRecord failed(String bk, String err) { return new StartRecord("failed", bk, null, err); }
-
-        private StartRecord(String status, String businessKey, String processInstanceId, String error) {
-            this.status = status;
-            this.businessKey = businessKey;
-            this.processInstanceId = processInstanceId;
-            this.error = error;
-        }
-
-        Map<String, Object> toMap() {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("status", status);
-            m.put("businessKey", businessKey);
-            m.put("processInstanceId", processInstanceId);
-            if (error != null) {
-                m.put("error", error);
-            }
-            return m;
-        }
-    }
-
-    /**
-     * 发起 IPD 主流程（异步）。
+     * <b>为何能同步</b>：spk-ipd-flow.json 全部触发器已改 type=2（HTTP_CALLBACK）。{@code createProcessInstance}
+     * 同步执行至第一个 wait state（CDCP 前的 concept 首个 receiveTask）即返回——serviceTask 触发器发 HTTP
+     * 到 /run，/run 调 {@code dispatchActivityAsync} 立即返 dispatched（fire-and-forget），流程卡 receiveTask
+     * 等 LLM 后台回调推进。实测 {@code createProcessInstance} ≈ 0.06s 返回（见 7ae82efb 轨迹）。
      * <p>
-     * <b>为何异步</b>：{@code processInstanceApi.createProcessInstance} 调 Flowable
-     * {@code startProcessInstanceByKey}，同步执行所有 serviceTask 直到第一个 wait state
-     * （CDCP userTask assignee=1）才返回，concept 阶段 5 个服务任务约耗时 3 分钟。同步会让
-     * 前端按钮转 3 分钟、网关 504。改为：立即返 businessKey，后台线程跑流，前端按
-     * {@link #getByBusinessKey} 轮询，done 后取 processInstanceId 载入泳道。
+     * <b>历史</b>：type1 时代触发器同步跑 LLM，{@code createProcessInstance} 阻塞 ~3min 才到 CDCP 门，
+     * 故曾改为异步发起 + businessKey 轮询（startRecords 内存态）。type2 根治后同步即可，免去内存态轮询
+     * （startRecords 易因服务重启丢失 → 前端 not_found 卡死，且 6min 轮询纯冗余）。
      *
      * @param businessKey  项目业务 key（ipd-2026-0042）；为空则自动生成
      * @param projectName  项目名（写入流程变量，概念阶段 agent 可读）
      * @param payload      附加 payload（OR 池原始需求等，可空）
      * @param mode         运行模式 test/product（写入流程变量 spk_mode，route 内只读；
      *                      product=concept 阶段起执行真实交付动作；空=test）
-     * @return {businessKey, status:"starting"} —— status 转 done 后 processInstanceId 见 {@link #getByBusinessKey}
+     * @return {businessKey, processInstanceId, mode}
      */
     public Map<String, Object> start(String businessKey, String projectName, String payload, String mode) {
         if (businessKey == null || businessKey.isBlank()) {
             businessKey = "ipd-" + System.currentTimeMillis();
         }
-        final String bk = businessKey;
         Long userId = SecurityFrameworkUtils.getLoginUserId();
         if (userId == null) {
             userId = 1L; // 兜底：system 用户（与 spk-delivery.self.system-user-id 对齐）
         }
-        final Long starterId = userId;
 
         BpmProcessInstanceCreateReqDTO createReq = new BpmProcessInstanceCreateReqDTO();
         createReq.setProcessDefinitionKey(IPD_FLOW_KEY);
-        createReq.setBusinessKey(bk);
+        createReq.setBusinessKey(businessKey);
         Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("businessKey", bk);
+        variables.put("businessKey", businessKey);
         variables.put("projectName", projectName);
         if (payload != null && !payload.isBlank()) {
             variables.put("projectPayload", payload);
         }
-        // spk_mode：test=桩仅测试 / product=真实交付。route 内只读 getVariable（触发器线程安全，
-        // 不触写锁，遵守 [[flowable-sync-trigger-deadlock]] 铁律）。空/null 归一为 test。
+        // spk_mode：test=桩仅测试 / product=真实交付。route 内只读 getVariable（后台独立线程，不触写锁，
+        // 遵守 [[flowable-sync-trigger-deadlock]] 铁律）。空/null 归一为 test。
         String normMode = (mode == null || mode.isBlank()) ? "test" : mode.trim().toLowerCase();
         variables.put("spk_mode", normMode);
         createReq.setVariables(variables);
 
-        // 标记 starting，立即返回 businessKey；createProcessInstance 在后台线程跑（同步执行至 CDCP 门约 3 分钟）
-        startRecords.put(bk, StartRecord.starting(bk));
-        startExecutor.submit(() -> {
-            try {
-                String instanceId = processInstanceApi.createProcessInstance(starterId, createReq);
-                startRecords.put(bk, StartRecord.done(bk, instanceId));
-                log.info("[start-async][businessKey={} userId={} instanceId={} 已到 wait state]",
-                        bk, starterId, instanceId);
-            } catch (Throwable t) {
-                startRecords.put(bk, StartRecord.failed(bk, t.getMessage()));
-                log.error("[start-async][businessKey={} 发起失败]", bk, t);
-            }
-        });
+        // 同步发起：type2 后 ~0.06s 到首 receiveTask 即返 processInstanceId
+        String processInstanceId = processInstanceApi.createProcessInstance(userId, createReq);
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("businessKey", bk);
-        result.put("status", "starting");
+        result.put("businessKey", businessKey);
+        result.put("processInstanceId", processInstanceId);
         result.put("mode", normMode);
-        result.put("hint", "IPD 流程后台发起中（同步执行至 CDCP 门约 3 分钟），轮询 GET /spk/ipd/project/by-key/"
-                + bk + " 取 processInstanceId");
-        log.info("[start][businessKey={} projectName={} mode={} userId={} 已提交后台发起]", bk, projectName, normMode, starterId);
+        log.info("[start][businessKey={} projectName={} mode={} userId={} processInstanceId={}]",
+                businessKey, projectName, normMode, userId, processInstanceId);
         return result;
-    }
-
-    /**
-     * 按 businessKey 查发起态：starting / done / failed / not_found。
-     * <p>
-     * 前端发起后轮询此接口，{@code done} 时取 {@code processInstanceId} 再载入泳道；
-     * {@code failed} 时取 {@code error} 报错；{@code not_found} 说明内存态丢失（如服务重启），需重新发起。
-     */
-    public Map<String, Object> getByBusinessKey(String businessKey) {
-        if (businessKey == null || businessKey.isBlank()) {
-            throw new IllegalArgumentException("businessKey 不能为空");
-        }
-        StartRecord rec = startRecords.get(businessKey);
-        if (rec != null) {
-            return rec.toMap();
-        }
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("status", "not_found");
-        m.put("businessKey", businessKey);
-        return m;
-    }
-
-    @PreDestroy
-    public void shutdown() {
-        startExecutor.shutdown();
-        try {
-            if (!startExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                startExecutor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            startExecutor.shutdownNow();
-        }
     }
 
     /**

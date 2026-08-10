@@ -151,7 +151,6 @@ import {
   intakeProject,
   getProject,
   getLatestProject,
-  getProjectByBusinessKey,
   getRequirements,
   getGitPr,
   getGitRelease,
@@ -202,6 +201,8 @@ const phaseTagType = (s?: string): any => {
   return 'info'
 }
 
+// 发起 IPD（同步）：type2 触发器改造后 createProcessInstance ~0.06s 到首 receiveTask 即返 processInstanceId，
+// 不再需要异步发起 + businessKey 轮询（旧 startRecords 内存态易因服务重启丢失→前端 not_found 卡死）。
 const onStart = async () => {
   starting.value = true
   startMsg.value = ''
@@ -212,108 +213,53 @@ const onStart = async () => {
       projectName: form.projectName || undefined,
       mode: form.mode
     })
-    const bk = data?.businessKey
-    if (!bk) {
-      startMsg.value = '发起失败：未返回 businessKey'
+    if (!data?.processInstanceId) {
+      startMsg.value = '发起失败：未返回 processInstanceId'
       starting.value = false
       return
     }
-    // 兼容同步返回 processInstanceId 的旧路径（理论上不再走）
-    if (data?.processInstanceId) {
-      instanceId.value = data.processInstanceId
-      startOk.value = true
-      startMsg.value = `已发起 IPD 流程：businessKey=${bk} processInstanceId=${data.processInstanceId}`
-      ElMessage.success('IPD 流程已发起')
-      loadProject()
-      starting.value = false
-      return
-    }
-    startMsg.value = `流程后台发起中（businessKey=${bk}），同步执行至 CDCP 门约 3 分钟，请勿刷新…`
-    pollByBusinessKey(bk)
+    instanceId.value = data.processInstanceId
+    startOk.value = true
+    startMsg.value = `已发起 IPD 流程：businessKey=${data.businessKey} processInstanceId=${data.processInstanceId}`
+    ElMessage.success('IPD 流程已发起')
+    loadProject()
   } catch (e: any) {
     startOk.value = false
     startMsg.value = e?.message || '发起失败'
+  } finally {
     starting.value = false
   }
 }
 
+// 一句话发起（同步）：后端 intake 同步跑 LLM 抽取（≤30s 硬超时兜底）+ 同步 start（~0.06s）。
+// 前端此调用单独设 60s 超时覆盖 30s LLM + 余量（approve 不动，仍原生 30s）。
 const onIntake = async () => {
   if (!intakeRequest.value.trim()) {
     ElMessage.warning('请输入一句话需求')
     return
   }
   starting.value = true
-  startMsg.value = ''
+  startMsg.value = 'LLM 抽取项目名/需求中（最长 30s），请稍候…'
   startOk.value = false
   try {
     const data: any = await intakeProject(intakeRequest.value, form.mode)
-    const bk = data?.businessKey
-    if (!bk) {
-      startMsg.value = '发起失败：未返回 businessKey'
+    if (!data?.processInstanceId) {
+      startMsg.value = '发起失败：未返回 processInstanceId'
       starting.value = false
       return
     }
-    if (data?.processInstanceId) {
-      instanceId.value = data.processInstanceId
-      startOk.value = true
-      startMsg.value = `已发起 IPD 流程：projectName=${data?.projectName || '-'} processInstanceId=${data.processInstanceId}`
-      ElMessage.success('IPD 流程已发起')
-      loadProject()
-      starting.value = false
-      return
-    }
-    startMsg.value = `流程后台发起中（projectName=${data?.projectName || '-'} businessKey=${bk}，LLM 抽取后同步跑至 CDCP 门约 3 分钟，请勿刷新）`
-    pollByBusinessKey(bk)
+    instanceId.value = data.processInstanceId
+    startOk.value = true
+    const tag = data.intakeMode === 'fallback' ? '（LLM 降级，原文当项目名）' : ''
+    startMsg.value = `已发起 IPD 流程：projectName=${data?.projectName || '-'} processInstanceId=${data.processInstanceId}${tag}`
+    ElMessage.success('IPD 流程已发起')
+    loadProject()
   } catch (e: any) {
     startOk.value = false
     startMsg.value = e?.message || '发起失败'
+  } finally {
     starting.value = false
   }
-}
-
-// 异步发起后按 businessKey 轮询发起态：done 取 processInstanceId 载入泳道；failed 报错；超时提示
-let pollTimer: any = null
-const pollByBusinessKey = (bk: string) => {
-  const startedAt = Date.now()
-  const POLL_INTERVAL = 5000
-  const POLL_TIMEOUT = 6 * 60 * 1000
-  if (pollTimer) {
-    clearTimeout(pollTimer)
-    pollTimer = null
-  }
-  const tick = async () => {
-    try {
-      const st: any = await getProjectByBusinessKey(bk)
-      if (st?.status === 'done' && st?.processInstanceId) {
-        instanceId.value = st.processInstanceId
-        startOk.value = true
-        startMsg.value = `已发起 IPD 流程：businessKey=${bk} processInstanceId=${st.processInstanceId}`
-        ElMessage.success('IPD 流程已发起')
-        loadProject()
-        starting.value = false
-        return
-      }
-      if (st?.status === 'failed') {
-        startOk.value = false
-        startMsg.value = `发起失败：${st?.error || '后台执行异常'}`
-        starting.value = false
-        return
-      }
-      // starting / not_found → 继续轮询，直到超时
-      if (Date.now() - startedAt > POLL_TIMEOUT) {
-        startOk.value = false
-        startMsg.value = `发起超时（businessKey=${bk}，>6 分钟仍未到 done），请到 BPM 审批中心查看或稍后载入`
-        starting.value = false
-        return
-      }
-      pollTimer = setTimeout(tick, POLL_INTERVAL)
-    } catch (e: any) {
-      startOk.value = false
-      startMsg.value = `轮询失败：${e?.message || ''}`
-      starting.value = false
-    }
-  }
-  tick()
 }
 
 const loadProject = async () => {
@@ -436,7 +382,6 @@ const loadLatest = async () => {
 }
 onUnmounted(() => {
   if (timer) clearInterval(timer)
-  if (pollTimer) clearTimeout(pollTimer)
   evtSource?.close()
 })
 </script>

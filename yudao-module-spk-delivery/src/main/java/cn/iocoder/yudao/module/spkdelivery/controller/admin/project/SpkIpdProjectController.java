@@ -28,8 +28,8 @@ import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
  * <p>
  * 端点前缀 /spk/ipd/project（经 axios 全局注入 /admin-api）：
  * <ul>
- *   <li>POST /start —— 发起 IPD 主流程（businessKey + projectName）。</li>
- *   <li>POST /intake —— 自然语言发起（hermes「说一句话就开跑」入口，LLM 抽取 projectName/payload 后转 /start）。</li>
+ *   <li>POST /start —— 发起 IPD 主流程（同步返 processInstanceId；type2 触发器后 ~0.06s 到首 receiveTask）。</li>
+ *   <li>POST /intake —— 自然语言发起（hermes「说一句话就开跑」入口，LLM 抽取 projectName/payload 后转 /start，同步）。</li>
  *   <li>GET  /{id} —— 项目总览（泳道 + 六阶段进度），id=processInstanceId。</li>
  *   <li>GET  /{id}/phases —— 各阶段 done/running/failed/total + 阶段状态。</li>
  *   <li>GET  /requirements —— Plane 需求代理（Dashboard 需求 Tab）。</li>
@@ -60,7 +60,7 @@ public class SpkIpdProjectController {
     }
 
     @PostMapping("/start")
-    @Operation(summary = "发起 IPD 主流程（businessKey + projectName）")
+    @Operation(summary = "发起 IPD 主流程（同步返 processInstanceId；type2 触发器后 ~0.06s 到首 receiveTask）")
     @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:create')")
     public CommonResult<Map<String, Object>> start(
             @Parameter(description = "项目业务 key") @RequestParam(value = "businessKey", required = false) String businessKey,
@@ -68,14 +68,6 @@ public class SpkIpdProjectController {
             @Parameter(description = "附加 payload") @RequestParam(value = "payload", required = false) String payload,
             @Parameter(description = "运行模式 test/product") @RequestParam(value = "mode", required = false) String mode) {
         return success(projectService.start(businessKey, projectName, payload, mode));
-    }
-
-    @GetMapping("/by-key/{businessKey}")
-    @Operation(summary = "按 businessKey 查发起态")
-    @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:query')")
-    public CommonResult<Map<String, Object>> getByBusinessKey(
-            @Parameter(description = "项目业务 key") @PathVariable("businessKey") String businessKey) {
-        return success(projectService.getByBusinessKey(businessKey));
     }
 
     @GetMapping("/latest")
