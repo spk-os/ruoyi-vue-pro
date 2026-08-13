@@ -244,6 +244,31 @@ const remainingRouter: AppRouteRecordRaw[] = [
     }
   },
   {
+    path: '/spk',
+    component: Layout,
+    name: 'spkHidden',
+    meta: {
+      hidden: true
+    },
+    children: [
+      {
+        path: 'ipd/projects/detail',
+        component: () => import('@/views/spk/ipd/projects/detail.vue'),
+        name: 'SpkIpdProjectDetail',
+        meta: {
+          noCache: true,
+          hidden: true,
+          canTo: true,
+          title: '项目详情',
+          activeMenu: '/spk/ipd/projects'
+        },
+        props: (route) => ({
+          projectId: route.query.projectId ? Number(route.query.projectId) : undefined
+        })
+      }
+    ]
+  },
+  {
     path: '/bpm',
     component: Layout,
     name: 'bpm',

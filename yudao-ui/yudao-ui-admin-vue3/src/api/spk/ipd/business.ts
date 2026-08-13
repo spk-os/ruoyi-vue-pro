@@ -1,0 +1,403 @@
+import request from '@/config/axios'
+
+// SPK-OS Cortext-IPD 4 级版本模型业务 API（/admin-api/spk/ipd/*）
+// 设计文档 10.1-10.6 / 12.9。复用 yudao CommonResult 剥壳（request 自动解包 data）。
+// 旧的单实例 /spk/ipd/project/* 见 ./project.ts，按 10.12 进入兼容期，新页面不再调用。
+
+// ==================== 类型 ====================
+
+export interface SpkIpdProjectVO {
+  id?: number
+  projectNo?: string
+  projectCode?: string
+  name: string
+  description?: string
+  objective?: string
+  ownerUserId: number
+  status?: string // DRAFT/ACTIVE/PAUSED/ARCHIVED
+  health?: string // UNKNOWN/GOOD/WARN/CRITICAL
+  plannedStartAt?: string
+  plannedEndAt?: string
+  actualStartAt?: string
+  actualEndAt?: string
+  currentMajorReleaseId?: number
+  lockVersion?: number
+  createTime?: string
+  updateTime?: string
+}
+
+export interface SpkIpdProjectPageReqVO extends PageParam {
+  name?: string
+  projectCode?: string
+  ownerUserId?: number
+  status?: string
+  health?: string
+}
+
+export interface SpkIpdMajorReleaseVO {
+  id?: number
+  projectId: number
+  majorNo?: number
+  versionLabel?: string
+  name: string
+  objective?: string
+  scopeSummary?: string
+  ownerUserId: number
+  status?: string // PLANNING/ACTIVE/MAINTENANCE/CLOSED
+  baselineVersionId?: number
+  plannedStartAt?: string
+  plannedEndAt?: string
+  actualStartAt?: string
+  actualEndAt?: string
+  lockVersion?: number
+}
+
+export interface SpkIpdMajorReleaseCreateReqVO {
+  majorNo: number
+  name: string
+  objective: string
+  scopeSummary?: string
+  ownerUserId: number
+  createBaselineVersion?: boolean
+  baselinePlan?: { plannedStartAt?: string; plannedEndAt?: string }
+}
+
+export interface SpkIpdVersionVO {
+  id?: number
+  projectId?: number
+  majorReleaseId: number
+  majorNo?: number
+  minorNo?: number
+  versionNo?: string
+  versionType: string // BASELINE/INCREMENT/HOTFIX
+  baselineFlag?: number
+  name?: string
+  objective?: string
+  scopeSummary?: string
+  ownerUserId: number
+  status?: string // DRAFT/PLANNING/READY/RUNNING/VERIFYING/RELEASED/CANCELLED
+  deliveryReadiness?: string
+  health?: string
+  plannedStartAt?: string
+  plannedEndAt?: string
+  actualStartAt?: string
+  actualEndAt?: string
+  releasedAt?: string
+  sourceVersionId?: number
+  lockVersion?: number
+}
+
+export interface SpkIpdVersionCreateReqVO {
+  versionType: string
+  minorNo?: number
+  name?: string
+  objective: string
+  scopeSummary?: string
+  sourceVersionId?: number
+  ownerUserId: number
+  plannedStartAt?: string
+  plannedEndAt?: string
+}
+
+export interface SpkIpdReadinessCheckVO {
+  code: string
+  status: string // PASS/WARN/BLOCK
+  message?: string
+  action?: string
+}
+
+export interface SpkIpdReadinessRespVO {
+  ready?: boolean
+  resolvedProfileVersion?: number
+  checks?: SpkIpdReadinessCheckVO[]
+  effectiveStages?: string[]
+}
+
+export interface SpkIpdFlowRunVO {
+  id?: number
+  runNo?: string
+  projectId?: number
+  majorReleaseId?: number
+  versionId?: number
+  issueCaseId?: number
+  flowType: string
+  profileId?: number
+  profileVersion?: number
+  businessKey?: string
+  processInstanceId?: string
+  status?: string
+  currentStage?: string
+  currentActivity?: string
+  health?: string
+  blockReason?: string
+  attemptNo?: number
+  supersedesFlowRunId?: number
+  startedAt?: string
+  endedAt?: string
+  lockVersion?: number
+  createTime?: string
+}
+
+export interface SpkIpdFlowRunPageReqVO extends PageParam {
+  projectId?: number
+  versionId?: number
+  issueCaseId?: number
+  flowType?: string
+  status?: string
+  currentStage?: string
+}
+
+export interface SpkIpdFlowRunPreflightReqVO {
+  projectId: number
+  versionId?: number
+  issueCaseId?: number
+  flowType: string
+  processProfileId?: number
+  tailoring?: {
+    architectureMode?: string
+    endGate?: string
+    skipActivities?: string[]
+    reason?: string
+  }
+}
+
+export interface SpkIpdIssueCaseVO {
+  id?: number
+  caseNo?: string
+  projectId?: number
+  issueType: string
+  severity: string
+  title: string
+  description?: string
+  source?: string
+  externalSystem?: string
+  externalId?: string
+  externalUrl?: string
+  ownerUserId?: number
+  status?: string // OPEN/TRIAGED/IN_PROGRESS/RESOLVED/CLOSED/REOPENED
+  rootCause?: string
+  resolution?: string
+  detectedAt?: string
+  resolvedAt?: string
+  closedAt?: string
+  lockVersion?: number
+  createTime?: string
+}
+
+export interface SpkIpdIssueCasePageReqVO extends PageParam {
+  projectId?: number
+  issueType?: string
+  severity?: string
+  status?: string
+  ownerUserId?: number
+}
+
+// ==================== 项目 ====================
+
+export const getPage = (params: SpkIpdProjectPageReqVO) => {
+  return request.get({ url: '/spk/ipd/projects', params })
+}
+export const get = (id: number) => {
+  return request.get({ url: '/spk/ipd/projects/' + id })
+}
+export const getRoadmap = (id: number) => {
+  return request.get({ url: '/spk/ipd/projects/' + id + '/roadmap' })
+}
+export const create = (data: SpkIpdProjectVO) => {
+  return request.post({ url: '/spk/ipd/projects', data })
+}
+export const update = (id: number, data: SpkIpdProjectVO) => {
+  return request.put({ url: '/spk/ipd/projects/' + id, data })
+}
+export const activate = (id: number) => {
+  return request.post({ url: '/spk/ipd/projects/' + id + '/activate' })
+}
+export const pause = (id: number) => {
+  return request.post({ url: '/spk/ipd/projects/' + id + '/pause' })
+}
+export const archive = (id: number) => {
+  return request.post({ url: '/spk/ipd/projects/' + id + '/archive' })
+}
+
+// ==================== 大版本 ====================
+
+export const listMajorReleases = (projectId: number) => {
+  return request.get({ url: '/spk/ipd/projects/' + projectId + '/major-releases' })
+}
+export const getMajorRelease = (id: number) => {
+  return request.get({ url: '/spk/ipd/major-releases/' + id })
+}
+export const createMajorRelease = (projectId: number, data: SpkIpdMajorReleaseCreateReqVO) => {
+  return request.post({ url: '/spk/ipd/projects/' + projectId + '/major-releases', data })
+}
+export const updateMajorRelease = (id: number, data: SpkIpdMajorReleaseVO) => {
+  return request.put({ url: '/spk/ipd/major-releases/' + id, data })
+}
+export const closeMajorRelease = (id: number) => {
+  return request.post({ url: '/spk/ipd/major-releases/' + id + '/close' })
+}
+
+// ==================== 交付版本 ====================
+
+export const listVersions = (majorReleaseId: number) => {
+  return request.get({ url: '/spk/ipd/major-releases/' + majorReleaseId + '/versions' })
+}
+export const getVersion = (id: number) => {
+  return request.get({ url: '/spk/ipd/versions/' + id })
+}
+export const createVersion = (majorReleaseId: number, data: SpkIpdVersionCreateReqVO) => {
+  return request.post({ url: '/spk/ipd/major-releases/' + majorReleaseId + '/versions', data })
+}
+export const updateVersion = (id: number, data: SpkIpdVersionVO) => {
+  return request.put({ url: '/spk/ipd/versions/' + id, data })
+}
+export const readiness = (versionId: number) => {
+  return request.get({ url: '/spk/ipd/versions/' + versionId + '/readiness' })
+}
+export const readyVersion = (versionId: number) => {
+  return request.post({ url: '/spk/ipd/versions/' + versionId + '/ready' })
+}
+export const cancelVersion = (versionId: number) => {
+  return request.post({ url: '/spk/ipd/versions/' + versionId + '/cancel' })
+}
+export const traceability = (versionId: number) => {
+  return request.get({ url: '/spk/ipd/versions/' + versionId + '/traceability' })
+}
+
+// ==================== FlowRun ====================
+
+export const preflight = (data: SpkIpdFlowRunPreflightReqVO) => {
+  return request.post({ url: '/spk/ipd/flow-runs/preflight', data })
+}
+export const createFlowRun = (data: SpkIpdFlowRunPreflightReqVO) => {
+  return request.post({ url: '/spk/ipd/flow-runs', data })
+}
+export const getFlowRunPage = (params: SpkIpdFlowRunPageReqVO) => {
+  return request.get({ url: '/spk/ipd/flow-runs', params })
+}
+export const getFlowRun = (id: number) => {
+  return request.get({ url: '/spk/ipd/flow-runs/' + id })
+}
+export const startFlowRun = (id: number, idempotencyKey: string) => {
+  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/start', headers: { 'Idempotency-Key': idempotencyKey } })
+}
+export const cancelFlowRun = (id: number, reason: string) => {
+  // 后端 @RequestBody Map 读取 reason，故走 data 而非 params
+  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/cancel', data: { reason } })
+}
+export const retryFlowRun = (id: number) => {
+  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/retry' })
+}
+export const blockFlowRun = (id: number, data: { reason: string; impact?: string }) => {
+  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/block', data })
+}
+export const unblockFlowRun = (id: number) => {
+  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/unblock' })
+}
+export const timeline = (id: number) => {
+  return request.get({ url: '/spk/ipd/flow-runs/' + id + '/timeline' })
+}
+export const activities = (id: number) => {
+  return request.get({ url: '/spk/ipd/flow-runs/' + id + '/activities' })
+}
+export const diagram = (id: number) => {
+  return request.get({ url: '/spk/ipd/flow-runs/' + id + '/diagram' })
+}
+export const engineering = (id: number) => {
+  return request.get({ url: '/spk/ipd/flow-runs/' + id + '/engineering' })
+}
+export const getCommand = (flowRunId: number, commandId: number) => {
+  return request.get({ url: `/spk/ipd/flow-runs/${flowRunId}/commands/${commandId}` })
+}
+
+// ==================== 问题 IssueCase ====================
+
+export const createIssue = (projectId: number, data: SpkIpdIssueCaseVO) => {
+  return request.post({ url: '/spk/ipd/projects/' + projectId + '/issues', data })
+}
+export const pageIssues = (projectId: number, params: SpkIpdIssueCasePageReqVO) => {
+  return request.get({ url: '/spk/ipd/projects/' + projectId + '/issues', params })
+}
+export const getIssue = (id: number) => {
+  return request.get({ url: '/spk/ipd/issues/' + id })
+}
+export const updateIssue = (id: number, data: SpkIpdIssueCaseVO) => {
+  return request.put({ url: '/spk/ipd/issues/' + id, data })
+}
+export const triageIssue = (id: number, data: { severity?: string; ownerUserId?: number; affectedVersionIds?: number[] }) => {
+  return request.post({ url: '/spk/ipd/issues/' + id + '/triage', data })
+}
+export const addVersionRelation = (id: number, data: { versionId: number; relationType: string }) => {
+  return request.post({ url: '/spk/ipd/issues/' + id + '/version-relations', data })
+}
+export const listVersionRelations = (id: number) => {
+  return request.get({ url: '/spk/ipd/issues/' + id + '/version-relations' })
+}
+export const startIssueFlow = (id: number, idempotencyKey: string) => {
+  return request.post({ url: '/spk/ipd/issues/' + id + '/start-flow', headers: { 'Idempotency-Key': idempotencyKey } })
+}
+export const resolveIssue = (id: number, resolution: string) => {
+  return request.post({ url: '/spk/ipd/issues/' + id + '/resolve', data: { resolution } })
+}
+export const closeIssue = (id: number) => {
+  return request.post({ url: '/spk/ipd/issues/' + id + '/close' })
+}
+export const reopenIssue = (id: number, reason: string) => {
+  return request.post({ url: '/spk/ipd/issues/' + id + '/reopen', data: { reason } })
+}
+
+// ==================== 上下文选择器 / 旧实例映射 ====================
+
+export const pickerProjects = () => {
+  return request.get({ url: '/spk/ipd/context/projects' })
+}
+export const pickerVersions = (projectId: number) => {
+  return request.get({ url: '/spk/ipd/context/versions', params: { projectId } })
+}
+export const pickerFlowRuns = (versionId: number) => {
+  return request.get({ url: '/spk/ipd/context/flow-runs', params: { versionId } })
+}
+export const recentContexts = () => {
+  return request.get({ url: '/spk/ipd/context/recent' })
+}
+export const saveRecentContext = (ctx: object) => {
+  return request.post({ url: '/spk/ipd/context/recent', data: ctx })
+}
+export const resolveLegacy = (processInstanceId: string) => {
+  return request.get({ url: '/spk/ipd/legacy/resolve', params: { processInstanceId } })
+}
+export const listNeedsMapping = () => {
+  return request.get({ url: '/spk/ipd/legacy/needs-mapping' })
+}
+export const confirmMapping = (mappingId: number, data: object) => {
+  return request.post({ url: '/spk/ipd/legacy/' + mappingId + '/confirm', data })
+}
+
+// ==================== 总览 Overview ====================
+
+export interface SpkIpdOverviewAttentionItem {
+  type: string
+  severity: string
+  refId?: number
+  title: string
+  detail?: string
+}
+export interface SpkIpdOverviewVO {
+  projectCounts?: Record<string, number>
+  versionCounts?: Record<string, number>
+  flowRunCounts?: Record<string, number>
+  issueCounts?: Record<string, number>
+  issueSeverityCounts?: Record<string, number>
+  flowHealthCounts?: Record<string, number>
+  aiUsage?: Record<string, any>
+  activeFlowCount?: number
+  blockedFlowCount?: number
+  openIssueCount?: number
+  attentionItems?: SpkIpdOverviewAttentionItem[]
+  recentFlows?: Array<Record<string, any>>
+  roadmap?: Array<Record<string, any>>
+}
+
+export const getOverview = () => {
+  return request.get({ url: '/spk/ipd/overview' })
+}
