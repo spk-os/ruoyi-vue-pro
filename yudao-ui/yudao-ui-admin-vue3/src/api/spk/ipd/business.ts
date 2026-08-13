@@ -419,3 +419,132 @@ export interface SpkIpdMonitorVO {
 export const getMonitor = (projectId?: number) => {
   return request.get({ url: '/spk/ipd/monitor', params: projectId ? { projectId } : {} })
 }
+
+// ==================== 团队、参与者与分派 Team ====================
+
+export interface SpkIpdActorRow {
+  id: number
+  actorType: string
+  actorId: number
+  name: string
+  subtitle?: string
+  businessRole?: string
+  accountableFlag?: number
+  capacityPct?: number
+  status?: string
+  projectId?: number
+  versionId?: number
+}
+export interface SpkIpdLoadRow {
+  actorType: string
+  actorId: number
+  name: string
+  total: number
+  planned: number
+  running: number
+  blocked: number
+  done: number
+}
+export interface SpkIpdTeamVO {
+  projectId?: number
+  versionId?: number
+  people?: SpkIpdActorRow[]
+  agents?: SpkIpdActorRow[]
+  squads?: SpkIpdActorRow[]
+  load?: SpkIpdLoadRow[]
+  summary?: Record<string, number>
+}
+export interface SpkIpdActorCandidate {
+  actorType: string
+  actorId: number
+  name: string
+  subtitle?: string
+  businessRole?: string
+}
+export interface SpkIpdActorSaveReqVO {
+  projectId?: number
+  versionId?: number
+  actorType: string
+  actorId: number
+  businessRole: string
+  accountableFlag?: number
+  capacityPct?: number
+  effectiveFrom?: string
+  effectiveTo?: string
+  status?: string
+}
+export interface SpkIpdAssignmentVO extends PageParam {
+  projectId?: number
+  versionId?: number
+  flowRunId?: number
+  workItemType?: string
+  actorType?: string
+  actorId?: number
+  status?: string
+  id?: number
+  activityRunId?: string
+  workItemId?: string
+  accountableActorType?: string
+  accountableActorId?: number
+  plannedEffort?: number
+  actualEffort?: number
+  lockVersion?: number
+  createTime?: string
+}
+export interface SpkIpdAssignmentCreateReqVO {
+  projectId?: number
+  versionId?: number
+  flowRunId: number
+  activityRunId?: string
+  workItemType: string
+  workItemId: string
+  actorType: string
+  actorId: number
+  accountableActorType?: string
+  accountableActorId?: number
+  plannedEffort?: number
+}
+export interface SpkIpdAssignmentReassignReqVO {
+  actorType: string
+  actorId: number
+  accountableActorType?: string
+  accountableActorId?: number
+  reason?: string
+}
+
+export const getTeam = (projectId?: number, versionId?: number) => {
+  const params: any = {}
+  if (projectId) params.projectId = projectId
+  if (versionId) params.versionId = versionId
+  return request.get({ url: '/spk/ipd/team', params })
+}
+export const listActors = (projectId: number, versionId?: number) => {
+  const params: any = {}
+  if (versionId) params.versionId = versionId
+  return request.get({ url: `/spk/ipd/projects/${projectId}/actors`, params })
+}
+export const pageActors = (params: any) => {
+  return request.get({ url: '/spk/ipd/actors/page', params })
+}
+export const saveActor = (projectId: number, data: SpkIpdActorSaveReqVO) => {
+  return request.post({ url: `/spk/ipd/projects/${projectId}/actors`, data })
+}
+export const deleteActor = (id: number) => {
+  return request.delete({ url: `/spk/ipd/actors/${id}` })
+}
+export const candidates = (actorType?: string, role?: string, q?: string) => {
+  const params: any = {}
+  if (actorType) params.actorType = actorType
+  if (role) params.role = role
+  if (q) params.q = q
+  return request.get({ url: '/spk/ipd/actors/candidates', params })
+}
+export const pageAssignments = (params: any) => {
+  return request.get({ url: '/spk/ipd/assignments', params })
+}
+export const createAssignment = (data: SpkIpdAssignmentCreateReqVO) => {
+  return request.post({ url: '/spk/ipd/assignments', data })
+}
+export const reassign = (assignmentId: number, data: SpkIpdAssignmentReassignReqVO) => {
+  return request.post({ url: `/spk/ipd/assignments/${assignmentId}/reassign`, data })
+}

@@ -119,4 +119,13 @@ public interface ErrorCodeConstants {
     ErrorCode IPD_COMMAND_CONFLICT = new ErrorCode(1_050_116_050, "幂等键相同但负载不一致，命令冲突");
     ErrorCode IPD_CONTEXT_MISMATCH = new ErrorCode(1_050_116_051, "上下文键互相矛盾");
 
+    // ========== IPD 参与者与分派（1-050-116-060） ==========
+    ErrorCode IPD_ACTOR_NOT_EXISTS = new ErrorCode(1_050_116_060, "项目参与者不存在");
+    ErrorCode IPD_ACTOR_DUPLICATE = new ErrorCode(1_050_116_061, "同一作用域已存在相同参与者");
+    ErrorCode IPD_ACTOR_ACCOUNTABLE_DUPLICATE = new ErrorCode(1_050_116_062, "同一作用域同一角色已有唯一 accountable");
+    ErrorCode IPD_ACTOR_TYPE_INVALID = new ErrorCode(1_050_116_063, "参与者类型非法，须为 HUMAN/AGENT/SQUAD/SYSTEM");
+    ErrorCode IPD_ASSIGNMENT_NOT_EXISTS = new ErrorCode(1_050_116_070, "任务分派不存在");
+    ErrorCode IPD_ASSIGNMENT_BPM_NOT_HUMAN = new ErrorCode(1_050_116_071, "BPM 审批任务只能分派给真人，Agent 不可作为 accountable");
+    ErrorCode IPD_ASSIGNMENT_NOT_REASSIGNABLE = new ErrorCode(1_050_116_072, "任务分派当前状态不可转派");
+
 }
