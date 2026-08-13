@@ -401,3 +401,21 @@ export interface SpkIpdOverviewVO {
 export const getOverview = () => {
   return request.get({ url: '/spk/ipd/overview' })
 }
+
+// ==================== 项目维度监控 Monitor ====================
+
+export interface SpkIpdMonitorIntegration {
+  name: string
+  healthy: boolean
+  detail?: string
+  url?: string
+}
+export interface SpkIpdMonitorVO {
+  summary?: Record<string, number>
+  flows?: Array<Record<string, any>>
+  integrations?: SpkIpdMonitorIntegration[]
+}
+
+export const getMonitor = (projectId?: number) => {
+  return request.get({ url: '/spk/ipd/monitor', params: projectId ? { projectId } : {} })
+}
