@@ -94,4 +94,29 @@ public interface ErrorCodeConstants {
     ErrorCode MODEL_CAPABILITY_NOT_EXISTS = new ErrorCode(1_050_115_000, "模型能力画像不存在");
     ErrorCode MODEL_SNAPSHOT_NOT_EXISTS = new ErrorCode(1_050_115_001, "模型快照不存在");
 
+    // ========== IPD 业务骨架 Project/Major/Version/FlowRun/Issue（1-050-116-000） ==========
+    ErrorCode IPD_PROJECT_NOT_EXISTS = new ErrorCode(1_050_116_000, "IPD 项目不存在");
+    ErrorCode IPD_PROJECT_CODE_DUPLICATE = new ErrorCode(1_050_116_001, "项目短码已存在");
+    ErrorCode IPD_PROJECT_NOT_DRAFT = new ErrorCode(1_050_116_002, "项目非草稿状态，不可修改");
+    ErrorCode IPD_PROJECT_HAS_ACTIVE = new ErrorCode(1_050_116_003, "存在活跃版本/流程，不可归档");
+    ErrorCode IPD_MAJOR_NOT_EXISTS = new ErrorCode(1_050_116_010, "大版本不存在");
+    ErrorCode IPD_MAJOR_NO_DUPLICATE = new ErrorCode(1_050_116_011, "大版本序号已存在");
+    ErrorCode IPD_MAJOR_HAS_RUNNING = new ErrorCode(1_050_116_012, "大版本存在运行实例，禁止修改序号");
+    ErrorCode IPD_VERSION_NOT_EXISTS = new ErrorCode(1_050_116_020, "交付版本不存在");
+    ErrorCode IPD_VERSION_NO_DUPLICATE = new ErrorCode(1_050_116_021, "版本号已存在");
+    ErrorCode IPD_VERSION_NOT_DRAFT = new ErrorCode(1_050_116_022, "版本非 DRAFT，不可改编号");
+    ErrorCode IPD_VERSION_RUNNING = new ErrorCode(1_050_116_023, "版本已进入运行，不可取消");
+    ErrorCode IPD_VERSION_BASELINE_EXISTS = new ErrorCode(1_050_116_024, "同一大版本已存在基线版本");
+    ErrorCode IPD_FLOW_RUN_NOT_EXISTS = new ErrorCode(1_050_116_030, "FlowRun 不存在");
+    ErrorCode IPD_FLOW_RUN_NOT_READY = new ErrorCode(1_050_116_031, "FlowRun 非 READY 状态，不可启动");
+    ErrorCode IPD_FLOW_RUN_ACTIVE_EXISTS = new ErrorCode(1_050_116_032, "同一版本已存在活跃主交付流");
+    ErrorCode IPD_FLOW_TYPE_MISMATCH = new ErrorCode(1_050_116_033, "流程类型与版本类型不匹配");
+    ErrorCode IPD_FLOW_START_FAIL = new ErrorCode(1_050_116_034, "Flowable 流程启动失败");
+    ErrorCode IPD_FLOW_RUN_NOT_CANCELLABLE = new ErrorCode(1_050_116_035, "FlowRun 当前状态不可取消");
+    ErrorCode IPD_ISSUE_NOT_EXISTS = new ErrorCode(1_050_116_040, "问题不存在");
+    ErrorCode IPD_ISSUE_NO_FIXED_IN = new ErrorCode(1_050_116_041, "进入实施修复前必须存在 FIXED_IN 关联");
+    ErrorCode IPD_ISSUE_NOT_RESOLVABLE = new ErrorCode(1_050_116_042, "问题缺少验证结论，不可关闭");
+    ErrorCode IPD_COMMAND_CONFLICT = new ErrorCode(1_050_116_050, "幂等键相同但负载不一致，命令冲突");
+    ErrorCode IPD_CONTEXT_MISMATCH = new ErrorCode(1_050_116_051, "上下文键互相矛盾");
+
 }
