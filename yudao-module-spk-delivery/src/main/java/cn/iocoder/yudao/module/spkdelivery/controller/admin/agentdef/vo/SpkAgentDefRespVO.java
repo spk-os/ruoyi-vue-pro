@@ -53,4 +53,21 @@ public class SpkAgentDefRespVO {
     @Schema(description = "创建时间")
     private LocalDateTime createTime;
 
+    // ===== 高级字段（供前端回显） =====
+
+    @Schema(description = "智能体种类 lead/worker/verifier")
+    private String agentKind;
+    @Schema(description = "能力标签数组 JSON")
+    private String capabilityTags;
+    @Schema(description = "Verifier 类型 TR/RE/SEC")
+    private String verifierType;
+    @Schema(description = "隔离级别 process/container/vm")
+    private String isolationLevel;
+    @Schema(description = "执行模式 local/omnigent")
+    private String mode;
+    @Schema(description = "继承父智能体 id")
+    private Long parentDefId;
+    @Schema(description = "Omnigent 侧 agent-id 映射")
+    private String omnigentAgentId;
+
 }

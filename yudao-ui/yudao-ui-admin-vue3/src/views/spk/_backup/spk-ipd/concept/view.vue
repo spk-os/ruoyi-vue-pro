@@ -1,4 +1,13 @@
 <!--
+  [归档 2026-08-14] 旧版 IPD 立项摘要视图（formCustomViewPath='/spk-ipd/concept/view'）。
+  1:1 新版对应物 = views/spk/ipd/view.vue（同基线 5ecc4de0b9 引入副本，formCustomViewPath
+  改为 '/spk/ipd/view'，9 字段 + 5 API 逐字相同）——信息层面无缺失，旧路径已被新路径替代，
+  故旧文件迁此备份。门禁/裁决信息另散见于 spk/ipd/cockpit（ActivityDetail 的 gate_decision
+  / verifications[].overallConclusion + Swimlane STAGE_ORDER），但非聚合立项摘要单页。
+  注意：新旧两个 view 均靠 bpm_form.conf 的 formCustomViewPath(form_type=20) 动态加载，
+  当前 bpm_form 表全空 → 两者运行时都未渲染，需建 form_type=20 表单配路径才激活。
+  原路径：src/views/spk-ipd/concept/view.vue（baseline 5ecc4de0b9 引入）。
+  ──────────────────────────────────────────────────────────────────────────
   SPK-OS IPD 立项摘要视图（form_type=20 业务表单组件）
   由 bpm/processInstance/detail/index.vue 的 BusinessFormComponent 加载，
   formCustomViewPath='/spk-ipd/concept/view' 经 routerHelper.registerComponent 子串命中本文件。

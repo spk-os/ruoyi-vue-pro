@@ -46,6 +46,8 @@ public class SpkAgentDefService {
         // 唯一性校验
         validateNameUnique(null, reqVO.getName());
         validateCodeUnique(null, reqVO.getCode());
+        // 角色继承环检测：parentDefId 不能指自己或子孙
+        validateParentChain(null, reqVO.getParentDefId());
         SpkAgentDefDO agent = SpkAgentDefDO.builder()
                 .name(reqVO.getName())
                 .code(reqVO.getCode())
@@ -63,6 +65,14 @@ public class SpkAgentDefService {
                 .source(reqVO.getSource() != null ? reqVO.getSource() : "manual")
                 .hidden(reqVO.getHidden() != null ? reqVO.getHidden() : 0)
                 .lastActivity(reqVO.getLastActivity())
+                // 高级字段透传（mode 默认 local）
+                .agentKind(reqVO.getAgentKind())
+                .capabilityTags(reqVO.getCapabilityTags())
+                .verifierType(reqVO.getVerifierType())
+                .isolationLevel(reqVO.getIsolationLevel())
+                .mode(reqVO.getMode() != null ? reqVO.getMode() : "local")
+                .parentDefId(reqVO.getParentDefId())
+                .omnigentAgentId(reqVO.getOmnigentAgentId())
                 .build();
         agentDefMapper.insert(agent);
         return agent;
@@ -75,6 +85,8 @@ public class SpkAgentDefService {
         SpkAgentDefDO agent = validateExists(reqVO.getId());
         validateNameUnique(reqVO.getId(), reqVO.getName());
         validateCodeUnique(reqVO.getId(), reqVO.getCode());
+        // 角色继承环检测：parentDefId 不能指自己或子孙
+        validateParentChain(reqVO.getId(), reqVO.getParentDefId());
         SpkAgentDefDO update = SpkAgentDefDO.builder()
                 .id(reqVO.getId())
                 .name(reqVO.getName())
@@ -92,10 +104,168 @@ public class SpkAgentDefService {
                 .source(reqVO.getSource())
                 .hidden(reqVO.getHidden())
                 .lastActivity(reqVO.getLastActivity())
+                // 高级字段透传（mode 默认 local）
+                .agentKind(reqVO.getAgentKind())
+                .capabilityTags(reqVO.getCapabilityTags())
+                .verifierType(reqVO.getVerifierType())
+                .isolationLevel(reqVO.getIsolationLevel())
+                .mode(reqVO.getMode() != null ? reqVO.getMode() : "local")
+                .parentDefId(reqVO.getParentDefId())
+                .omnigentAgentId(reqVO.getOmnigentAgentId())
                 .build();
         // 保留既有会话绑定
         update.setConversationId(agent.getConversationId());
         agentDefMapper.updateById(update);
+    }
+
+    /**
+     * 角色继承解析：沿 parentDefId 链向上合并父智能体属性（运行时合并，不物化）。
+     * <p>合并规则（子非空则覆盖父，capabilityTags 并集）：
+     * <ul>
+     *   <li>capabilityTags：并集（子扩展能力）</li>
+     *   <li>toolsConfig：合并（子覆盖同名 key，简化为子覆盖父整体）</li>
+     *   <li>soulContent/model/roleId/mode/omnigentAgentId/agentKind/verifierType：子非空覆盖父</li>
+     * </ul>
+     * 带环检测（visited Set），出现环直接返回当前 def（防死循环）。
+     * 调用时机：SpkTaskRouterService 选出 lead 后对 lead 调用，得到 effective lead 装配派发参数。
+     *
+     * @param defId 智能体 id
+     * @return 合并父链后的有效智能体（深拷贝，不改 DB）
+     */
+    public SpkAgentDefDO resolveEffective(Long defId) {
+        if (defId == null) {
+            return null;
+        }
+        SpkAgentDefDO def = agentDefMapper.selectById(defId);
+        if (def == null) {
+            return null;
+        }
+        // 无父继承直接返回
+        if (def.getParentDefId() == null) {
+            return def;
+        }
+        // 沿父链合并，带环检测
+        java.util.Set<Long> visited = new java.util.HashSet<>();
+        visited.add(def.getId());
+        SpkAgentDefDO effective = cloneDef(def);
+        Long parentId = def.getParentDefId();
+        while (parentId != null && !visited.contains(parentId)) {
+            visited.add(parentId);
+            SpkAgentDefDO parent = agentDefMapper.selectById(parentId);
+            if (parent == null) {
+                break;
+            }
+            mergeFromParent(effective, parent);
+            parentId = parent.getParentDefId();
+        }
+        return effective;
+    }
+
+    /** 浅拷贝 def（不改 DB，用于合并父链）。 */
+    private SpkAgentDefDO cloneDef(SpkAgentDefDO src) {
+        return SpkAgentDefDO.builder()
+                .id(src.getId())
+                .name(src.getName())
+                .code(src.getCode())
+                .role(src.getRole())
+                .sessionKey(src.getSessionKey())
+                .soulContent(src.getSoulContent())
+                .workingMemory(src.getWorkingMemory())
+                .status(src.getStatus())
+                .model(src.getModel())
+                .roleId(src.getRoleId())
+                .conversationId(src.getConversationId())
+                .toolsConfig(src.getToolsConfig())
+                .config(src.getConfig())
+                .runtimeType(src.getRuntimeType())
+                .source(src.getSource())
+                .hidden(src.getHidden())
+                .lastActivity(src.getLastActivity())
+                .agentKind(src.getAgentKind())
+                .capabilityTags(src.getCapabilityTags())
+                .verifierType(src.getVerifierType())
+                .isolationLevel(src.getIsolationLevel())
+                .mode(src.getMode())
+                .parentDefId(src.getParentDefId())
+                .omnigentAgentId(src.getOmnigentAgentId())
+                .build();
+    }
+
+    /**
+     * 把父属性合并进 effective（子非空则保留子，capabilityTags 取并集）。
+     */
+    @SuppressWarnings("unchecked")
+    private void mergeFromParent(SpkAgentDefDO effective, SpkAgentDefDO parent) {
+        // capabilityTags 并集
+        java.util.List<String> merged = new java.util.ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (String tag : parseTagList(parent.getCapabilityTags())) {
+            if (seen.add(tag)) merged.add(tag);
+        }
+        for (String tag : parseTagList(effective.getCapabilityTags())) {
+            if (seen.add(tag)) merged.add(tag);
+        }
+        if (!merged.isEmpty()) {
+            try {
+                effective.setCapabilityTags(
+                        cn.iocoder.yudao.framework.common.util.json.JsonUtils.toJsonString(merged));
+            } catch (Exception ignore) {
+                // 保持原值
+            }
+        }
+        // 子非空则覆盖父
+        if (effective.getAgentKind() == null) effective.setAgentKind(parent.getAgentKind());
+        if (effective.getVerifierType() == null) effective.setVerifierType(parent.getVerifierType());
+        if (effective.getIsolationLevel() == null) effective.setIsolationLevel(parent.getIsolationLevel());
+        if (effective.getMode() == null) effective.setMode(parent.getMode());
+        if (effective.getOmnigentAgentId() == null) effective.setOmnigentAgentId(parent.getOmnigentAgentId());
+        if (effective.getSoulContent() == null) effective.setSoulContent(parent.getSoulContent());
+        if (effective.getModel() == null) effective.setModel(parent.getModel());
+        if (effective.getRoleId() == null) effective.setRoleId(parent.getRoleId());
+        if (effective.getToolsConfig() == null) effective.setToolsConfig(parent.getToolsConfig());
+    }
+
+    private static java.util.List<String> parseTagList(String json) {
+        if (json == null || json.isBlank()) {
+            return java.util.Collections.emptyList();
+        }
+        try {
+            java.util.List<Object> list = cn.iocoder.yudao.framework.common.util.json.JsonUtils
+                    .parseObject(json, java.util.List.class);
+            java.util.List<String> res = new java.util.ArrayList<>();
+            for (Object o : list) {
+                res.add(String.valueOf(o));
+            }
+            return res;
+        } catch (Exception e) {
+            return java.util.Collections.emptyList();
+        }
+    }
+
+    /**
+     * 校验 parentDefId 不能指向自己或子孙（环检测）。
+     */
+    private void validateParentChain(Long selfId, Long parentDefId) {
+        if (parentDefId == null) {
+            return;
+        }
+        if (selfId != null && selfId.equals(parentDefId)) {
+            throw exception(AGENT_DEF_PARENT_CYCLE);
+        }
+        // 向上走链，若回到 selfId 则成环
+        java.util.Set<Long> visited = new java.util.HashSet<>();
+        Long cursor = parentDefId;
+        while (cursor != null && !visited.contains(cursor)) {
+            visited.add(cursor);
+            if (cursor.equals(selfId)) {
+                throw exception(AGENT_DEF_PARENT_CYCLE);
+            }
+            SpkAgentDefDO p = agentDefMapper.selectById(cursor);
+            if (p == null) {
+                break;
+            }
+            cursor = p.getParentDefId();
+        }
     }
 
     /**

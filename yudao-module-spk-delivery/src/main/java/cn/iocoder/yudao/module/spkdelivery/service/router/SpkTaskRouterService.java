@@ -17,6 +17,7 @@ import cn.iocoder.yudao.module.spkdelivery.enums.SpkTaskContractStatusEnum;
 import cn.iocoder.yudao.module.spkdelivery.service.agent.FrameworkAdapter;
 import cn.iocoder.yudao.module.spkdelivery.service.agent.SpkAgentDispatchReq;
 import cn.iocoder.yudao.module.spkdelivery.service.agent.SpkAgentDispatchResult;
+import cn.iocoder.yudao.module.spkdelivery.service.agentdef.SpkAgentDefService;
 import cn.iocoder.yudao.module.spkdelivery.service.artifact.SpkArtifactService;
 import cn.iocoder.yudao.module.spkdelivery.service.context.SpkContextBuilderService;
 import cn.iocoder.yudao.module.spkdelivery.service.evidence.SpkEvidenceService;
@@ -88,6 +89,8 @@ public class SpkTaskRouterService {
     private final Map<String, FrameworkAdapter> adapterMap = new java.util.concurrent.ConcurrentHashMap<>();
     @Value("${spk-delivery.execution.adapter:native-ai}")
     private String defaultAdapterName;
+    @Resource
+    private SpkAgentDefService agentDefService;
     @Resource
     private SpkIpdMetrics metrics;
 
@@ -165,12 +168,26 @@ public class SpkTaskRouterService {
                 .setModelSnapshotId(snapshotId)
                 .setContextManifestUri(contextUri);
         try {
+            // 角色继承：对 lead 调 resolveEffective 合并父链（capabilityTags 并集、soulContent/model/mode 子覆盖父）。
+            // 注：selectLead 的能力匹配仍用原 def（避免继承改变选 lead 结果）；effective 仅用于派发参数。
+            SpkAgentDefDO effectiveLead = agentDefService.resolveEffective(lead.getId());
+            if (effectiveLead == null) {
+                effectiveLead = lead;
+            }
             SpkAgentDispatchReq req = new SpkAgentDispatchReq()
-                    .setRoleId(lead.getRoleId())
+                    .setRoleId(effectiveLead.getRoleId() != null ? effectiveLead.getRoleId() : lead.getRoleId())
                     .setPrompt(prompt)
                     .setInstanceId(processInstanceId)
-                    .setNodeKey(nodeKey);
-            FrameworkAdapter adapter = selectAdapter(def);
+                    .setNodeKey(nodeKey)
+                    // per-agent 路由上下文（OmnigentAdapter 据 leadDefId 解析 omnigentAgentId、按 activityRunId 隔离 workspace）
+                    .setLeadCode(lead.getCode())
+                    .setLeadDefId(lead.getId())
+                    .setActivityRunId(activityRunId)
+                    .setMode(effectiveLead.getMode())
+                    .setOmnigentAgentId(effectiveLead.getOmnigentAgentId())
+                    .setStage(def.getStage())
+                    .setOutputArtifactType(def.getOutputArtifactType());
+            FrameworkAdapter adapter = selectAdapter(def, effectiveLead);
             SpkAgentDispatchResult dispatch = adapter.dispatchTask(req);
             result.setProvider(adapter.getName());
             // 持久化 adapter 返回的 taskId（omnigent=conv_xxx 会话 id / native-ai=convId#sendMsgId）
@@ -290,15 +307,30 @@ public class SpkTaskRouterService {
     }
 
     /**
-     * 选择当前 Activity 派发所用 adapter。
+     * 选择当前 Activity 派发所用 adapter（per-agent 路由核心）。
      * <p>
-     * P2：按全局配置 spk-delivery.execution.adapter 选（默认 native-ai）。
-     * 未来可按 def.getExecutionLocation() / def 额外字段做 per-Activity 路由。
-     * 选不到时回退 native-ai，再选不到抛 TASK_ROUTER_NO_LEAD 同类异常。
+     * "用哪个 runtime"是 agent 的属性（lead.mode），不是 activity 的属性：
+     * <ul>
+     *   <li>lead.mode=omnigent → 走 OmnigentAdapter（真实云沙箱 + 多智能体 fanout + 会话持久化）</li>
+     *   <li>lead.mode=local（或空）→ 走 NativeAiAdapter（本地 yudao-module-ai 内核 LLM）</li>
+     * </ul>
+     * 与 def.executionLocation（系统执行 vs agent 内部执行）正交：executionLocation 写 contract.executionMode，
+     * mode 决定 adapter。选不到指定 adapter 时回退 defaultAdapterName → native-ai → 任一可用。
+     * mode=omnigent 但 omnigent adapter 不在线（:6767 不监听）由 OmnigentAdapter 内部捕获并降级，此处不拦截。
      */
-    private FrameworkAdapter selectAdapter(SpkIpdActivityDefDO def) {
-        FrameworkAdapter a = adapterMap.get(defaultAdapterName);
+    private FrameworkAdapter selectAdapter(SpkIpdActivityDefDO def, SpkAgentDefDO lead) {
+        // per-agent 按 lead.mode 选 adapter；lead 无 mode 回退全局 defaultAdapterName
+        String preferred = (lead != null && lead.getMode() != null && !lead.getMode().isBlank())
+                ? lead.getMode() : defaultAdapterName;
+        String adapterName = "omnigent".equalsIgnoreCase(preferred) ? "omnigent"
+                : "local".equalsIgnoreCase(preferred) ? "native-ai" : defaultAdapterName;
+        FrameworkAdapter a = adapterMap.get(adapterName);
         if (a != null) {
+            return a;
+        }
+        a = adapterMap.get(defaultAdapterName);
+        if (a != null) {
+            log.warn("[selectAdapter][preferred={} 不存在，回退默认 {}]", adapterName, defaultAdapterName);
             return a;
         }
         a = adapterMap.get("native-ai");

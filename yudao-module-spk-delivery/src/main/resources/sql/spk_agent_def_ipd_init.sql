@@ -6,6 +6,20 @@
 -- 幂等：先按 code 清除本批，再用 nextval 重建
 -- =====================================================================
 
+-- ----------------------------
+-- per-agent 双模式 + 角色继承接线（mode/parent_def_id/omnigent_agent_id）
+-- mode: local(默认,走 NativeAiAdapter) / omnigent(走 OmnigentAdapter 真实沙箱)
+-- parent_def_id: 继承父智能体（运行时合并解析）
+-- omnigent_agent_id: mode=omnigent 时 Omnigent 侧 agent-id 映射，空回退全局配置
+-- ----------------------------
+ALTER TABLE "spk_agent_def" ADD COLUMN IF NOT EXISTS "mode" VARCHAR(16) DEFAULT 'local';
+ALTER TABLE "spk_agent_def" ADD COLUMN IF NOT EXISTS "parent_def_id" BIGINT;
+ALTER TABLE "spk_agent_def" ADD COLUMN IF NOT EXISTS "omnigent_agent_id" VARCHAR(64);
+COMMENT ON COLUMN "spk_agent_def"."mode" IS '执行模式 local/omnigent';
+COMMENT ON COLUMN "spk_agent_def"."parent_def_id" IS '继承父智能体 id';
+COMMENT ON COLUMN "spk_agent_def"."omnigent_agent_id" IS 'Omnigent 侧 agent-id 映射';
+
+
 DELETE FROM "spk_agent_def" WHERE "code" IN (
   'lead-req-insight','lead-concept-options','lead-proj-plan','lead-arch-design',
   'lead-detail-design','lead-coding','lead-integration-verify','lead-beta-verify',
@@ -38,3 +52,13 @@ INSERT INTO "spk_agent_def" ("id","name","code","role","status","model","role_id
 (nextval('spk_agent_def_seq'),'技术评审 Verifier','verifier-tr','技术评审','idle','glm-5.2',1,'native','manual','verifier','["review"]','TR','process',0),
 (nextval('spk_agent_def_seq'),'需求评审 Verifier','verifier-re','需求评审','idle','glm-5.2',1,'native','manual','verifier','["review"]','RE','process',0),
 (nextval('spk_agent_def_seq'),'安全评审 Verifier','verifier-sec','安全评审','idle','glm-5.2',1,'native','manual','verifier','["review"]','SEC','process',0);
+
+-- ----------------------------
+-- per-agent 双模式接线示范：
+-- lead-arch-design  → mode=omnigent + omnigent_agent_id=spk-architect（验证 Omnigent 真实沙箱链 + 多 agent 映射）
+-- lead-req-insight  → mode=omnigent + omnigent_agent_id=spk-reporter（验证 Omnigent 真实文件回流 + conv 续跑）
+-- 其余 lead 默认 mode=local（走 NativeAiAdapter 本地 LLM 链）
+-- ----------------------------
+UPDATE "spk_agent_def" SET "mode"='omnigent',"omnigent_agent_id"='spk-architect' WHERE "code"='lead-arch-design';
+UPDATE "spk_agent_def" SET "mode"='omnigent',"omnigent_agent_id"='spk-reporter'  WHERE "code"='lead-req-insight';
+

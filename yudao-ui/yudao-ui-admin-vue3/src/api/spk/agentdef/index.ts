@@ -22,6 +22,14 @@ export interface AgentDefVO {
   hidden?: number
   lastActivity?: string
   createTime?: Date
+  // 高级字段（高级模式才显，通用模式默认）
+  agentKind?: string // lead/worker/verifier
+  capabilityTags?: string // JSON 数组，如 ["architecture","review"]
+  verifierType?: string // TR/RE/SEC，仅 verifier
+  isolationLevel?: string // process/container/vm
+  mode?: string // local/omnigent（per-agent runtime）
+  parentDefId?: number // 继承父智能体 id
+  omnigentAgentId?: string // Omnigent 侧 agent-id 映射
 }
 
 export interface AgentDefPageReqVO extends PageParam {

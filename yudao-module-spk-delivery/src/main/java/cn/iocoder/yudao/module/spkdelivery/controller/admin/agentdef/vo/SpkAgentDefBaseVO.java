@@ -66,4 +66,27 @@ public class SpkAgentDefBaseVO {
     @Schema(description = "最近活动描述")
     private String lastActivity;
 
+    // ===== 高级字段（高级模式才显，通用模式默认） =====
+
+    @Schema(description = "智能体种类 lead/worker/verifier", example = "lead")
+    private String agentKind;
+
+    @Schema(description = "能力标签数组 JSON，Task Router 路由依据", example = "[\"architecture\"]")
+    private String capabilityTags;
+
+    @Schema(description = "Verifier 类型 TR/RE/SEC，仅 verifier 用", example = "TR")
+    private String verifierType;
+
+    @Schema(description = "隔离级别 process/container/vm", example = "process")
+    private String isolationLevel;
+
+    @Schema(description = "执行模式 local/omnigent（per-agent 决定走 NativeAiAdapter 还是 OmnigentAdapter）", example = "local")
+    private String mode;
+
+    @Schema(description = "继承父智能体 id（运行时合并解析：capabilityTags 并集、soulContent/model/mode 子覆盖父）", example = "1")
+    private Long parentDefId;
+
+    @Schema(description = "Omnigent 侧 agent-id 映射（mode=omnigent 时用，空回退全局配置）", example = "spk-architect")
+    private String omnigentAgentId;
+
 }

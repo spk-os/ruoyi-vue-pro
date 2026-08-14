@@ -55,6 +55,7 @@ public interface ErrorCodeConstants {
     ErrorCode AGENT_DEF_ROLE_REQUIRED = new ErrorCode(1_050_108_003, "智能体未关联 AI 角色，无法唤醒");
     ErrorCode AGENT_DEF_RUNTIME_NOT_SUPPORT_WAKE = new ErrorCode(1_050_108_004, "该运行时类型暂不支持本地唤醒");
     ErrorCode AGENT_DEF_WAKE_FAIL = new ErrorCode(1_050_108_005, "智能体唤醒失败");
+    ErrorCode AGENT_DEF_PARENT_CYCLE = new ErrorCode(1_050_108_006, "父智能体继承链成环（不能指向自己或子孙）");
 
     // ========== 智能体编队（1-050-109-000） ==========
     ErrorCode AGENT_SQUAD_NOT_EXISTS = new ErrorCode(1_050_109_000, "智能体编队不存在");
@@ -127,5 +128,14 @@ public interface ErrorCodeConstants {
     ErrorCode IPD_ASSIGNMENT_NOT_EXISTS = new ErrorCode(1_050_116_070, "任务分派不存在");
     ErrorCode IPD_ASSIGNMENT_BPM_NOT_HUMAN = new ErrorCode(1_050_116_071, "BPM 审批任务只能分派给真人，Agent 不可作为 accountable");
     ErrorCode IPD_ASSIGNMENT_NOT_REASSIGNABLE = new ErrorCode(1_050_116_072, "任务分派当前状态不可转派");
+
+    // ========== IPD 审批与决策包（1-050-116-080） ==========
+    ErrorCode IPD_TASK_ALREADY_COMPLETED = new ErrorCode(1_050_116_080, "审批任务已被处理，不得生成孤立决策");
+    ErrorCode IPD_TASK_NOT_BELONG_TO_USER = new ErrorCode(1_050_116_081, "审批任务不属于当前用户");
+    ErrorCode IPD_DECISION_INVALID = new ErrorCode(1_050_116_082, "决策类型非法，须为 APPROVE/REJECT/REDIRECT/RETURN");
+    ErrorCode IPD_DECISION_PACKAGE_HASH_MISMATCH = new ErrorCode(1_050_116_083, "决策包已变化，请刷新后重审");
+    ErrorCode IPD_REQUIRED_ARTIFACT_MISSING = new ErrorCode(1_050_116_084, "必需产物/证据缺失或门禁未通过，禁止 Go");
+    ErrorCode IPD_EVIDENCE_WAIVER_NOT_AUTHORIZED = new ErrorCode(1_050_116_085, "无证据豁免授权");
+    ErrorCode IPD_REDIRECT_TARGET_REQUIRED = new ErrorCode(1_050_116_086, "REDIRECT/RETURN 必须指定目标节点 key");
 
 }

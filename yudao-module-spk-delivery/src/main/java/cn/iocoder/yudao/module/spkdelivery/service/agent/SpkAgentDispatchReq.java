@@ -39,4 +39,24 @@ public class SpkAgentDispatchReq {
      */
     private Long ttlExpireTime;
 
+    // ===== per-agent 路由上下文（让 OmnigentAdapter 拿到 def/lead 维度信息） =====
+
+    /** lead 智能体 code（OmnigentAdapter 据此解析 def.omnigentAgentId） */
+    private String leadCode;
+    /** lead 智能体 id（adapter 取 def.omnigentAgentId 用） */
+    private Long leadDefId;
+    /** activityRunId（workspace 隔离路径分段 + 会话续跑 key） */
+    private String activityRunId;
+    /** 项目 id（workspace 隔离路径分段） */
+    private Long projectId;
+    /** 版本 id（workspace 隔离路径分段） */
+    private Long versionId;
+    /** 执行模式 local/omnigent（按 lead.mode 决定走哪个 adapter；与 executionLocation 正交） */
+    private String mode;
+    /** Omnigent 侧 agent-id（mode=omnigent 时 OmnigentAdapter 用此值，空回退全局配置） */
+    private String omnigentAgentId;
+    /** def 快照（stage/outputArtifactType/prompt 等，adapter 可选读，避免耦合 ActivityDef） */
+    private String stage;
+    private String outputArtifactType;
+
 }

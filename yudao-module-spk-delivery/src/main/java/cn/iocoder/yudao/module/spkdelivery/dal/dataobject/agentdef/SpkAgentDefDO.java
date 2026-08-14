@@ -113,5 +113,20 @@ public class SpkAgentDefDO extends BaseDO {
      * 最近活动描述
      */
     private String lastActivity;
+    /**
+     * 执行模式 local/omnigent（per-agent 决定走 NativeAiAdapter 还是 OmnigentAdapter）。
+     * 与 executionLocation（系统执行 vs agent 内部执行）正交。默认 local。
+     */
+    private String mode;
+    /**
+     * 继承父智能体 id（运行时合并解析：capabilityTags 并集、soulContent/model/mode 子覆盖父）。
+     * 为空表示无继承。不能指向自己或子孙（create/update 校验）。
+     */
+    private Long parentDefId;
+    /**
+     * Omnigent 侧 agent-id 映射（mode=omnigent 时 OmnigentAdapter 用此值创建会话，
+     * 为空回退全局 spk-delivery.omnigent.agent-id）。
+     */
+    private String omnigentAgentId;
 
 }

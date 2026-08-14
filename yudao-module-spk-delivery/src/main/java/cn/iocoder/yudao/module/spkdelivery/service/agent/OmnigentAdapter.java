@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * SPK-OS OmnigentAdapter —— 对接 Omnigent 执行域的 FrameworkAdapter 实现。
@@ -99,41 +100,127 @@ public class OmnigentAdapter implements FrameworkAdapter {
     @Value("${spk-delivery.omnigent.cookie:}")
     private String cookie;
 
+    // name→UUID 缓存：omnigent_agent_id 列可填 agent 名称（如 spk-architect）或 32-hex UUID，
+    // POST /v1/sessions 的 agent_id 必须是 UUID；名称在此解析后缓存（/v1/agents 稳定，UUID 为 content-hash 跨重启不变）。
+    private final Map<String, String> agentIdCache = new ConcurrentHashMap<>();
+
     // 强制 HTTP/1.1：Java HttpClient 默认 HTTP/2，对 Omnigent(uvicorn/HTTP1.1) 发 h2c upgrade
     // 会被拒「Invalid HTTP request received」(400)，必须显式降版本。
     private final HttpClient http = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(10)).build();
 
+    /**
+     * 会话续跑缓存：activityRunId → conv_xxx。同 activityRunId 重复派发复用同 session（runner 已存在 409 幂等），
+     * 让 Omnigent 会话持久化价值落地（多轮上下文不丢）。route 正常路径每次新 activityRunId 不会命中，
+     * 主要服务于同 run 内重试 / 手动 rerun 同 key 场景。
+     */
+    private final Map<String, String> sessionCache = new java.util.concurrent.ConcurrentHashMap<>();
+
     @Override
     public SpkAgentDispatchResult dispatchTask(SpkAgentDispatchReq req) {
         if (fastMode) {
             return fastDispatch(req);
         }
-        if (agentId == null || agentId.isBlank()) {
-            throw new RuntimeException("OmnigentAdapter 真实模式需配置 spk-delivery.omnigent.agent-id（ag_xxx）");
+        // per-agent 动态 agent-id：优先 req.omnigentAgentId（lead 维度），空回退全局配置 agentId。
+        // 列值可填 agent 名称（spk-architect）或 32-hex UUID；名称在此解析为 UUID（Omnigent 要求 UUID）。
+        String rawAgentId = (req.getOmnigentAgentId() != null && !req.getOmnigentAgentId().isBlank())
+                ? req.getOmnigentAgentId() : agentId;
+        if (rawAgentId == null || rawAgentId.isBlank()) {
+            throw new RuntimeException("OmnigentAdapter 真实模式需配置 agent-id（per-agent omnigentAgentId 或全局 spk-delivery.omnigent.agent-id）");
         }
+        String effectiveAgentId = resolveAgentId(rawAgentId);
         try {
-            String convId = createSession(req);
-            log.info("[dispatchTask][omnigent instanceId={} nodeKey={} convId={} sse={}]",
-                    req.getInstanceId(), req.getNodeKey(), convId, sseMode);
-            // 关键：create session 只种 seed 消息，必须 launch runner 才真正触发 agent 执行
-            launchRunner(convId);
-            String assistantText = sseMode ? subscribeAssistantText(convId) : pollAssistantText(convId);
-            String files = listFilesText(convId);
-            String resultText = assistantText;
-            if (files != null && !files.isBlank()) {
-                resultText = (assistantText == null ? "" : assistantText) + "\n\n[files]\n" + files;
+            // 会话续跑：同 activityRunId 复用既有 conv，否则新建
+            String convId = (req.getActivityRunId() != null)
+                    ? sessionCache.get(req.getActivityRunId()) : null;
+            boolean reused = convId != null;
+            if (!reused) {
+                convId = createSession(req, effectiveAgentId);
+                if (req.getActivityRunId() != null) {
+                    sessionCache.put(req.getActivityRunId(), convId);
+                }
             }
+            log.info("[dispatchTask][omnigent instanceId={} nodeKey={} leadCode={} agentId={} convId={} reused={} sse={}]",
+                    req.getInstanceId(), req.getNodeKey(), req.getLeadCode(), effectiveAgentId, convId, reused, sseMode);
+            // per-project/version/activityRunId workspace 隔离（host 须真实存在，本地路径自动 mkdir）
+            String ws = resolveWorkspace(req);
+            // 关键：create session 只种 seed 消息，必须 launch runner 才真正触发 agent 执行
+            launchRunner(convId, ws);
+            String assistantText = sseMode ? subscribeAssistantText(convId) : pollAssistantText(convId);
+            // files 结构化回流：取 resources/files 真实文件 {path, fileId, sha}，拼成结构化 JSON + markdown 段
+            String filesJson = listFilesStructured(convId);
+            String resultText = buildResultText(assistantText, filesJson);
             return new SpkAgentDispatchResult()
                     .setTaskId(convId)
                     .setConversationId(0L)
                     .setResult(resultText)
                     .setStatus(SpkAgentTaskStatusEnum.DONE.getLabel());
         } catch (Exception e) {
-            log.error("[dispatchTask][omnigent 失败 instanceId={} nodeKey={}]",
-                    req.getInstanceId(), req.getNodeKey(), e);
+            log.error("[dispatchTask][omnigent 失败 instanceId={} nodeKey={} leadCode={}]",
+                    req.getInstanceId(), req.getNodeKey(), req.getLeadCode(), e);
             throw new RuntimeException("Omnigent 派发失败：" + e.getMessage(), e);
+        }
+    }
+
+    /** 组装产物文本：assistant 正文 + 结构化 files 段（markdown 表 + JSON），供 parsePayload 提取 document。 */
+    private String buildResultText(String assistantText, String filesJson) {
+        StringBuilder sb = new StringBuilder();
+        if (assistantText != null && !assistantText.isBlank()) {
+            sb.append(assistantText);
+        }
+        if (filesJson != null && !filesJson.isBlank()) {
+            // 结构化 files：嵌入 JSON 字段（cockpit/artifact 可解析）+ markdown 可读段
+            sb.append("\n\n## 交付文件\n");
+            try {
+                JsonNode arr = JsonUtils.parseTree(filesJson);
+                if (arr.isArray()) {
+                    sb.append("| 文件路径 | 标识 |\n| --- | --- |\n");
+                    for (JsonNode f : arr) {
+                        String path = textOf(f.get("path"));
+                        String sha = textOf(f.get("sha"));
+                        if (sha == null) sha = textOf(f.get("fileId"));
+                        sb.append("| ").append(path != null ? path : "-").append(" | ").append(sha != null ? sha : "-").append(" |\n");
+                    }
+                }
+            } catch (Exception ignore) {
+                sb.append("(files 解析失败，原始：").append(truncate(filesJson, 200)).append(")\n");
+            }
+            sb.append("\n[files]\n").append(filesJson);
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 解析 per-activity workspace 路径：{workspace根}/spk/{projectId|na}/{versionId|na}/{activityRunId}。
+     * Omnigent host 须真实存在此路径，否则 launch runner 400。本地路径（/work/... 或 /tmp/...）自动 mkdir。
+     * 非本地 host 路径无法 mkdir，降级回退全局 workspace 根（已存在）以保证 runner 可启动。
+     */
+    private String resolveWorkspace(SpkAgentDispatchReq req) {
+        String root = (workspace == null || workspace.isBlank()) ? "/work/SPK-OS/artifacts" : workspace;
+        String pid = req.getProjectId() != null ? String.valueOf(req.getProjectId()) : "na";
+        String vid = req.getVersionId() != null ? String.valueOf(req.getVersionId()) : "na";
+        String aid = req.getActivityRunId() != null ? req.getActivityRunId() : "run-" + System.nanoTime();
+        String ws = root + "/spk/" + pid + "/" + vid + "/" + aid;
+        // 仅本地路径尝试 ensureWorkspace（Omnigent host 同机时有效；远程路径 mkdir 无意义但不报错）
+        if (ensureWorkspace(ws)) {
+            return ws;
+        }
+        // 降级：隔离路径 ensure 失败（远程不可写），回退全局根（host 侧已存在）保证 runner 可启动
+        log.warn("[resolveWorkspace][隔离路径 {} 无法确保，回退全局根 {}]", ws, root);
+        return root;
+    }
+
+    /** 本地路径自动 mkdir（仅对可写本地路径生效）；返回是否成功确保。 */
+    private boolean ensureWorkspace(String ws) {
+        try {
+            java.nio.file.Path p = java.nio.file.Paths.get(ws);
+            java.nio.file.Files.createDirectories(p);
+            return true;
+        } catch (Exception e) {
+            // 远程路径或无权限：非致命，调用方降级回退全局根
+            log.debug("[ensureWorkspace][{} mkdir 失败：{}]", ws, e.getMessage());
+            return false;
         }
     }
 
@@ -164,7 +251,52 @@ public class OmnigentAdapter implements FrameworkAdapter {
 
     // ===== 真实 Omnigent REST 调用 =====
 
-    private String createSession(SpkAgentDispatchReq req) throws Exception {
+    /**
+     * 解析 agent-id：32-hex UUID 原样返回；否则按名称查 GET /v1/agents 取 UUID 并缓存。
+     * omnigent_agent_id 列允许填名称（用户友好、跨重启稳定），但 POST /v1/sessions 的 agent_id
+     * 必须是 UUID，故在此做一次 name→id 解析（/v1/agents 列表稳定，UUID 为 content-hash 跨重启不变）。
+     */
+    private String resolveAgentId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return raw;
+        }
+        // 32 位 hex（含可选 ag_ 前缀）视为 UUID，直接用
+        String trimmed = raw.startsWith("ag_") ? raw.substring(3) : raw;
+        if (trimmed.length() == 32 && trimmed.matches("[0-9a-fA-F]{32}")) {
+            return trimmed;
+        }
+        // 名称：走缓存 → GET /v1/agents 按名匹配
+        String cached = agentIdCache.get(raw);
+        if (cached != null) {
+            return cached;
+        }
+        try {
+            String resp = getJson("/v1/agents");
+            JsonNode root = JsonUtils.parseTree(resp);
+            JsonNode data = root.has("data") ? root.get("data") : root;
+            if (data == null || !data.isArray()) {
+                throw new RuntimeException("/v1/agents 响应无 data 数组：" + truncate(resp, 300));
+            }
+            for (JsonNode a : data) {
+                String name = textOf(a.get("name"));
+                if (raw.equals(name)) {
+                    String id = textOf(a.get("id"));
+                    if (id != null && !id.isBlank()) {
+                        agentIdCache.put(raw, id);
+                        log.info("[resolveAgentId][name={} -> uuid={}]", raw, id);
+                        return id;
+                    }
+                }
+            }
+            throw new RuntimeException("Omnigent agent 名称「" + raw + "」在 /v1/agents 未注册（404 根因）");
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("解析 Omnigent agent-id「" + raw + "」失败：" + e.getMessage(), e);
+        }
+    }
+
+    private String createSession(SpkAgentDispatchReq req, String effectiveAgentId) throws Exception {
         String prompt = req.getPrompt() == null ? "" : req.getPrompt();
         String nodeKey = req.getNodeKey() == null ? "" : req.getNodeKey();
         Map<String, Object> textBlock = new LinkedHashMap<>();
@@ -177,8 +309,8 @@ public class OmnigentAdapter implements FrameworkAdapter {
         item.put("type", "message");
         item.put("data", data);
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("agent_id", agentId);
-        body.put("title", "SPK-IPD " + nodeKey);
+        body.put("agent_id", effectiveAgentId);
+        body.put("title", "SPK-IPD " + nodeKey + (req.getLeadCode() != null ? " " + req.getLeadCode() : ""));
         body.put("initial_items", List.of(item));
         String resp = postJson("/v1/sessions", JsonUtils.toJsonString(body));
         JsonNode node = JsonUtils.parseTree(resp);
@@ -193,16 +325,14 @@ public class OmnigentAdapter implements FrameworkAdapter {
      * 启动 runner —— POST /v1/hosts/{host_id}/runners {session_id, workspace}。
      * 这是真正触发 Omnigent agent 执行的步骤（create session 只种 seed 消息不触发 run）。
      * host_id 留空时动态解析首个 online 且 claude-sdk harness 已配置的 host。
-     * workspace 必须是 host 上真实存在的绝对路径，否则 400。
+     * workspace 必须是 host 上真实存在的绝对路径，否则 400（由 resolveWorkspace 保证）。
      * 已存在 runner 时返回 409，视为已启动（幂等）。
      */
-    private void launchRunner(String convId) throws Exception {
+    private void launchRunner(String convId, String ws) throws Exception {
         String hid = resolveHostId();
         if (hid == null || hid.isBlank()) {
             throw new RuntimeException("Omnigent 无可用在线 host（需在线且 claude-sdk harness 已配置）");
         }
-        String ws = (workspace == null || workspace.isBlank())
-                ? "/work/SPK-OS/artifacts" : workspace;
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("session_id", convId);
         body.put("workspace", ws);
@@ -415,7 +545,12 @@ public class OmnigentAdapter implements FrameworkAdapter {
         }
     }
 
-    private String listFilesText(String convId) {
+    /**
+     * 结构化回流 files：取 resources/files 真实文件，每文件 {path, fileId, sha}。
+     * 替代旧 listFilesText（只拼 file_id 列表无 path/sha），让产物可追溯具体文件路径与指纹。
+     * 返回 JSON 数组字符串；无文件返回 null。
+     */
+    private String listFilesStructured(String convId) {
         try {
             String resp = getJson("/v1/sessions/" + convId + "/resources/files?limit=100");
             JsonNode root = JsonUtils.parseTree(resp);
@@ -423,15 +558,25 @@ public class OmnigentAdapter implements FrameworkAdapter {
             if (data == null || !data.isArray() || data.isEmpty()) {
                 return null;
             }
-            List<String> ids = new ArrayList<>();
+            List<Map<String, Object>> files = new ArrayList<>();
             for (JsonNode f : data) {
                 String fid = textOf(f.get("file_id"));
                 if (fid == null) fid = textOf(f.get("id"));
-                if (fid != null) ids.add(fid);
+                String path = textOf(f.get("path"));
+                if (path == null) path = textOf(f.get("name"));
+                if (path == null && fid != null) path = fid;
+                String sha = textOf(f.get("sha"));
+                if (sha == null) sha = textOf(f.get("sha256"));
+                if (sha == null) sha = textOf(f.get("hash"));
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("path", path);
+                m.put("fileId", fid);
+                m.put("sha", sha);
+                files.add(m);
             }
-            return ids.isEmpty() ? null : JsonUtils.toJsonString(ids);
+            return files.isEmpty() ? null : JsonUtils.toJsonString(files);
         } catch (Exception e) {
-            log.warn("[listFilesText][convId={} 取文件失败：{}]", convId, e.getMessage());
+            log.warn("[listFilesStructured][convId={} 取文件失败：{}]", convId, e.getMessage());
             return null;
         }
     }
