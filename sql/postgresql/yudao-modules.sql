@@ -6003,6 +6003,20 @@ VALUES (6950, 1, 6850, 'admin', 'admin', 0, 1),
        (6953, 1, 6853, 'admin', 'admin', 0, 1)
 ON CONFLICT (id) DO NOTHING;
 
+-- SPK 研发 -> 研发管理（原型名「研发驾驶舱」，设计文档 §3.1/§3.3/§4）
+-- 单一产品表面，4 视图（全景总览/智能协同/运行监控/交付分析）经页面内侧栏切换。
+-- 路由用 query(?view=) 而非 /:view 子路径，规避 yudao 嵌套菜单 404 坑（D-12 兼容）。
+-- 菜单 6960；超管 role_id=1 授权 6970。sort=0 置顶为 SPK 研发首要入口；
+-- 原 6870「IPD 总览」sort 0→1 让位（其功能已并入驾驶舱 overview 视图）。
+UPDATE system_menu SET sort=1, updater='admin' WHERE id=6870 AND sort=0;
+INSERT INTO system_menu (id, name, permission, type, sort, parent_id, path, icon, component, component_name, status, visible, keep_alive, always_show, creator, updater, deleted)
+VALUES (6960, '研发管理', 'spk-delivery:ipd-home:query', 2, 0, 6800, 'ipd-home', 'ep:data-board', 'spk/ipd/home/index', 'SpkIpdHome', 0, true, true, true, 'admin', 'admin', 0)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO system_role_menu (id, role_id, menu_id, creator, updater, deleted, tenant_id)
+VALUES (6970, 1, 6960, 'admin', 'admin', 0, 1)
+ON CONFLICT (id) DO NOTHING;
+
 CREATE SEQUENCE IF NOT EXISTS spk_dcp_redirect_log_seq;
 
 -- =====================================================================
