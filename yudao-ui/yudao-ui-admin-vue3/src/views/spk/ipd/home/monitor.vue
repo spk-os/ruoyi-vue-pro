@@ -7,10 +7,10 @@
   <div v-loading="loading" class="spk-monitor">
     <!-- 汇总指标 -->
     <div class="grid grid-cols-2 md:grid-cols-5 gap-10px mb-16px">
-      <SpkStatCard label="活跃运行" :value="summary.active || 0" />
-      <SpkStatCard label="已阻塞" :value="summary.blocked || 0" :danger="(summary.blocked || 0) > 0" />
-      <SpkStatCard label="等待决策" :value="summary.waiting || 0" />
-      <SpkStatCard label="今日完成" :value="summary.doneToday || 0" />
+      <SpkStatCard label="活跃运行" :value="summary.active ?? '未接入'" />
+      <SpkStatCard label="已阻塞" :value="summary.blocked ?? '未接入'" :danger="(summary.blocked || 0) > 0" />
+      <SpkStatCard label="待决策/问题" :value="summary.waiting ?? '未接入'" />
+      <SpkStatCard label="今日完成" :value="summary.doneToday ?? '未接入'" />
       <SpkStatCard label="平均证据完整度" :value="eviPct" />
     </div>
 
@@ -48,7 +48,7 @@
         <div class="spk-flowrow" @click="toggle(fr.id)">
           <div class="spk-flowrow__id">
             <div class="spk-flowrow__idno">{{ fr.runNo || fr.id }}</div>
-            <div class="spk-flowrow__sub">{{ fr.versionName }} · {{ fr.flowType }} · {{ fr.projectName }}</div>
+            <div class="spk-flowrow__sub">{{ fr.flowType }} · {{ fr.currentStage || '—' }} · {{ fr.health || '—' }}</div>
           </div>
           <div class="spk-flowrow__stage">
             <SpkStagePipeline :states="pipelineStates(fr)" />
@@ -73,9 +73,9 @@
             <!-- 阻塞/决策摘要 -->
             <div class="spk-detail__sum">
               <div class="spk-detail__row"><span class="spk-detail__label">当前阶段</span><span>{{ fr.currentStage || '—' }}</span></div>
-              <div class="spk-detail__row"><span class="spk-detail__label">负责人</span><span>{{ fr.owner || '—' }}</span></div>
-              <div class="spk-detail__row"><span class="spk-detail__label">启动时间</span><span>{{ fr.startedAt || '—' }}</span></div>
-              <div class="spk-detail__row"><span class="spk-detail__label">证据完整度</span><span>{{ fr.evidenceCompleteness ?? 0 }}%</span></div>
+              <div class="spk-detail__row"><span class="spk-detail__label">健康度</span><span>{{ fr.health || '—' }}</span></div>
+              <div class="spk-detail__row"><span class="spk-detail__label">启动时间</span><span>{{ fmt(fr.startedAt) }}</span></div>
+              <div class="spk-detail__row"><span class="spk-detail__label">证据/产物</span><span>{{ fr.evidenceCount ?? 0 }} / {{ fr.artifactCount ?? 0 }}</span></div>
               <div v-if="fr.blockReason" class="spk-detail__row spk-detail__row--bad">
                 <span class="spk-detail__label">阻塞原因</span><span>{{ fr.blockReason }}</span>
               </div>
@@ -95,6 +95,7 @@
 <script lang="ts" setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { formatDate } from '@/utils/formatTime'
 import * as IpdBusinessApi from '@/api/spk/ipd/business'
 import { getMetricsSnapshot } from '@/api/spk/ipd/cockpit'
 import SpkStatCard from './components/SpkStatCard.vue'
@@ -121,6 +122,9 @@ const eviPct = computed(() => {
   if (v === undefined || v === null) return '未接入'
   return Math.round(v) + '%'
 })
+
+// 时间戳 → 可读时间；空值显示占位
+const fmt = (ts?: number | string | null) => (ts ? formatDate(ts, 'YYYY-MM-DD HH:mm') : '—')
 
 const flowsFiltered = computed(() => {
   return flows.value.filter((fr) => {
@@ -164,12 +168,13 @@ const load = async () => {
       getMetricsSnapshot().catch(() => ({}))
     ])
     flows.value = ((mon as any)?.flows) || []
+    const s = (mon as any)?.summary || {}
     summary.value = {
-      active: (mon as any)?.summary?.active ?? (snap as any)?.activeFlowCount,
-      blocked: (mon as any)?.summary?.blocked ?? (snap as any)?.blockedFlowCount,
-      waiting: (mon as any)?.summary?.waiting ?? (snap as any)?.waitingDecisionCount,
-      doneToday: (mon as any)?.summary?.doneToday,
-      avgEvidence: (mon as any)?.summary?.avgEvidence
+      active: s.running ?? (snap as any)?.activeFlowCount,
+      blocked: s.blocked,
+      waiting: s.issues,
+      doneToday: s.doneToday,
+      avgEvidence: s.avgEvidence
     }
     if (flows.value.length && openId.value === null) openId.value = flows.value[0].id
   } catch (e: any) {

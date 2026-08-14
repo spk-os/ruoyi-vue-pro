@@ -174,6 +174,7 @@
 <script lang="ts" setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { formatDate } from '@/utils/formatTime'
 import * as IpdBusinessApi from '@/api/spk/ipd/business'
 import SpkStatCard from './components/SpkStatCard.vue'
 import SpkBadge from './components/SpkBadge.vue'
@@ -196,15 +197,16 @@ const totalOf = (m?: Record<string, number>) => (m ? Object.values(m).reduce((a,
 const kpis = computed(() => {
   const pc = data.value.projectCounts || {}
   const activeProjects = pc.ACTIVE ?? 0
-  const vc = data.value.versionCounts || {}
-  const activeVersions = (vc.IN_PROGRESS ?? 0) + (vc.VERIFYING ?? 0)
+  const vc = data.value.versionCounts
+  const hasVer = vc && Object.keys(vc).length
+  const activeVersions = hasVer ? (vc.IN_PROGRESS ?? 0) + (vc.VERIFYING ?? 0) : null
   const fhc = data.value.flowHealthCounts || {}
   const good = fhc.GOOD ?? 0
   const fhcTotal = totalOf(fhc)
   const normalRate = fhcTotal ? Math.round((good / fhcTotal) * 100) : null
   return [
-    { label: '活跃项目', value: activeProjects, delta: '1 个已交付', trend: 'neutral' as const, goodWhen: 'up' as const },
-    { label: '活跃版本', value: activeVersions, delta: null, trend: 'neutral' as const, goodWhen: 'up' as const },
+    { label: '活跃项目', value: activeProjects, delta: null, trend: 'neutral' as const, goodWhen: 'up' as const },
+    { label: '活跃版本', value: activeVersions === null ? '未接入' : activeVersions, delta: null, trend: 'neutral' as const, goodWhen: 'up' as const },
     { label: '正常率', value: normalRate === null ? '未接入' : normalRate + '%', danger: false, delta: null, trend: 'neutral' as const, goodWhen: 'up' as const },
     { label: '阻塞流程', value: data.value.blockedFlowCount ?? 0, danger: (data.value.blockedFlowCount ?? 0) > 0, delta: null, trend: 'neutral' as const, goodWhen: 'down' as const },
     { label: '待决策', value: data.value.openIssueCount ?? att.value.length, delta: null, trend: 'neutral' as const, goodWhen: 'down' as const },
@@ -268,7 +270,7 @@ const convRate = computed(() => {
 const events = computed(() => {
   const evs: { time: string; title: string; meta?: string }[] = []
   for (const f of data.value.recentFlows || []) {
-    evs.push({ time: f.startedAt || '', title: `${f.runNo || f.flowRunId || ''} ${f.flowType || ''} ${f.status || ''}`, meta: f.projectName })
+    evs.push({ time: f.startedAt ? formatDate(f.startedAt, 'MM-DD HH:mm') : '', title: `${f.runNo || f.flowRunId || ''} ${f.flowType || ''} ${f.status || ''}`, meta: f.projectName })
   }
   for (const a of (data.value.attentionItems || []).slice(0, 3)) {
     evs.push({ time: '', title: a.title, meta: a.detail })
