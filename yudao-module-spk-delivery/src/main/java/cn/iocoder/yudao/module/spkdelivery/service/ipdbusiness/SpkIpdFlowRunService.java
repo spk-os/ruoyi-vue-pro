@@ -454,7 +454,36 @@ public class SpkIpdFlowRunService {
     }
 
     public SpkIpdFlowRunDO getFlowRun(Long flowRunId) {
-        return getFlowRunOrThrow(flowRunId);
+        SpkIpdFlowRunDO run = getFlowRunOrThrow(flowRunId);
+        assertFlowRunAccess(run);
+        return run;
+    }
+
+    /**
+     * 归属校验（P0 §6）：当前登录用户须为 FlowRun 所属项目的 owner；admin/system 兜底用户绕过。
+     * 旧数据无 projectId 或项目未设 owner 时不阻断，避免误拦（多成员表留 S2）。
+     */
+    public void assertFlowRunAccess(SpkIpdFlowRunDO run) {
+        if (run == null) {
+            return;
+        }
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        // 未登录或 system 兜底用户（与 start 的 1L 兜底对齐）由 RBAC 层兜底，不二次拦截
+        if (userId == null || userId == 1L) {
+            return;
+        }
+        Long pid = run.getProjectId();
+        if (pid == null) {
+            return; // 旧数据无项目归属，不阻断读取
+        }
+        var proj = projectBusinessService.getProject(pid);
+        if (proj == null) {
+            return; // 项目不存在由其它校验处理
+        }
+        Long owner = proj.getOwnerUserId();
+        if (owner != null && !owner.equals(userId)) {
+            throw exception(IPD_FLOW_RUN_ACCESS_DENIED);
+        }
     }
 
     /** 按引擎实例反查 FlowRun（供旧路由/回调兼容） */

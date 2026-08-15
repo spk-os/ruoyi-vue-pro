@@ -67,6 +67,7 @@
           <span class="spk-card__sub">各阶段平均等待时间</span>
         </div>
         <div class="spk-card__body">
+          <el-empty v-if="!stageBottleneck.length" description="样本不足：阶段平均耗时待 FlowRun 阶段聚合接入" :image-size="50" />
           <div v-for="b in stageBottleneck" :key="b.label" class="spk-bn">
             <span class="spk-bn__label">{{ b.label }}</span>
             <div class="spk-bn__bar"><div class="spk-bn__fill" :style="{ width: b.pct + '%', background: b.color }" /></div>
@@ -74,7 +75,7 @@
           </div>
           <div v-if="bottleneckStage" class="spk-bn__alert">
             <b>瓶颈：{{ bottleneckStage.label }}（{{ bottleneckStage.days }}）</b>
-            <span>该阶段智能体重试率偏高，建议检查 LLM 超时阈值与失败智能体配置。</span>
+            <span>该阶段平均耗时占比偏高，建议核查该阶段 Activity 重试率与失败智能体配置。</span>
           </div>
         </div>
       </div>
@@ -160,16 +161,13 @@ const agents = computed<{ name: string; rate: string; tasks: number; cost: strin
   return []
 })
 
-const STAGES = [
-  { label: '概念', days: 0.8, pct: 15, color: '#4ac26b', bold: false },
-  { label: '计划', days: 2.4, pct: 45, color: '#d4a72c', bold: true },
-  { label: '开发', days: 4.8, pct: 85, color: '#ff8182', bold: true },
-  { label: '验证', days: 3.5, pct: 65, color: '#fb8f44', bold: true },
-  { label: '发布', days: 1.2, pct: 25, color: '#4ac26b', bold: false },
-  { label: '生命周期', days: 0.5, pct: 10, color: '#4ac26b', bold: false }
-]
-const stageBottleneck = computed(() => STAGES)
-const bottleneckStage = computed(() => STAGES.find((s) => s.bold && s.pct >= 80) || null)
+// 阶段瓶颈：来源后端 metrics snapshot 的 stageBottleneck 字段（各阶段平均等待时间）。
+// 后端尚未接入阶段耗时聚合时为空，显示"样本不足"，绝不灌硬编码天数（C-14 铁律）。
+const stageBottleneck = computed(() => {
+  const arr = snap.value.stageBottleneck
+  return Array.isArray(arr) ? arr : []
+})
+const bottleneckStage = computed(() => stageBottleneck.value.find((s: any) => s.bold && s.pct >= 80) || null)
 
 const costSummary = computed(() => {
   const c = snap.value

@@ -133,6 +133,7 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
         Map<String, SpkIpdFlowRunDO> runMap = new LinkedHashMap<>();
         for (String pid : instanceIds) {
             SpkIpdFlowRunDO run = flowRunService.getByProcessInstanceId(pid);
+        flowRunService.assertFlowRunAccess(run); // P0 §6 归属校验：仅项目 owner 可读
             if (run != null) {
                 runMap.put(pid, run);
             }
@@ -238,6 +239,7 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
         }
         String pid = task.getProcessInstanceId();
         SpkIpdFlowRunDO run = flowRunService.getByProcessInstanceId(pid);
+        flowRunService.assertFlowRunAccess(run); // P0 §6 归属校验：仅项目 owner 可读
 
         List<SpkGateRecordDO> gates = gateRecordMapper.selectListByInstanceId(pid);
         List<SpkEvidenceRecordDO> evidence = evidenceRecordMapper.selectListByProcessInstanceId(pid);
