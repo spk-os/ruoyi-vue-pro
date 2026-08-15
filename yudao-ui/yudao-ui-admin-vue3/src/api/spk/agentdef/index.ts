@@ -99,3 +99,8 @@ export const unhideAgentDef = (id: number) => {
 export const wakeAgentDef = (id: number, message: string) => {
   return request.post({ url: '/spk/agent-def/wake', data: { id, message } })
 }
+
+// 智能体管理 KPI 聚合（真实计数：状态分布/编队/任务）
+export const getAgentDefStats = () => {
+  return request.get<Record<string, number>>({ url: '/spk/agent-def/stats' })
+}

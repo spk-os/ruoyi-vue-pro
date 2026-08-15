@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
@@ -129,6 +130,13 @@ public class SpkAgentDefController {
     @PreAuthorize("@ss.hasPermission('spk-delivery:agent-def:wake')")
     public CommonResult<SpkAgentDefWakeRespVO> wake(@Valid @RequestBody SpkAgentDefWakeReqVO reqVO) {
         return success(agentDefService.wake(reqVO.getId(), reqVO.getMessage()));
+    }
+
+    @GetMapping("/stats")
+    @Operation(summary = "智能体管理 KPI 聚合（真实计数：状态分布/编队/任务）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:agent-def:query')")
+    public CommonResult<Map<String, Object>> stats() {
+        return success(agentDefService.stats());
     }
 
 }

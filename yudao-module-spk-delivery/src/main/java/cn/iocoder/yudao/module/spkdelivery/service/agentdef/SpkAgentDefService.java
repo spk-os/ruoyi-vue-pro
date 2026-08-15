@@ -7,7 +7,12 @@ import cn.iocoder.yudao.module.spkdelivery.controller.admin.agentdef.vo.SpkAgent
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.agentdef.vo.SpkAgentDefUpdateReqVO;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.agentdef.vo.SpkAgentDefWakeRespVO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agentdef.SpkAgentDefDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agent.SpkAgentTaskDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agentsquad.SpkAgentSquadDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agent.SpkAgentTaskMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agentdef.SpkAgentDefMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agentsquad.SpkAgentSquadMapper;
+import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.module.spkdelivery.enums.SpkAgentDefStatusEnum;
 import cn.iocoder.yudao.module.spkdelivery.enums.SpkAgentRuntimeTypeEnum;
 import jakarta.annotation.Resource;
@@ -17,7 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.*;
@@ -38,6 +45,38 @@ public class SpkAgentDefService {
     private SpkAgentDefMapper agentDefMapper;
     @Resource
     private SpkAgentDefWakeRunner wakeRunner;
+    @Resource
+    private SpkAgentSquadMapper squadMapper;
+    @Resource
+    private SpkAgentTaskMapper agentTaskMapper;
+
+    /**
+     * 智能体管理 KPI 聚合（真实计数，不造假）。
+     * <p>聚合 spk_agent_def 按运行时状态分布 + 编队数 + 任务执行数。
+     * 现有状态枚举仅 offline/idle/busy/error；原型"注册/就绪/审批中/已退役"生命周期属后续扩展，
+     * 此处如实按现有状态返回，未聚合的字段返回 0（真实 0，非冒充）。
+     */
+    public Map<String, Object> stats() {
+        Map<String, Object> stats = new LinkedHashMap<>();
+        // 智能体按状态计数
+        long total = 0;
+        for (SpkAgentDefStatusEnum e : SpkAgentDefStatusEnum.values()) {
+            long c = agentDefMapper.selectCount(new LambdaQueryWrapperX<SpkAgentDefDO>()
+                    .eq(SpkAgentDefDO::getStatus, e.getLabel()));
+            stats.put(e.getLabel(), c);
+            total += c;
+        }
+        stats.put("totalAgents", total);
+        // 编队数（启用/停用）
+        long activeSquad = squadMapper.selectCount(new LambdaQueryWrapperX<SpkAgentSquadDO>()
+                .eq(SpkAgentSquadDO::getStatus, "active"));
+        long totalSquad = squadMapper.selectCount(null);
+        stats.put("totalSquads", totalSquad);
+        stats.put("activeSquads", activeSquad);
+        // 任务执行数
+        stats.put("totalTasks", agentTaskMapper.selectCount(null));
+        return stats;
+    }
 
     /**
      * 创建智能体
