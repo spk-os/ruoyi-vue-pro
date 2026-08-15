@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.*;
 
+import java.time.LocalDateTime;
+
 /**
  * SPK-OS Agent 任务执行实例 DO
  * <p>
@@ -110,5 +112,27 @@ public class SpkAgentTaskDO extends BaseDO {
      * TTL 过期时间（毫秒时间戳，0 表示无）
      */
     private Long ttlExpireTime;
+
+    // ==================== 运行负载聚合字段（§7.1 第 3 视图） ====================
+    /**
+     * 智能体定义 ID（聚合维度，dispatch 时回填）
+     */
+    private Long agentDefId;
+    /**
+     * 小队 ID（聚合维度，dispatch 时回填）
+     */
+    private Long squadId;
+    /**
+     * 实际开始执行时间
+     */
+    private LocalDateTime startedAt;
+    /**
+     * 实际结束时间
+     */
+    private LocalDateTime finishedAt;
+    /**
+     * 本次运行消耗 token 数（运行时回填，成本聚合）
+     */
+    private Integer costTokens;
 
 }

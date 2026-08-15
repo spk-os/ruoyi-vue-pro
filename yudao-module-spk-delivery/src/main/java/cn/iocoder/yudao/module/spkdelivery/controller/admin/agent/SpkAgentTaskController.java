@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.spkdelivery.controller.admin.agent;
 
 import cn.iocoder.yudao.framework.apilog.core.annotation.ApiAccessLog;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
+import cn.iocoder.yudao.module.spkdelivery.controller.admin.agent.vo.SpkAgentLoadStatsVO;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.agent.vo.SpkAgentTaskCallbackReqVO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agent.SpkAgentTaskDO;
 import cn.iocoder.yudao.module.spkdelivery.service.agent.SpkAgentTaskService;
@@ -113,6 +114,13 @@ public class SpkAgentTaskController {
             data.put("activityRunId", activityRunId);
         }
         return success(data);
+    }
+
+    @GetMapping("/load-stats")
+    @Operation(summary = "智能体运行负载聚合（§7.1 第 3 视图，按 agent_def 维度真实聚合 spk_task_contract）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:agent:query')")
+    public CommonResult<List<SpkAgentLoadStatsVO>> loadStats() {
+        return success(agentTaskService.getLoadStats());
     }
 
 }

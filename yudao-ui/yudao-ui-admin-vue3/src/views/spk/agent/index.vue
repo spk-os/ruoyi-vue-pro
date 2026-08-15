@@ -231,6 +231,11 @@
     <el-tab-pane label="智能体小队" name="squad" lazy>
       <component :is="SquadPage" />
     </el-tab-pane>
+
+    <!-- Tab3 运行负载（§7.1 第 3 视图，真实聚合不造假） -->
+    <el-tab-pane label="运行负载" name="load" lazy>
+      <AgentLoadPanel />
+    </el-tab-pane>
   </el-tabs>
 </template>
 
@@ -239,6 +244,7 @@ import { dateFormatter } from '@/utils/formatTime'
 import * as AgentDefApi from '@/api/spk/agentdef'
 import AgentForm from './AgentForm.vue'
 import WakeDialog from './WakeDialog.vue'
+import AgentLoadPanel from './AgentLoadPanel.vue'
 import StatCard from '../ipd/overview/StatCard.vue'
 import { defineAsyncComponent } from 'vue'
 
@@ -250,7 +256,7 @@ const SquadPage = defineAsyncComponent(() => import('../squad/index.vue'))
 const message = useMessage()
 const { t } = useI18n()
 
-const activeTab = ref<'def' | 'squad'>('def')
+const activeTab = ref<'def' | 'squad' | 'load'>('def')
 
 // 智能体状态选项（offline/idle/busy/error，本地枚举）
 const STATUS_OPTIONS = [

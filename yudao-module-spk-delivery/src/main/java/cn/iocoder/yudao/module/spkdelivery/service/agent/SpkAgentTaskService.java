@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.spkdelivery.service.agent;
 
+import cn.iocoder.yudao.module.spkdelivery.controller.admin.agent.vo.SpkAgentLoadStatsVO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agent.SpkAgentTaskDO;
 import cn.iocoder.yudao.module.spkdelivery.service.router.SpkRouteResult;
 
@@ -108,5 +109,12 @@ public interface SpkAgentTaskService {
      * @param note          介入备注（写反馈/失败原因）
      */
     SpkRouteResult intervene(String activityRunId, String action, String note);
+
+    /**
+     * 按智能体定义维度聚合运行负载（§7.1 第 3 视图）。
+     * <p>真实聚合 spk_task_contract：running/成功/失败/接管/最近错误/最近活动。
+     * 数据稀疏时返回空列表，前端标注"样本不足"，绝不造假。
+     */
+    List<SpkAgentLoadStatsVO> getLoadStats();
 
 }

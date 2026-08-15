@@ -48,4 +48,34 @@ public class SpkAgentSquadDO extends BaseDO {
      */
     private String config;
 
+    // ==================== 编排治理字段（§7.1 / §9.5） ====================
+    /**
+     * 编排模式：SERIAL 串行 / PARALLEL 并行 / CONCURRENT 并发（wake 按策略分发）
+     */
+    private String orchestrationMode;
+    /**
+     * 并发上限（PARALLEL/CONCURRENT 生效，0 表示不限）
+     */
+    private Integer concurrency;
+    /**
+     * 单成员执行超时秒（0 表示不限）
+     */
+    private Integer timeout;
+    /**
+     * 降级策略：SKIP 跳过 / FALLBACK 回退主智能体 / BLOCK 阻塞等人工
+     */
+    private String degradation;
+    /**
+     * 编队模板版本号
+     */
+    private Integer version;
+    /**
+     * 发布状态：DRAFT / PUBLISHED / SUPERSEDED
+     */
+    private String publishState;
+    /**
+     * 锁版本（乐观锁，治理发布/回滚用）
+     */
+    private Integer lockVersion;
+
 }

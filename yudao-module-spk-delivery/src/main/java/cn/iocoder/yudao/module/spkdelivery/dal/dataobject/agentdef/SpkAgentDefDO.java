@@ -129,4 +129,26 @@ public class SpkAgentDefDO extends BaseDO {
      */
     private String omnigentAgentId;
 
+    // ==================== 治理字段（§7.1 / §9.5 治理表面） ====================
+    /**
+     * 模板版本号（治理产物，发布/回滚引用）
+     */
+    private Integer version;
+    /**
+     * 负责人（用户 id 字符串）
+     */
+    private String owner;
+    /**
+     * 安全级别 LOW/MEDIUM/HIGH/CRITICAL（影响 isolationLevel 与审批门）
+     */
+    private String securityLevel;
+    /**
+     * 生命周期：REGISTER/TRIAL/READY/RETIRE（与运行态 status=idle/busy/error 正交，不破坏现有语义）
+     */
+    private String lifecycle;
+    /**
+     * 锁版本（乐观锁，治理发布/回滚用）
+     */
+    private Integer lockVersion;
+
 }

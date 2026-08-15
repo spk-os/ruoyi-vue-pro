@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.spkdelivery.service.agent;
 
 import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.bpm.api.task.BpmProcessTaskApi;
+import cn.iocoder.yudao.module.spkdelivery.controller.admin.agent.vo.SpkAgentLoadStatsVO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agent.SpkAgentTaskDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agentdef.SpkAgentDefDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.artifact.SpkArtifactManifestDO;
@@ -282,6 +283,8 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
                         .contractId(c.getContractId())
                         .activityId(c.getActivityId())
                         .roleId(roleId != null ? roleId : c.getLeadAgentId())
+                        .agentDefId(c.getLeadAgentId())
+                        .squadId(c.getWorkerSquadId())
                         .prompt(c.getPrompt())
                         .status(c.getStatus())
                         .result(resultText)
@@ -417,6 +420,28 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
                 .filter(id -> id != null && id.startsWith("Activity_"))
                 .findFirst()
                 .orElse(activeIds.get(0));
+    }
+
+    @Override
+    public List<SpkAgentLoadStatsVO> getLoadStats() {
+        // 真实聚合 spk_task_contract（IPD 每次运行都落行）；空即真实无数据，不造假
+        List<SpkAgentLoadStatsVO> rows = agentTaskMapper.selectLoadStats();
+        if (rows == null || rows.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        // 补 successRate + lastError（best-effort，失败原因查不到则留空，不编造）
+        for (SpkAgentLoadStatsVO r : rows) {
+            int done = r.getSucceeded() == null ? 0 : r.getSucceeded();
+            int total = r.getTotal() == null ? 0 : r.getTotal();
+            // 样本不足（<3 次）不计算成功率，前端显式标"样本不足"
+            r.setSuccessRate(total >= 3 ? (total == 0 ? 0.0 : (double) done / total) : null);
+            try {
+                r.setLastError(agentTaskMapper.selectLastErrorByDefId(r.getAgentDefId()));
+            } catch (Exception ignore) {
+                // 查询失败留空，不阻断聚合主流程
+            }
+        }
+        return rows;
     }
 
 }
