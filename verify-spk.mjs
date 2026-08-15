@@ -5,15 +5,22 @@ import puppeteer from './yudao-ui/yudao-ui-admin-vue3/node_modules/puppeteer-cor
 
 const BASE = 'http://localhost:5173'
 const CHROME = '/usr/bin/google-chrome'
+// 路径以 system_menu 父链真实注册为准（routerHelper 同名单子折叠：
+//  6810 智能体管理 + 单子 6811 同名 SpkAgent → 折叠为 /spk/spk-agent，吞掉 agent 段）
+// 顶层直挂 6800：ipd-home/projects/ipd-monitor/spk-governance
+// 6810 单子折叠：spk-agent
+// 6970 备份目录多子（不折叠）：backup/* 共 12 项
 const ALL_ROUTES = {
   '/spk/ipd-home': '研发管理(cockpit)',
   '/spk/projects': '项目管理',
   '/spk/ipd-monitor': '项目监控',
-  '/spk/spk-agent/agent': '智能体',
-  '/spk/ipd-cockpit': 'IPD监控台',
-  '/spk/ipd-overview': 'IPD总览',
-  '/spk/ipd-team': '团队与智能体',
-  '/spk/ipd-approval': '审批决策',
+  '/spk/spk-agent': '智能体',
+  '/spk/spk-governance': '流程治理',
+  '/spk/backup/spk-office': '指挥台(拓扑大屏-只读)',
+  '/spk/backup/ipd-cockpit': 'IPD监控台',
+  '/spk/backup/ipd-overview': 'IPD总览',
+  '/spk/backup/ipd-team': '团队与智能体',
+  '/spk/backup/ipd-approval': '审批决策',
 }
 const argRoutes = process.argv.slice(2)
 const routes = argRoutes.length ? Object.fromEntries(argRoutes.map(r=>[r,ALL_ROUTES[r]||r])) : ALL_ROUTES

@@ -22,8 +22,17 @@
       <StatCard label="任务总数" :value="summary.total" icon="ep:list" type="default" />
     </div>
 
+    <!-- 聚焦横幅（从拓扑大屏下钻进入） -->
+    <div v-if="focusMode" class="focus-banner">
+      <Icon icon="ep:aim" class="mr-5px" />
+      <span>聚焦智能体：<b>{{ focusAgentName || `#${focusAgentDefId}` }}</b>（仅展示该智能体运行负载）</span>
+      <el-button class="ml-auto" link type="primary" @click="exitFocus">
+        <Icon class="mr-5px" icon="ep:back" />返回全部
+      </el-button>
+    </div>
+
     <ContentWrap>
-      <el-table v-loading="loading" :data="list" :show-overflow-tooltip="true">
+      <el-table v-loading="loading" :data="displayList" :show-overflow-tooltip="true">
         <el-table-column align="center" label="智能体" min-width="160">
           <template #default="{ row }">
             <span>{{ row.agentName || '-' }}</span>
@@ -64,8 +73,8 @@
       </el-table>
       <!-- 数据稀疏诚实标注 -->
       <el-empty
-        v-if="!loading && list.length === 0"
-        description="暂无运行数据（样本不足 / IPD 尚未派发任务）"
+        v-if="!loading && displayList.length === 0"
+        :description="focusMode ? '该智能体暂无运行数据（样本不足 / 尚未派发任务）' : '暂无运行数据（样本不足 / IPD 尚未派发任务）'"
       />
     </ContentWrap>
   </div>
@@ -74,13 +83,24 @@
 <script lang="ts" setup>
 import { dateFormatter } from '@/utils/formatTime'
 import { getLoadStats, type AgentLoadStats } from '@/api/spk/agent/task'
+import { useRoute, useRouter } from 'vue-router'
 import StatCard from '../ipd/overview/StatCard.vue'
 
 defineOptions({ name: 'AgentLoadPanel' })
 
+const route = useRoute()
+const router = useRouter()
+
 const loading = ref(false)
 const list = ref<AgentLoadStats[]>([])
 
+// 下钻聚焦模式：从拓扑大屏点节点进入时带 agentDefId，聚焦该智能体
+const focusAgentDefId = ref<number | null>(null)
+const focusAgentName = ref('')
+const focusMode = computed(() => focusAgentDefId.value != null)
+const displayList = computed(() =>
+  focusMode.value ? list.value.filter((r) => r.agentDefId === focusAgentDefId.value) : list.value
+)
 const summary = computed(() => {
   const agents = list.value.length
   const sum = (f: (r: AgentLoadStats) => number | undefined) =>
@@ -99,6 +119,11 @@ const load = async () => {
   loading.value = true
   try {
     list.value = (await getLoadStats()) || []
+    // 聚焦模式下补全智能体名（拓扑大屏传入）
+    if (focusMode.value && focusAgentName.value === '') {
+      const hit = list.value.find((r) => r.agentDefId === focusAgentDefId.value)
+      if (hit?.agentName) focusAgentName.value = hit.agentName
+    }
   } catch {
     list.value = []
   } finally {
@@ -106,7 +131,21 @@ const load = async () => {
   }
 }
 
-onMounted(load)
+const exitFocus = () => {
+  focusAgentDefId.value = null
+  focusAgentName.value = ''
+  router.replace({ query: { tab: 'load' } })
+}
+
+onMounted(async () => {
+  // 从拓扑大屏下钻：query.agentDefId 聚焦该智能体
+  const q = route.query
+  if (q.agentDefId) {
+    focusAgentDefId.value = Number(q.agentDefId)
+    focusAgentName.value = (q.agentName as string) || ''
+  }
+  await load()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -120,6 +159,16 @@ onMounted(load)
   .load-title {
     font-size: 15px;
     font-weight: 500;
+  }
+  .focus-banner {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    background: var(--el-color-primary-light-9);
+    border: 1px solid var(--el-color-primary-light-7);
+    border-radius: 6px;
+    font-size: 13px;
   }
   .stats-grid {
     display: grid;

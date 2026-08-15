@@ -18,8 +18,8 @@ export const HERO_SHEET_ROWS = 7
 
 // 中文字符串（硬编码，与既有 spk agent 页一致）
 export const TXT = {
-  title: '指挥台',
-  subtitle: '智能体编队的实时平面可视化',
+  title: '智能体拓扑大屏',
+  subtitle: '只读视图 · 展示智能体编队实时状态，不承担命令（点节点查看运行负载）',
   mainDeck: '主甲板',
   resetView: '重置视图',
   resetLayout: '恢复布局',

@@ -241,6 +241,7 @@
 
 <script lang="ts" setup>
 import { dateFormatter } from '@/utils/formatTime'
+import { useRoute } from 'vue-router'
 import * as AgentDefApi from '@/api/spk/agentdef'
 import AgentForm from './AgentForm.vue'
 import WakeDialog from './WakeDialog.vue'
@@ -255,8 +256,13 @@ const SquadPage = defineAsyncComponent(() => import('../squad/index.vue'))
 
 const message = useMessage()
 const { t } = useI18n()
+const route = useRoute()
 
 const activeTab = ref<'def' | 'squad' | 'load'>('def')
+// 从拓扑大屏下钻带 tab=load 进入，自动切到运行负载 tab
+if (route.query.tab === 'load') {
+  activeTab.value = 'load'
+}
 
 // 智能体状态选项（offline/idle/busy/error，本地枚举）
 const STATUS_OPTIONS = [

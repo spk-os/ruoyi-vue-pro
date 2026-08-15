@@ -45,18 +45,15 @@
           </div>
         </div>
 
+        <!-- 只读语义说明（§7.1 第4视图：拓扑大屏不承担命令） -->
         <div class="pt-1">
-          <div class="text-[10px] uppercase tracking-wider text-slate-400 mb-1.5">{{ TXT.quickActions }}</div>
-          <div class="grid grid-cols-3 gap-1.5">
-            <el-button size="small" @click="run('focus')">{{ TXT.actionFocus }}</el-button>
-            <el-button size="small" @click="run('pair')">{{ TXT.actionPair }}</el-button>
-            <el-button size="small" @click="run('break')">{{ TXT.actionBreak }}</el-button>
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 mb-1.5">运行详情</div>
+          <el-button type="primary" size="small" class="w-full!" @click="goLoadStats">
+            <Icon icon="ep:data-line" class="mr-5px" />查看运行负载 / 任务历史
+          </el-button>
+          <div class="text-[10px] text-slate-500 mt-1">
+            拓扑大屏为只读视图，不在此下发命令；点击上方按钮下钻该智能体的运行负载与任务历史。
           </div>
-        </div>
-
-        <div class="pt-1">
-          <el-button size="small" disabled class="w-full! text-xs">指挥台 Companion（未安装）</el-button>
-          <div class="text-[10px] text-slate-500 mt-1">本地 Companion 客户端尚未安装，仅显示占位入口。</div>
         </div>
       </div>
     </template>
@@ -65,7 +62,8 @@
 
 <script lang="ts" setup>
 import { computed } from 'vue'
-import type { OfficeAction, OfficeAgent } from './types'
+import { useRouter } from 'vue-router'
+import type { OfficeAgent } from './types'
 import { TXT, formatLastSeen, getInitials, hashColor, statusDot, statusLabel } from './office-config'
 import type { useOfficeEngine } from './useOfficeEngine'
 
@@ -74,6 +72,8 @@ const props = defineProps<{
   agent: OfficeAgent | null
 }>()
 const emit = defineEmits<{ (e: 'update:agent', v: OfficeAgent | null): void }>()
+
+const router = useRouter()
 
 const visible = computed({
   get: () => props.agent != null,
@@ -89,7 +89,14 @@ const ringClass = computed(() => {
   return 'ring-slate-500'
 })
 
-const run = (action: OfficeAction) => {
-  if (props.agent) props.engine.executeAgentAction(props.agent, action)
+// 下钻：跳转智能体管理页运行负载 tab，聚焦该智能体
+const goLoadStats = () => {
+  if (!props.agent) return
+  const a = props.agent
+  emit('update:agent', null)
+  router.push({
+    name: 'SpkAgent',
+    query: { tab: 'load', agentDefId: String(a.id), agentName: a.name }
+  })
 }
 </script>
