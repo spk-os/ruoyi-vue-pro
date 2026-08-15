@@ -114,6 +114,10 @@ public interface ErrorCodeConstants {
     ErrorCode IPD_FLOW_TYPE_MISMATCH = new ErrorCode(1_050_116_033, "流程类型与版本类型不匹配");
     ErrorCode IPD_FLOW_START_FAIL = new ErrorCode(1_050_116_034, "Flowable 流程启动失败");
     ErrorCode IPD_FLOW_RUN_NOT_CANCELLABLE = new ErrorCode(1_050_116_035, "FlowRun 当前状态不可取消");
+    ErrorCode IPD_FLOW_RUN_NOT_BLOCKABLE = new ErrorCode(1_050_116_036, "FlowRun 当前状态不可阻断（仅运行中/等待审批可阻断）");
+    ErrorCode IPD_FLOW_RUN_NOT_UNBLOCKABLE = new ErrorCode(1_050_116_037, "FlowRun 当前状态不可解除阻断（仅 BLOCKED 可解除）");
+    ErrorCode IPD_FLOW_RUN_NOT_RETRYABLE = new ErrorCode(1_050_116_038, "FlowRun 当前状态不可重试（仅 FAILED 可重试）");
+    ErrorCode IPD_FLOW_RUN_REASON_REQUIRED = new ErrorCode(1_050_116_039, "阻断/取消/重试必须填写理由");
     ErrorCode IPD_ISSUE_NOT_EXISTS = new ErrorCode(1_050_116_040, "问题不存在");
     ErrorCode IPD_ISSUE_NO_FIXED_IN = new ErrorCode(1_050_116_041, "进入实施修复前必须存在 FIXED_IN 关联");
     ErrorCode IPD_ISSUE_NOT_RESOLVABLE = new ErrorCode(1_050_116_042, "问题缺少验证结论，不可关闭");

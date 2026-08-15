@@ -135,6 +135,29 @@
           </el-table>
         </el-collapse-item>
       </el-collapse>
+
+      <!-- 候选动作栏（C-14 铁律：禁止定义函数但不渲染操作控件） -->
+      <div class="action-bar">
+        <div class="action-bar__hash">
+          <span class="action-bar__label">决策包哈希</span>
+          <span class="font-mono text-xs">{{ pkg.decisionPackageHash || '—' }}</span>
+        </div>
+        <div class="action-bar__btns">
+          <el-button
+            v-for="a in pkg.candidateActions || []"
+            :key="a.decision"
+            :type="actionBtnType(a.decision)"
+            :disabled="a.enabled === false || loading"
+            @click="decide(a.decision)"
+          >
+            {{ actionLabel(a.decision) }}
+            <span v-if="a.enabled === false" class="action-bar__reason">（{{ a.reason || '当前不可用' }}）</span>
+          </el-button>
+        </div>
+        <div v-if="!pkg.candidateActions?.length" class="action-bar__empty">
+          无候选动作（任务可能已被处理或为只读归档，不可再决策）
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -188,7 +211,7 @@ const decide = (decision: string) => {
     ElMessage.warning(action.reason || `${decision} 当前不可用`)
     return
   }
-  ElMessageBox.prompt('请输入决策理由', `${decision} 决策`, {
+  ElMessageBox.prompt('请输入决策理由', `${actionLabel(decision)} 决策`, {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     inputType: 'textarea',
@@ -196,7 +219,7 @@ const decide = (decision: string) => {
   }).then(async ({ value }) => {
     let redirectTargetTaskKey: string | undefined
     if (decision === 'REDIRECT' || decision === 'RETURN') {
-      const r = await ElMessageBox.prompt('目标节点 key', `${decision} 目标`, {
+      const r = await ElMessageBox.prompt('目标节点 key', `${actionLabel(decision)} 目标`, {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         inputValidator: (v) => (v && v.trim().length > 0) || '目标节点不能为空'
@@ -215,15 +238,67 @@ const decide = (decision: string) => {
       ElMessage.success('决策已提交')
       emit('decided')
       await load()
+    } catch (e: any) {
+      // 显式处理并发冲突：任务已被他人处理时不再当作未知错误吞掉
+      const code = e?.code ?? e?.data?.code
+      if (code === 1050116080 /* IPD_TASK_ALREADY_COMPLETED */) {
+        ElMessage.warning('该审批任务已被他人处理，已刷新决策包显示实际结果')
+        await load()
+      } else {
+        ElMessage.error(e?.message || '决策提交失败')
+      }
     } finally {
       loading.value = false
     }
   }).catch(() => {})
 }
+
+// 候选动作按钮样式与文案（GO/NO_GO/REDIRECT/RETURN）
+const actionBtnType = (d?: string): any =>
+  ({ GO: 'success', NO_GO: 'danger', REDIRECT: 'warning', RETURN: 'info' } as any)[d || ''] || 'primary'
+const actionLabel = (d?: string): string =>
+  ({ GO: 'Go', NO_GO: 'No-Go', REDIRECT: 'Redirect', RETURN: 'Return' } as any)[d || ''] || d || ''
 </script>
 
 <style scoped>
 .spk-decision-package { padding: 4px; }
 .summary-card { margin-bottom: 8px; }
 .summary-card :deep(.el-card__body) { padding: 8px; }
+.action-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-top: 8px;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+}
+.action-bar__hash {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+}
+.action-bar__label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.action-bar__btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.action-bar__reason {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+}
+.action-bar__empty {
+  width: 100%;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
 </style>

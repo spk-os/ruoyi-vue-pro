@@ -52,6 +52,20 @@ public final class SpkIpdBusinessConstants {
     public static final String CMD_START_FLOW = "START_FLOW";
     public static final String CMD_CANCEL_FLOW = "CANCEL_FLOW";
     public static final String CMD_RETRY_FLOW = "RETRY_FLOW";
+    public static final String CMD_BLOCK_FLOW = "BLOCK_FLOW";
+    public static final String CMD_UNBLOCK_FLOW = "UNBLOCK_FLOW";
+
+    // ---------- FlowRun 状态机（§6.4 / §11.4） ----------
+    public static final String STATUS_DRAFT = "DRAFT";
+    public static final String STATUS_READY = "READY";
+    public static final String STATUS_STARTING = "STARTING";
+    public static final String STATUS_RUNNING = "RUNNING";
+    public static final String STATUS_WAITING_APPROVAL = "WAITING_APPROVAL";
+    public static final String STATUS_BLOCKED = "BLOCKED";
+    public static final String STATUS_FAILED = "FAILED";
+    public static final String STATUS_COMPLETED = "COMPLETED";
+    public static final String STATUS_CANCELLED = "CANCELLED";
+    public static final String STATUS_SUPERSEDED = "SUPERSEDED";
 
     private static final DateTimeFormatter DAY_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final DateTimeFormatter YEAR_FMT = DateTimeFormatter.ofPattern("yyyy");

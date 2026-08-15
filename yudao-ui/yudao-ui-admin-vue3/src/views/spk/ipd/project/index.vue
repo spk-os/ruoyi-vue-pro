@@ -25,6 +25,7 @@
         <el-form-item label="流程实例">
           <el-input v-model="instanceId" placeholder="processInstanceId" style="width: 300px" @keyup.enter="loadProject" />
           <el-button class="ml-8px" @click="loadProject">载入</el-button>
+          <el-button class="ml-8px" text @click="loadLatest">载入最新</el-button>
           <el-switch v-model="autoRefresh" active-text="自动刷新(5s)" class="ml-8px" />
         </el-form-item>
       </el-form>
@@ -360,8 +361,8 @@ const toggleSse = () => {
 }
 
 onMounted(() => {
-  // 进入界面默认载入最新 IPD 流程实例（无则等用户手动发起/载入）
-  loadLatest()
+  // C-14 铁律：禁止进入即默认载入全局最新 Flowable 实例。
+  // 改由用户显式「载入最新」或输入 processInstanceId 后「载入」触发，避免误把最新实例当作当前上下文。
   const tick = () => {
     if (autoRefresh.value && instanceId.value) loadProject()
   }

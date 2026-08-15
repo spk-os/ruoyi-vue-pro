@@ -260,26 +260,191 @@ public class SpkIpdFlowRunService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public SpkIpdFlowRunDO cancel(Long flowRunId, String reason) {
+    public SpkIpdFlowRunDO cancel(Long flowRunId, String reason, String idempotencyKey) {
+        if (reason == null || reason.isBlank()) {
+            throw exception(IPD_FLOW_RUN_REASON_REQUIRED);
+        }
         SpkIpdFlowRunDO run = getFlowRunOrThrow(flowRunId);
-        if ("COMPLETED".equals(run.getStatus()) || "CANCELLED".equals(run.getStatus())) {
-            throw exception(IPD_FLOW_RUN_NOT_CANCELLABLE);
+        // 幂等登记：同 key 重复取消返回当前态（审计 + 防重复点击并发）
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("flowRunId", flowRunId);
+        payload.put("reason", reason);
+        SpkIpdCommandService.CommandEnvelope cmd = commandService.enlist(
+                idempotencyKey, CMD_CANCEL_FLOW, "FLOW_RUN", String.valueOf(flowRunId), writeJson(payload));
+        if (!cmd.isNew()) {
+            return run;
         }
-        // 取消业务流并调用引擎（若已绑定实例）
-        if (run.getProcessInstanceId() != null) {
-            try {
-                historyService.createHistoricProcessInstanceQuery()
-                        .processInstanceId(run.getProcessInstanceId()).singleResult();
-                // 引擎侧取消由 BPM API 负责；S1 仅置业务态，引擎实例取消延后到 S2 BPM adapter
-            } catch (Exception e) {
-                log.warn("[cancel][引擎实例查询失败 pid={} {}]", run.getProcessInstanceId(), e.getMessage());
+        commandService.markRunning(cmd.commandId());
+        try {
+            // 状态机：终态（COMPLETED/CANCELLED/FAILED/SUPERSEDED）不可取消
+            if (STATUS_COMPLETED.equals(run.getStatus()) || STATUS_CANCELLED.equals(run.getStatus())
+                    || STATUS_FAILED.equals(run.getStatus()) || STATUS_SUPERSEDED.equals(run.getStatus())) {
+                throw exception(IPD_FLOW_RUN_NOT_CANCELLABLE);
             }
+            // 取消业务流并调用引擎（若已绑定实例）
+            if (run.getProcessInstanceId() != null) {
+                try {
+                    historyService.createHistoricProcessInstanceQuery()
+                            .processInstanceId(run.getProcessInstanceId()).singleResult();
+                    // 引擎侧取消由 BPM API 负责；S1 仅置业务态，引擎实例取消延后到 S2 BPM adapter
+                } catch (Exception e) {
+                    log.warn("[cancel][引擎实例查询失败 pid={} {}]", run.getProcessInstanceId(), e.getMessage());
+                }
+            }
+            run.setStatus(STATUS_CANCELLED);
+            run.setBlockReason(reason);
+            run.setEndedAt(LocalDateTime.now());
+            flowRunMapper.updateById(run);
+            commandService.markSuccess(cmd.commandId(),
+                    "{\"status\":\"CANCELLED\",\"flowRunId\":" + flowRunId + "}");
+            return run;
+        } catch (Exception e) {
+            commandService.markFailed(cmd.commandId(), "CANCEL_FAIL", e.getMessage());
+            throw e;
         }
-        run.setStatus("CANCELLED");
-        run.setBlockReason(reason);
-        run.setEndedAt(LocalDateTime.now());
-        flowRunMapper.updateById(run);
-        return run;
+    }
+
+    /**
+     * 人工阻断：置 BLOCKED 并记理由，<b>不取消引擎实例</b>（区别于 cancel）。
+     * 设计文档 §6.4 状态机：仅 RUNNING/WAITING_APPROVAL/STARTING/READY 可阻断；终态与 BLOCKED/DRAFT 拒绝。
+     * 幂等（Idempotency-Key + CommandLog 审计），理由必填。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public SpkIpdFlowRunDO block(Long flowRunId, String reason, String idempotencyKey) {
+        if (reason == null || reason.isBlank()) {
+            throw exception(IPD_FLOW_RUN_REASON_REQUIRED);
+        }
+        SpkIpdFlowRunDO run = getFlowRunOrThrow(flowRunId);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("flowRunId", flowRunId);
+        payload.put("reason", reason);
+        SpkIpdCommandService.CommandEnvelope cmd = commandService.enlist(
+                idempotencyKey, CMD_BLOCK_FLOW, "FLOW_RUN", String.valueOf(flowRunId), writeJson(payload));
+        if (!cmd.isNew()) {
+            return run;
+        }
+        commandService.markRunning(cmd.commandId());
+        try {
+            if (STATUS_COMPLETED.equals(run.getStatus()) || STATUS_CANCELLED.equals(run.getStatus())
+                    || STATUS_FAILED.equals(run.getStatus()) || STATUS_SUPERSEDED.equals(run.getStatus())
+                    || STATUS_BLOCKED.equals(run.getStatus()) || STATUS_DRAFT.equals(run.getStatus())) {
+                throw exception(IPD_FLOW_RUN_NOT_BLOCKABLE);
+            }
+            run.setStatus(STATUS_BLOCKED);
+            run.setBlockReason("BLOCK:" + reason);
+            flowRunMapper.updateById(run);
+            commandService.markSuccess(cmd.commandId(),
+                    "{\"status\":\"BLOCKED\",\"flowRunId\":" + flowRunId + "}");
+            log.info("[block][flowRunId={} reason={}]", flowRunId, reason);
+            return run;
+        } catch (Exception e) {
+            commandService.markFailed(cmd.commandId(), "BLOCK_FAIL", e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * 解除阻断：BLOCKED → RUNNING，清空当前 blockReason。
+     * 设计文档 §6.4：仅 BLOCKED 可解除。幂等 + 理由必填（审计可追溯）。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public SpkIpdFlowRunDO unblock(Long flowRunId, String reason, String idempotencyKey) {
+        if (reason == null || reason.isBlank()) {
+            throw exception(IPD_FLOW_RUN_REASON_REQUIRED);
+        }
+        SpkIpdFlowRunDO run = getFlowRunOrThrow(flowRunId);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("flowRunId", flowRunId);
+        payload.put("reason", reason);
+        SpkIpdCommandService.CommandEnvelope cmd = commandService.enlist(
+                idempotencyKey, CMD_UNBLOCK_FLOW, "FLOW_RUN", String.valueOf(flowRunId), writeJson(payload));
+        if (!cmd.isNew()) {
+            return run;
+        }
+        commandService.markRunning(cmd.commandId());
+        try {
+            if (!STATUS_BLOCKED.equals(run.getStatus())) {
+                throw exception(IPD_FLOW_RUN_NOT_UNBLOCKABLE);
+            }
+            run.setStatus(STATUS_RUNNING);
+            run.setBlockReason(null);
+            flowRunMapper.updateById(run);
+            commandService.markSuccess(cmd.commandId(),
+                    "{\"status\":\"RUNNING\",\"flowRunId\":" + flowRunId + "}");
+            log.info("[unblock][flowRunId={} reason={}]", flowRunId, reason);
+            return run;
+        } catch (Exception e) {
+            commandService.markFailed(cmd.commandId(), "UNBLOCK_FAIL", e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * 重试：仅 FAILED 可重试。创建新 attempt（新 FlowRun 行，attemptNo+1，supersedesFlowRunId 指向旧），
+     * 旧行置 SUPERSEDED。<b>新行为 DRAFT，需再调 start() 启动</b>（不在互锁事务内写 Flowable）。
+     * 设计文档 §6.4 / §11.4：retry 走 attempt 模型，不覆盖旧证据/旧产物。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> retry(Long flowRunId, String idempotencyKey) {
+        SpkIpdFlowRunDO old = getFlowRunOrThrow(flowRunId);
+        if (!STATUS_FAILED.equals(old.getStatus())) {
+            throw exception(IPD_FLOW_RUN_NOT_RETRYABLE);
+        }
+        String payloadJson = "{\"flowRunId\":" + flowRunId + "}";
+        SpkIpdCommandService.CommandEnvelope cmd = commandService.enlist(
+                idempotencyKey, CMD_RETRY_FLOW, "FLOW_RUN", String.valueOf(flowRunId), payloadJson);
+        Map<String, Object> r = new LinkedHashMap<>();
+        if (!cmd.isNew()) {
+            r.put("flowRunId", flowRunId);
+            r.put("commandId", cmd.commandId());
+            r.put("commandStatus", cmd.log().getStatus());
+            r.put("idempotent", true);
+            return r;
+        }
+        commandService.markRunning(cmd.commandId());
+        try {
+            // 旧行置 SUPERSEDED
+            old.setStatus(STATUS_SUPERSEDED);
+            flowRunMapper.updateById(old);
+            // 新 attempt：复制业务上下文，attemptNo+1，supersedes 指向旧
+            SpkIpdFlowRunDO fresh = SpkIpdFlowRunDO.builder()
+                    .projectId(old.getProjectId())
+                    .majorReleaseId(old.getMajorReleaseId())
+                    .versionId(old.getVersionId())
+                    .issueCaseId(old.getIssueCaseId())
+                    .flowType(old.getFlowType())
+                    .profileId(old.getProfileId())
+                    .profileVersion(old.getProfileVersion())
+                    .profileSnapshotJson(old.getProfileSnapshotJson())
+                    .tailoringSnapshotJson(old.getTailoringSnapshotJson())
+                    .status(STATUS_DRAFT)
+                    .health(HEALTH_UNKNOWN)
+                    .attemptNo((old.getAttemptNo() == null ? 0 : old.getAttemptNo()) + 1)
+                    .supersedesFlowRunId(old.getId())
+                    .plannedStartAt(old.getPlannedStartAt())
+                    .plannedEndAt(old.getPlannedEndAt())
+                    .build();
+            String tmpNo = "FR-TMP-" + System.nanoTime();
+            fresh.setRunNo(tmpNo);
+            fresh.setBusinessKey("IPD:" + tmpNo);
+            flowRunMapper.insert(fresh);
+            fresh.setRunNo(runNo(fresh.getId()));
+            fresh.setBusinessKey(businessKey(fresh.getRunNo()));
+            flowRunMapper.updateById(fresh);
+            commandService.markSuccess(cmd.commandId(),
+                    "{\"newFlowRunId\":" + fresh.getId() + "}");
+            r.put("flowRunId", fresh.getId());
+            r.put("supersededFlowRunId", old.getId());
+            r.put("commandId", cmd.commandId());
+            r.put("commandStatus", "SUCCESS");
+            r.put("attemptNo", fresh.getAttemptNo());
+            r.put("flowRunStatus", STATUS_DRAFT);
+            log.info("[retry][old={} new={} attemptNo={}]", old.getId(), fresh.getId(), fresh.getAttemptNo());
+            return r;
+        } catch (Exception e) {
+            commandService.markFailed(cmd.commandId(), "RETRY_FAIL", e.getMessage());
+            throw e;
+        }
     }
 
     public SpkIpdFlowRunDO getFlowRun(Long flowRunId) {

@@ -6,9 +6,19 @@
 -->
 <template>
   <div class="spk-ipd-cockpit">
+    <!-- C-14：未携带 flowRunId/processInstanceId 进入时显式提示，不静默自动载入全局最新 -->
+    <el-alert
+      v-if="!externalPid"
+      type="info"
+      :closable="false"
+      show-icon
+      title="未指定 FlowRun"
+      description="请从「项目监控」选择一行运行后进入；或在下方流程图输入 processInstanceId / 点「载入最新」。"
+      class="mb-10px"
+    />
     <el-tabs v-model="activeTab" type="card" class="mb-10px">
       <el-tab-pane label="流程图" name="swimlane">
-        <Swimlane v-if="activeTab === 'swimlane'" @show-detail="onShowDetail" />
+        <Swimlane v-if="activeTab === 'swimlane'" :external-pid="externalPid" @show-detail="onShowDetail" />
       </el-tab-pane>
       <el-tab-pane label="Agent 负载" name="agentLoad">
         <AgentLoad v-if="activeTab === 'agentLoad'" />
@@ -30,11 +40,21 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import Swimlane from './Swimlane.vue'
 import ActivityDetail from './ActivityDetail.vue'
 import AgentLoad from './AgentLoad.vue'
 
 defineOptions({ name: 'SpkIpdCockpit' })
+
+const route = useRoute()
+// 监控行带入的流程实例编号（C-14：不得丢 ID）。优先 processInstanceId，回退 flowRunId。
+const externalPid = computed(() => {
+  const pid = route.query.processInstanceId as string | undefined
+  if (pid) return pid
+  const fr = route.query.flowRunId as string | undefined
+  return fr || ''
+})
 
 const activeTab = ref('swimlane')
 const drawerVisible = ref(false)

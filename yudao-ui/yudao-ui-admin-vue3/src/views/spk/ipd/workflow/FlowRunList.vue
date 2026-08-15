@@ -58,7 +58,7 @@
         <template #default="{ row }">{{ waitTime(row.startedAt, row.endedAt) }}</template>
       </el-table-column>
       <el-table-column label="发起时间" prop="startedAt" width="160" />
-      <el-table-column label="操作" width="220" fixed="right">
+      <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click="goCockpit(row)">跟踪</el-button>
           <el-button v-if="row.status === 'BLOCKED'" link type="success" size="small"
@@ -67,6 +67,8 @@
             @click="onBlock(row)">阻断</el-button>
           <el-button v-if="row.status === 'RUNNING'" link type="danger" size="small"
             @click="onCancel(row)">取消</el-button>
+          <el-button v-if="row.status === 'FAILED'" link type="primary" size="small"
+            @click="onRetry(row)">重试</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -84,6 +86,7 @@ import {
   getFlowRunPage,
   getPage as getPageProjects,
   cancelFlowRun,
+  retryFlowRun,
   blockFlowRun,
   unblockFlowRun
 } from '@/api/spk/ipd/business'
@@ -206,13 +209,36 @@ const onBlock = async (row: SpkIpdFlowRunVO) => {
 }
 
 const onUnblock = async (row: SpkIpdFlowRunVO) => {
+  let reason = ''
   try {
-    await ElMessageBox.confirm(`确认解除 ${row.runNo} 的阻断？`, '解除阻断', { type: 'warning' })
+    const r = await ElMessageBox.prompt('请输入解除阻断理由（审计必填）', '解除阻断', {
+      inputType: 'textarea', inputPlaceholder: '说明阻断条件已满足'
+    })
+    reason = r.value
   } catch {
     return
   }
-  await unblockFlowRun(row.id!)
+  if (!reason) {
+    ElMessage.warning('解除阻断必须给理由')
+    return
+  }
+  await unblockFlowRun(row.id!, reason)
   ElMessage.success('已解除阻断')
+  getList()
+}
+
+const onRetry = async (row: SpkIpdFlowRunVO) => {
+  try {
+    await ElMessageBox.confirm(
+      `确认重试 ${row.runNo}？将创建新 attempt（原运行置 SUPERSEDED），需随后手动启动。`,
+      '重试流程',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  const res: any = await retryFlowRun(row.id!)
+  ElMessage.success(`已创建新 attempt #${res?.attemptNo ?? ''}，请在列表启动`)
   getList()
 }
 

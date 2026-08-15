@@ -89,41 +89,48 @@ public class SpkIpdFlowRunController {
     }
 
     @PostMapping("/flow-runs/{flowRunId}/cancel")
-    @Operation(summary = "取消业务流并调用引擎；要求原因")
+    @Operation(summary = "取消业务流并调用引擎；要求理由；幂等（Idempotency-Key）")
     @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:update')")
     public CommonResult<SpkIpdFlowRunDO> cancel(@PathVariable("flowRunId") Long flowRunId,
-                                                @RequestBody(required = false) Map<String, String> body) {
-        String reason = body == null ? "用户取消" : body.getOrDefault("reason", "用户取消");
-        return success(flowRunService.cancel(flowRunId, reason));
+                                                @RequestBody(required = false) Map<String, String> body,
+                                                @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        String reason = body == null ? null : body.get("reason");
+        if (reason == null || reason.isBlank()) {
+            reason = "用户取消";
+        }
+        String key = idempotencyKey != null ? idempotencyKey : "cancel-" + flowRunId + "-" + System.nanoTime();
+        return success(flowRunService.cancel(flowRunId, reason, key));
     }
 
     @PostMapping("/flow-runs/{flowRunId}/retry")
-    @Operation(summary = "创建新 attempt；旧运行保留为 SUPERSEDED/FAILED（S1 状态机骨架）")
+    @Operation(summary = "重试：仅 FAILED 可重试；创建新 attempt，旧运行置 SUPERSEDED；幂等")
     @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:update')")
-    public CommonResult<Map<String, Object>> retry(@PathVariable("flowRunId") Long flowRunId) {
-        return success(java.util.Map.of(
-                "flowRunId", flowRunId,
-                "stage", "S1_SKELETON",
-                "note", "retry attempt 创建将在 S2 接入 BPM adapter 后提供"));
+    public CommonResult<Map<String, Object>> retry(@PathVariable("flowRunId") Long flowRunId,
+                                                   @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        String key = idempotencyKey != null ? idempotencyKey : "retry-" + flowRunId + "-" + System.nanoTime();
+        return success(flowRunService.retry(flowRunId, key));
     }
 
     @PostMapping("/flow-runs/{flowRunId}/block")
-    @Operation(summary = "人工阻断，必须给理由和影响（S1 状态机骨架）")
+    @Operation(summary = "人工阻断：置 BLOCKED 不取消引擎；理由必填；幂等")
     @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:update')")
     public CommonResult<SpkIpdFlowRunDO> block(@PathVariable("flowRunId") Long flowRunId,
-                                               @RequestBody Map<String, String> body) {
-        return success(flowRunService.cancel(flowRunId,
-                "BLOCK:" + body.getOrDefault("reason", "人工阻断")));
+                                               @RequestBody(required = false) Map<String, String> body,
+                                               @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        String reason = body == null ? null : body.get("reason");
+        String key = idempotencyKey != null ? idempotencyKey : "block-" + flowRunId + "-" + System.nanoTime();
+        return success(flowRunService.block(flowRunId, reason, key));
     }
 
     @PostMapping("/flow-runs/{flowRunId}/unblock")
-    @Operation(summary = "条件满足后解除阻断（S1 状态机骨架）")
+    @Operation(summary = "解除阻断：BLOCKED → RUNNING；理由必填（审计）；幂等")
     @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:update')")
-    public CommonResult<Map<String, Object>> unblock(@PathVariable("flowRunId") Long flowRunId) {
-        return success(java.util.Map.of(
-                "flowRunId", flowRunId,
-                "stage", "S1_SKELETON",
-                "note", "unblock 将在 S2 接入 BPM adapter 后提供"));
+    public CommonResult<SpkIpdFlowRunDO> unblock(@PathVariable("flowRunId") Long flowRunId,
+                                                 @RequestBody(required = false) Map<String, String> body,
+                                                 @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        String reason = body == null ? null : body.get("reason");
+        String key = idempotencyKey != null ? idempotencyKey : "unblock-" + flowRunId + "-" + System.nanoTime();
+        return success(flowRunService.unblock(flowRunId, reason, key));
     }
 
     @GetMapping("/flow-runs/{flowRunId}/timeline")
@@ -141,21 +148,23 @@ public class SpkIpdFlowRunController {
     }
 
     @GetMapping("/flow-runs/{flowRunId}/diagram")
-    @Operation(summary = "返回 Flowable 图和 SPK 状态叠加数据（S1 骨架）")
+    @Operation(summary = "返回 Flowable 图和 SPK 状态叠加数据（骨架，skeleton=true）")
     @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:query')")
     public CommonResult<Map<String, Object>> diagram(@PathVariable("flowRunId") Long flowRunId) {
         return success(java.util.Map.of(
                 "flowRunId", flowRunId,
+                "skeleton", true,
                 "stage", "S1_SKELETON",
                 "note", "diagram 叠加将在 S3 接入 Activity 运行状态后提供"));
     }
 
     @GetMapping("/flow-runs/{flowRunId}/engineering")
-    @Operation(summary = "按 Activity 聚合 branch/commit/PR/CI/release（S1 骨架）")
+    @Operation(summary = "按 Activity 聚合 branch/commit/PR/CI/release（骨架，skeleton=true）")
     @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:query')")
     public CommonResult<Map<String, Object>> engineering(@PathVariable("flowRunId") Long flowRunId) {
         return success(java.util.Map.of(
                 "flowRunId", flowRunId,
+                "skeleton", true,
                 "stage", "S1_SKELETON",
                 "note", "engineering 聚合将在 S5 接入 Gitea/PR/CI 后提供"));
     }

@@ -281,18 +281,22 @@ export const getFlowRun = (id: number) => {
 export const startFlowRun = (id: number, idempotencyKey: string) => {
   return request.post({ url: '/spk/ipd/flow-runs/' + id + '/start', headers: { 'Idempotency-Key': idempotencyKey } })
 }
+// 生成幂等键：浏览器无 crypto.randomUUID 时回退到时间戳+随机串
+const flowCmdKey = (prefix: string, id: number) =>
+  (crypto?.randomUUID ? crypto.randomUUID() : `${prefix}-${id}-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 export const cancelFlowRun = (id: number, reason: string) => {
-  // 后端 @RequestBody Map 读取 reason，故走 data 而非 params
-  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/cancel', data: { reason } })
+  // 后端 @RequestBody Map 读取 reason，故走 data 而非 params；幂等键防重复点击并发
+  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/cancel', data: { reason }, headers: { 'Idempotency-Key': flowCmdKey('cancel', id) } })
 }
 export const retryFlowRun = (id: number) => {
-  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/retry' })
+  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/retry', headers: { 'Idempotency-Key': flowCmdKey('retry', id) } })
 }
 export const blockFlowRun = (id: number, data: { reason: string; impact?: string }) => {
-  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/block', data })
+  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/block', data, headers: { 'Idempotency-Key': flowCmdKey('block', id) } })
 }
-export const unblockFlowRun = (id: number) => {
-  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/unblock' })
+export const unblockFlowRun = (id: number, reason: string) => {
+  // 后端要求解除阻断必须填理由（审计可追溯）
+  return request.post({ url: '/spk/ipd/flow-runs/' + id + '/unblock', data: { reason }, headers: { 'Idempotency-Key': flowCmdKey('unblock', id) } })
 }
 export const timeline = (id: number) => {
   return request.get({ url: '/spk/ipd/flow-runs/' + id + '/timeline' })

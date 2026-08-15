@@ -52,7 +52,7 @@ async function login(){
     localStorage.setItem('tenantId', enc(auth.tid))
   }, auth, FAR_FUTURE)
   // 3. 触发路由守卫：goto /index，守卫见 token 拉 permission-info 装配动态路由
-  await page.goto(BASE+'/index', {waitUntil:'networkidle2', timeout:30000}).catch(e=>console.log('  goto /index warn:',e.message.slice(0,80)))
+  await page.goto(BASE+'/index', {waitUntil:'domcontentloaded', timeout:30000}).catch(e=>console.log('  goto /index warn:',e.message.slice(0,80)))
   await new Promise(r=>setTimeout(r,2500))
   console.log('  after auth url:', page.url())
   return page.url()

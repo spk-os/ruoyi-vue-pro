@@ -15,6 +15,7 @@
         @keyup.enter="load"
       />
       <el-button type="primary" @click="load">查询</el-button>
+      <el-button text @click="loadLatest">载入最新</el-button>
       <el-switch v-model="autoRefresh" active-text="自动刷新(5s)" />
       <span class="meta">共 {{ total }} 个 Activity</span>
     </div>
@@ -152,8 +153,14 @@ const verdictType = (v?: string): any => {
 const fmt = (t?: string) => (t ? String(t).slice(5, 16).replace('T', ' ') : '—')
 
 onMounted(() => {
-  if (processInstanceId.value) load()
-  else loadLatest()
+  // C-14 铁律：禁止默认载入全局最新 Flowable 实例。
+  // 仅当外部注入（route query → externalPid，如从监控台带 ID 进入）或用户手动输入/「载入最新」时才加载。
+  if (props.externalPid) {
+    processInstanceId.value = props.externalPid
+    load()
+  } else if (processInstanceId.value) {
+    load()
+  }
   // 自动刷新开关变化时启停
   const tick = () => {
     if (autoRefresh.value && processInstanceId.value) load()
@@ -161,13 +168,15 @@ onMounted(() => {
   timer = setInterval(tick, 5000)
 })
 
-// 无外部注入实例时，默认载入最新 IPD 流程实例（监控台进入即展示最新泳道）
+// 手动「载入最新」：显式拉全局最新 IPD 流程实例。仅按钮触发，不在 onMounted 自动调用（C-14）。
 const loadLatest = async () => {
   try {
     const data: any = await getLatestProject()
     if (data?.status === 'ok' && data?.processInstanceId) {
       processInstanceId.value = data.processInstanceId
       load()
+    } else if (data?.status === 'not_found') {
+      ElMessage.info('暂无 IPD 流程实例，请先发起')
     }
   } catch {
     // 静默

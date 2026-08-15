@@ -110,7 +110,7 @@
             <el-table-column label="启动" prop="startedAt" width="150" :formatter="dateFormatter" />
             <el-table-column label="阻断原因" prop="blockReason" min-width="140" show-overflow-tooltip />
             <el-table-column label="操作" width="100" fixed="right">
-              <template #default><el-button link type="primary" size="small" @click.stop="openCockpit">监控台</el-button></template>
+              <template #default="{ row }"><el-button link type="primary" size="small" @click.stop="openCockpit(row)">监控台</el-button></template>
             </el-table-column>
           </el-table>
         </el-tab-pane>
@@ -164,7 +164,9 @@ const summaryCards = computed(() => {
 })
 
 const flowTag = (s?: string) => ({ RUNNING: 'success', BLOCKED: 'danger', CANCELLED: 'info', COMPLETED: 'success', FAILED: 'danger' } as any)[s || ''] || ''
-const openCockpit = () => push({ name: 'SpkIpdCockpit' })
+// C-14：监控行点击必须携带对象 ID（flowRunId + processInstanceId），不得丢上下文。
+const openCockpit = (row: any) =>
+  push({ name: 'SpkIpdCockpit', query: { flowRunId: row?.id, processInstanceId: row?.processInstanceId } })
 
 const load = async () => {
   loading.value = true
