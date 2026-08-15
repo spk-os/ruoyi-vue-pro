@@ -548,3 +548,32 @@ export const createAssignment = (data: SpkIpdAssignmentCreateReqVO) => {
 export const reassign = (assignmentId: number, data: SpkIpdAssignmentReassignReqVO) => {
   return request.post({ url: `/spk/ipd/assignments/${assignmentId}/reassign`, data })
 }
+
+// ==================== 项目空间 BFF（SpkIpdProjectWorkspaceController） ====================
+// 项目卡片网格 + 详情聚合（活跃版本/FlowRun/阶段时间戳/泳道/需求树/最近活动）
+// 全真实 DB 聚合，无数据字段前端标注"样本不足"，不造假。
+
+// 项目卡片网格：currentStage/activeVersion/dueIn/majorReleases/blockedFlows/pendingDecisions/teamSize/freshness
+export const getProjectCards = () => {
+  return request.get({ url: '/spk/ipd/projects/cards' })
+}
+
+// 项目详情一次性聚合：活跃版本/FlowRun/阶段时间戳/泳道/最近活动/需求树/问题计数
+export const getProjectWorkspace = (projectId: number) => {
+  return request.get({ url: `/spk/ipd/projects/${projectId}/workspace` })
+}
+
+// 6 阶段进入时间与状态（按版本活跃 FlowRun 聚合）
+export const getStageTimestamps = (projectId: number, versionId?: number) => {
+  return request.get({ url: `/spk/ipd/projects/${projectId}/stage-timestamps`, params: versionId ? { versionId } : {} })
+}
+
+// IR/SR/AR 需求追踪树（按版本过滤，无数据 sparse=true）
+export const getRequirementsTree = (projectId: number, versionId?: number) => {
+  return request.get({ url: `/spk/ipd/projects/${projectId}/requirements-tree`, params: versionId ? { versionId } : {} })
+}
+
+// 项目维度跨 FlowRun 最近活动时间线
+export const getRecentActivities = (projectId: number, limit = 10) => {
+  return request.get({ url: `/spk/ipd/projects/${projectId}/recent-activities`, params: { limit } })
+}

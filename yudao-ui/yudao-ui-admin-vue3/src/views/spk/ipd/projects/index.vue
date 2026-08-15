@@ -1,17 +1,9 @@
 <template>
+  <!-- 搜索工作栏 -->
   <ContentWrap>
-    <!-- 搜索工作栏 -->
     <el-form ref="queryFormRef" :inline="true" :model="queryParams" class="-mb-15px" label-width="82px">
       <el-form-item label="项目名称" prop="name">
         <el-input v-model="queryParams.name" class="!w-200px" clearable placeholder="如 智能家居中控" @keyup.enter="handleQuery" />
-      </el-form-item>
-      <el-form-item label="项目编码" prop="projectCode">
-        <el-input v-model="queryParams.projectCode" class="!w-180px" clearable placeholder="如 CORTEXT" @keyup.enter="handleQuery" />
-      </el-form-item>
-      <el-form-item label="负责人" prop="ownerUserId">
-        <el-select v-model="queryParams.ownerUserId" class="!w-180px" clearable filterable placeholder="全部">
-          <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
-        </el-select>
       </el-form-item>
       <el-form-item label="状态" prop="status">
         <el-select v-model="queryParams.status" class="!w-140px" clearable placeholder="全部">
@@ -26,25 +18,77 @@
       <el-form-item>
         <el-button @click="handleQuery"><Icon class="mr-5px" icon="ep:search" />搜索</el-button>
         <el-button @click="resetQuery"><Icon class="mr-5px" icon="ep:refresh" />重置</el-button>
-        <el-button v-hasPermi="['spk-delivery:ipd-project:create']" plain type="primary" @click="openForm()">
-          <Icon class="mr-5px" icon="ep:plus" />新建项目
+        <el-button v-hasPermi="['spk-delivery:ipd-project:create']" plain type="primary" @click="openWizard">
+          <Icon class="mr-5px" icon="ep:plus" />发起项目
         </el-button>
       </el-form-item>
     </el-form>
   </ContentWrap>
 
-  <!-- 列表 -->
   <ContentWrap>
-    <div class="flex justify-between items-center mb-10px">
-      <span class="text-sm text-gray-500">项目与大版本、交付版本、流程运行分离；点击行进入项目详情</span>
+    <div class="flex justify-between items-center mb-12px">
+      <span class="text-sm text-gray-500">项目卡片网格 · 真实聚合（无数据字段如实标注，不造假）</span>
       <el-radio-group v-model="view" size="small">
-        <el-radio-button value="table">表格</el-radio-button>
         <el-radio-button value="card">卡片</el-radio-button>
+        <el-radio-button value="table">表格</el-radio-button>
       </el-radio-group>
     </div>
 
+    <!-- 卡片网格 -->
+    <div v-if="view === 'card'" v-loading="loading" class="proj-grid">
+      <div v-for="row in filteredCards" :key="row.id" class="proj-card" @click="openDetail(row)">
+        <div class="proj-card__head">
+          <div class="proj-card__title">
+            <el-link type="primary" @click.stop="openDetail(row)">{{ row.name }}</el-link>
+            <span class="proj-card__no">{{ row.projectNo }}</span>
+          </div>
+          <div class="proj-card__tags">
+            <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+            <el-tag :type="healthTagType(row.health)" effect="plain" size="small">{{ healthLabel(row.health) }}</el-tag>
+          </div>
+        </div>
+
+        <SpkStagePipeline
+          class="mt-6px"
+          :current="stageIndex(row.currentStage)"
+          :stages="STAGE_LABELS"
+        />
+
+        <div class="proj-card__metrics">
+          <div class="metric">
+            <span class="metric__label">活跃版本</span>
+            <span class="metric__value">{{ row.activeVersion || '未接入' }}</span>
+          </div>
+          <div class="metric">
+            <span class="metric__label">剩余</span>
+            <span class="metric__value" :class="dueInClass(row.dueIn)">{{ dueInText(row.dueIn) }}</span>
+          </div>
+          <div class="metric">
+            <span class="metric__label">阻塞流</span>
+            <span class="metric__value" :class="{ 'text-red-600': row.blockedFlows > 0 }">{{ row.blockedFlows ?? 0 }}</span>
+          </div>
+          <div class="metric">
+            <span class="metric__label">待决策</span>
+            <span class="metric__value" :class="{ 'text-orange-600': row.pendingDecisions > 0 }">{{ row.pendingDecisions ?? 0 }}</span>
+          </div>
+          <div class="metric">
+            <span class="metric__label">团队</span>
+            <span class="metric__value">{{ row.teamSize ?? 0 }}</span>
+          </div>
+        </div>
+
+        <div class="proj-card__foot">
+          <span class="text-xs text-gray-400">{{ userLabel(row.ownerUserId) }}</span>
+          <span class="text-xs text-gray-400">大版本 {{ row.majorReleases ?? 0 }}</span>
+          <SpkFreshness v-if="row.freshness" :minutes="freshnessMinutes(row.freshness)" />
+          <span v-else class="text-xs text-gray-400">无更新</span>
+        </div>
+      </div>
+      <el-empty v-if="!loading && filteredCards.length === 0" description="暂无项目，点「发起项目」创建" />
+    </div>
+
     <!-- 表格视图 -->
-    <el-table v-if="view === 'table'" v-loading="loading" :data="list" @row-click="openDetail">
+    <el-table v-else v-loading="loading" :data="tableList" @row-click="openDetail">
       <el-table-column label="项目" min-width="220" prop="name">
         <template #default="{ row }">
           <el-link type="primary" @click.stop="openDetail(row)">{{ row.name }}</el-link>
@@ -55,17 +99,12 @@
         <template #default="{ row }">{{ userLabel(row.ownerUserId) }}</template>
       </el-table-column>
       <el-table-column align="center" label="状态" prop="status" width="110">
-        <template #default="{ row }">
-          <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
-        </template>
+        <template #default="{ row }"><el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
       </el-table-column>
       <el-table-column align="center" label="健康" prop="health" width="100">
-        <template #default="{ row }">
-          <el-tag :type="healthTagType(row.health)" effect="plain">{{ healthLabel(row.health) }}</el-tag>
-        </template>
+        <template #default="{ row }"><el-tag :type="healthTagType(row.health)" effect="plain">{{ healthLabel(row.health) }}</el-tag></template>
       </el-table-column>
       <el-table-column align="center" label="计划完成" prop="plannedEndAt" width="160" :formatter="dateFormatter" />
-      <el-table-column align="center" label="创建时间" prop="createTime" width="160" :formatter="dateFormatter" />
       <el-table-column align="center" fixed="right" label="操作" width="240">
         <template #default="{ row }">
           <el-button v-hasPermi="['spk-delivery:ipd-project:update']" v-if="row.status === 'DRAFT'" link type="primary" @click.stop="handleActivate(row)">激活</el-button>
@@ -76,141 +115,251 @@
         </template>
       </el-table-column>
     </el-table>
-
-    <!-- 卡片视图 -->
-    <div v-else v-loading="loading" class="grid grid-cols-3 gap-12px">
-      <el-card v-for="row in list" :key="row.id" class="cursor-pointer" shadow="hover" @click="openDetail(row)">
-        <div class="flex justify-between items-center">
-          <b>{{ row.name }}</b>
-          <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
-        </div>
-        <div class="text-xs text-gray-400 mt-4px">{{ row.projectNo }} · {{ userLabel(row.ownerUserId) }}</div>
-        <div class="flex justify-between items-center mt-8px">
-          <el-tag :type="healthTagType(row.health)" effect="plain" size="small">{{ healthLabel(row.health) }}</el-tag>
-          <span class="text-xs text-gray-400">计划至 {{ formatDate(row.plannedEndAt) }}</span>
-        </div>
-      </el-card>
-      <el-empty v-if="!loading && list.length === 0" description="暂无项目" />
-    </div>
-
-    <Pagination v-model:limit="queryParams.pageSize" v-model:page="queryParams.pageNo" :total="total" @pagination="getList" />
+    <Pagination v-if="view === 'table'" v-model:limit="queryParams.pageSize" v-model:page="queryParams.pageNo" :total="total" @pagination="getTableList" />
   </ContentWrap>
 
-  <!-- 新建/编辑抽屉 -->
-  <ProjectForm ref="formRef" @success="getList" />
+  <ProjectForm ref="formRef" @success="reload" />
+  <LaunchWizard ref="wizardRef" @success="onWizardSuccess" />
 </template>
 
 <script lang="ts" setup>
+import { SpkIpdProjectBusinessApi as Api, type IpdProjectVO } from '@/api/spk/ipd/business'
+import * as BusinessApi from '@/api/spk/ipd/business'
+import { getSimpleUserList, type UserVO } from '@/api/system/user'
 import { dateFormatter } from '@/utils/formatTime'
-import * as IpdBusinessApi from '@/api/spk/ipd/business'
-import { getSimpleUserList } from '@/api/system/user'
+import SpkStagePipeline from '@/views/spk/ipd/home/components/SpkStagePipeline.vue'
+import SpkFreshness from '@/views/spk/ipd/home/components/SpkFreshness.vue'
 import ProjectForm from './ProjectForm.vue'
+import LaunchWizard from './LaunchWizard.vue'
 
 defineOptions({ name: 'SpkIpdProjects' })
 
+const { push } = useRouter()
 const message = useMessage()
-const { t } = useI18n()
 
+const STAGE_LABELS = ['概念', '计划', '开发', '验证', '发布', '生命周期']
 const STATUS_OPTIONS = [
-  { label: '草稿', value: 'DRAFT' },
-  { label: '活跃', value: 'ACTIVE' },
-  { label: '暂停', value: 'PAUSED' },
-  { label: '归档', value: 'ARCHIVED' }
+  { value: 'DRAFT', label: '草稿' },
+  { value: 'ACTIVE', label: '进行中' },
+  { value: 'PAUSED', label: '已暂停' },
+  { value: 'ARCHIVED', label: '已归档' }
 ]
 const HEALTH_OPTIONS = [
-  { label: '未知', value: 'UNKNOWN' },
-  { label: '良好', value: 'GOOD' },
-  { label: '告警', value: 'WARN' },
-  { label: '严重', value: 'CRITICAL' }
+  { value: 'UNKNOWN', label: '未知' },
+  { value: 'GOOD', label: '健康' },
+  { value: 'WARN', label: '告警' },
+  { value: 'CRITICAL', label: '风险' }
 ]
-const statusLabel = (s?: string) => STATUS_OPTIONS.find((o) => o.value === s)?.label || s || '-'
-const statusTagType = (s?: string) => {
-  switch (s) {
-    case 'ACTIVE': return 'success'
-    case 'PAUSED': return 'warning'
-    case 'ARCHIVED': return 'info'
-    default: return ''
-  }
-}
-const healthLabel = (s?: string) => HEALTH_OPTIONS.find((o) => o.value === s)?.label || s || '-'
-const healthTagType = (s?: string) => {
-  switch (s) {
-    case 'GOOD': return 'success'
-    case 'WARN': return 'warning'
-    case 'CRITICAL': return 'danger'
-    default: return 'info'
-  }
-}
 
-const loading = ref(true)
+const statusLabel = (v: string) => STATUS_OPTIONS.find((o) => o.value === v)?.label || v || '—'
+const healthLabel = (v: string) => HEALTH_OPTIONS.find((o) => o.value === v)?.label || v || '—'
+const statusTagType = (v: string) => ({ DRAFT: 'info', ACTIVE: 'success', PAUSED: 'warning', ARCHIVED: 'danger' }[v] || 'info')
+const healthTagType = (v: string) => ({ UNKNOWN: 'info', GOOD: 'success', WARN: 'warning', CRITICAL: 'danger' }[v] || 'info')
+
+const loading = ref(false)
+const view = ref<'card' | 'table'>('card')
+const tableList = ref<IpdProjectVO[]>([])
 const total = ref(0)
-const list = ref<IpdBusinessApi.SpkIpdProjectVO[]>([])
-const view = ref('table')
-const userList = ref<any[]>([])
+const cards = ref<any[]>([])
+const userList = ref<UserVO[]>([])
+
 const queryParams = reactive({
+  name: '',
+  status: undefined as string | undefined,
+  health: undefined as string | undefined,
   pageNo: 1,
-  pageSize: 10,
-  name: undefined,
-  projectCode: undefined,
-  ownerUserId: undefined,
-  status: undefined,
-  health: undefined
+  pageSize: 10
 })
 const queryFormRef = ref()
-const userLabel = (id?: number) => userList.value.find((u) => u.id === id)?.nickname || (id ? `用户#${id}` : '-')
 
-const getList = async () => {
+const userLabel = (userId?: number) => {
+  if (!userId) return '未指派'
+  const u = userList.value.find((x) => x.id === userId)
+  return u ? u.nickname : `用户#${userId}`
+}
+
+// 卡片本地过滤（cards 为全量非分页，按搜索栏过滤）
+const filteredCards = computed(() => {
+  return cards.value.filter((c) => {
+    if (queryParams.name && !(c.name || '').toLowerCase().includes(queryParams.name.toLowerCase())) return false
+    if (queryParams.status && c.status !== queryParams.status) return false
+    if (queryParams.health && c.health !== queryParams.health) return false
+    return true
+  })
+})
+
+const stageIndex = (stage?: string) => {
+  const map: Record<string, number> = { concept: 0, plan: 1, develop: 2, qualify: 3, launch: 4, lifecycle: 5 }
+  return stage ? (map[stage] ?? 0) : 0
+}
+
+const dueInText = (dueIn?: number | null) => {
+  if (dueIn === null || dueIn === undefined) return '未接入'
+  if (dueIn < 0) return `逾期 ${-dueIn} 天`
+  if (dueIn === 0) return '今日到期'
+  return `剩 ${dueIn} 天`
+}
+const dueInClass = (dueIn?: number | null) => ({
+  'text-red-600': dueIn !== null && dueIn !== undefined && dueIn < 0,
+  'text-orange-600': dueIn === 0
+})
+
+const freshnessMinutes = (ts: number | string) => {
+  const t = typeof ts === 'string' ? Date.parse(ts) : ts
+  if (!t) return 0
+  const diff = (Date.now() - t) / 60000
+  return Math.max(0, Math.floor(diff))
+}
+
+const openDetail = (row: any) => {
+  if (!row?.id) return
+  push({ name: 'SpkIpdProjectDetail', query: { projectId: row.id } })
+}
+
+const openForm = (id?: number) => {
+  formRef.value.open(id)
+}
+
+// 发起项目向导
+const wizardRef = ref()
+const openWizard = () => wizardRef.value?.open()
+
+const formRef = ref()
+const reload = () => {
+  getCards()
+  getTableList()
+}
+
+const getCards = async () => {
   loading.value = true
   try {
-    const data = await IpdBusinessApi.getPage(queryParams)
-    list.value = data.list
+    cards.value = await BusinessApi.getProjectCards()
+  } finally {
+    loading.value = false
+  }
+}
+
+const getTableList = async () => {
+  loading.value = true
+  try {
+    const data = await Api.getPage(queryParams)
+    tableList.value = data.list
     total.value = data.total
   } finally {
     loading.value = false
   }
 }
-const handleQuery = () => { queryParams.pageNo = 1; getList() }
-const resetQuery = () => { queryFormRef.value.resetFields(); handleQuery() }
 
-const formatDate = (v?: string) => v ? v.slice(0, 10) : '—'
-
-const openDetail = (row: IpdBusinessApi.SpkIpdProjectVO) => {
-  if (!row?.id) return
-  push({ name: 'SpkIpdProjectDetail', query: { projectId: row.id } })
+const handleQuery = () => {
+  if (view.value === 'card') {
+    // 卡片本地过滤，无需重新请求
+  } else {
+    queryParams.pageNo = 1
+    getTableList()
+  }
+}
+const resetQuery = () => {
+  queryFormRef.value?.resetFields()
+  handleQuery()
 }
 
-const formRef = ref()
-const openForm = (id?: number) => formRef.value.open(id)
-
-const handleActivate = async (row: IpdBusinessApi.SpkIpdProjectVO) => {
-  try {
-    await message.confirm(`确认激活项目「${row.name}」？激活后进入 ACTIVE 状态。`)
-    await IpdBusinessApi.activate(row.id!)
-    message.success('激活成功')
-    await getList()
-  } catch {}
+const handleActivate = async (row: IpdProjectVO) => {
+  await Api.activate(row.id)
+  message.success('已激活')
+  reload()
 }
-const handlePause = async (row: IpdBusinessApi.SpkIpdProjectVO) => {
-  try {
-    await message.confirm(`确认暂停项目「${row.name}」？`)
-    await IpdBusinessApi.pause(row.id!)
-    message.success('已暂停')
-    await getList()
-  } catch {}
+const handlePause = async (row: IpdProjectVO) => {
+  await Api.pause(row.id)
+  message.success('已暂停')
+  reload()
 }
-const handleArchive = async (row: IpdBusinessApi.SpkIpdProjectVO) => {
-  try {
-    await message.confirm(`确认归档项目「${row.name}」？归档后不再出现在活跃视图。`)
-    await IpdBusinessApi.archive(row.id!)
-    message.success('已归档')
-    await getList()
-  } catch {}
+const handleArchive = async (row: IpdProjectVO) => {
+  await message.confirm(`确认归档项目「${row.name}」？归档后不可发起流程。`)
+  await Api.archive(row.id)
+  message.success('已归档')
+  reload()
 }
 
-const { push } = useRouter()
+const onWizardSuccess = () => {
+  message.success('项目已创建并可发起流程')
+  reload()
+}
 
-onMounted(async () => {
+const init = async () => {
   userList.value = await getSimpleUserList()
-  await getList()
-})
+  getCards()
+  getTableList()
+}
+
+onMounted(init)
 </script>
+
+<style lang="scss" scoped>
+.proj-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 14px;
+}
+.proj-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-bg-color);
+  cursor: pointer;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  &:hover {
+    border-color: var(--el-color-primary);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  }
+  &__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  &__title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  &__no {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+  }
+  &__tags {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  &__metrics {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    margin-top: 4px;
+  }
+  &__foot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-top: 1px dashed var(--el-border-color-lighter);
+    padding-top: 6px;
+  }
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  &__label {
+    font-size: 11px;
+    color: var(--el-text-color-secondary);
+  }
+  &__value {
+    font-size: 15px;
+    font-weight: 600;
+  }
+}
+</style>
