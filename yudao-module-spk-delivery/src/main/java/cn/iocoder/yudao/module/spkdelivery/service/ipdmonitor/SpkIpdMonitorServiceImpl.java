@@ -5,11 +5,15 @@ import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdmonitor.vo.SpkIpd
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdmonitor.vo.SpkIpdMonitorRespVO.IntegrationHealth;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.artifact.SpkArtifactManifestDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.evidence.SpkEvidenceRecordDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.gate.SpkGateRecordDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdDecisionRecordDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdFlowRunDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdIssueCaseDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdVersionDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.artifact.SpkArtifactManifestMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.evidence.SpkEvidenceRecordMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.gate.SpkGateRecordMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdDecisionRecordMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdFlowRunMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdIssueCaseMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdVersionMapper;
@@ -45,6 +49,10 @@ public class SpkIpdMonitorServiceImpl implements SpkIpdMonitorService {
     private SpkArtifactManifestMapper artifactMapper;
     @Resource
     private SpkEvidenceRecordMapper evidenceMapper;
+    @Resource
+    private SpkIpdDecisionRecordMapper decisionMapper;
+    @Resource
+    private SpkGateRecordMapper gateMapper;
     @Resource
     private SpkPlaneIntegrationService planeService;
     @Resource
@@ -121,7 +129,105 @@ public class SpkIpdMonitorServiceImpl implements SpkIpdMonitorService {
         resp.setSummary(summary);
 
         resp.setIntegrations(buildIntegrations());
+
+        // 项目维度 3 视图：决策审查 / 制品基线（按 processInstance 聚合）/ 门禁
+        List<String> pids = new ArrayList<>();
+        Map<String, String> pidToRunNo = new LinkedHashMap<>();
+        for (SpkIpdFlowRunDO f : flows) {
+            if (f.getProcessInstanceId() != null) {
+                pids.add(f.getProcessInstanceId());
+                pidToRunNo.put(f.getProcessInstanceId(), f.getRunNo());
+            }
+        }
+        resp.setDecisions(buildDecisions(projectId, pidToRunNo));
+        resp.setGates(buildGates(pids, pidToRunNo));
+        resp.setArtifacts(buildArtifacts(pids, pidToRunNo));
         return resp;
+    }
+
+    /** 决策审查：decision_record 按 projectId 直查（DO 带 projectId），并带出所属流程号 */
+    private List<Map<String, Object>> buildDecisions(Long projectId, Map<String, String> pidToRunNo) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        if (projectId == null) {
+            return rows; // 全项目维度暂不聚合决策，避免跨项目混淆
+        }
+        List<SpkIpdDecisionRecordDO> list = decisionMapper.selectList(
+                new LambdaQueryWrapperX<SpkIpdDecisionRecordDO>()
+                        .eq(SpkIpdDecisionRecordDO::getProjectId, projectId)
+                        .orderByDesc(SpkIpdDecisionRecordDO::getId));
+        for (SpkIpdDecisionRecordDO d : list) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", d.getId());
+            m.put("taskId", d.getTaskId());
+            m.put("flowRunId", d.getFlowRunId());
+            m.put("flowRunNo", pidToRunNo.getOrDefault(d.getProcessInstanceId(), null));
+            m.put("decision", d.getDecision());
+            m.put("reason", d.getReason());
+            m.put("decisionPackageHash", d.getDecisionPackageHash());
+            m.put("deciderUserId", d.getDeciderUserId());
+            m.put("redirectTargetTaskKey", d.getRedirectTargetTaskKey());
+            rows.add(m);
+        }
+        return rows;
+    }
+
+    /** 门禁：gate_record 按 processInstance 聚合 */
+    private List<Map<String, Object>> buildGates(List<String> pids, Map<String, String> pidToRunNo) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (String pid : pids) {
+            List<SpkGateRecordDO> list = gateMapper.selectListByInstanceId(pid);
+            if (list == null || list.isEmpty()) {
+                continue;
+            }
+            for (SpkGateRecordDO g : list) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", g.getId());
+                m.put("flowRunNo", pidToRunNo.get(pid));
+                m.put("processInstanceId", pid);
+                m.put("nodeKey", g.getNodeKey());
+                m.put("gate", g.getGate());
+                m.put("pass", g.getPass());
+                m.put("report", g.getReport());
+                m.put("callbackTime", g.getCallbackTime());
+                rows.add(m);
+            }
+        }
+        return rows;
+    }
+
+    /** 制品基线：artifact_manifest 按 processInstance 聚合，含哈希/签名/类型 */
+    private List<Map<String, Object>> buildArtifacts(List<String> pids, Map<String, String> pidToRunNo) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (String pid : pids) {
+            List<SpkArtifactManifestDO> list;
+            try {
+                list = artifactMapper.selectListByProcessInstanceId(pid);
+            } catch (Exception ignore) {
+                continue;
+            }
+            if (list == null || list.isEmpty()) {
+                continue;
+            }
+            for (SpkArtifactManifestDO a : list) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", a.getId());
+                m.put("artifactId", a.getArtifactId());
+                m.put("artifactType", a.getArtifactType());
+                m.put("flowRunNo", pidToRunNo.get(pid));
+                m.put("activityRunId", a.getActivityRunId());
+                m.put("contentHash", a.getContentHash());
+                m.put("version", a.getVersion());
+                m.put("status", a.getStatus());
+                m.put("signerRequired", a.getSignerRequired());
+                m.put("signedBy", a.getSignedBy());
+                m.put("signedAt", a.getSignedAt());
+                m.put("mime", a.getMime());
+                m.put("bytes", a.getBytes());
+                m.put("summary", a.getSummary());
+                rows.add(m);
+            }
+        }
+        return rows;
     }
 
     private List<IntegrationHealth> buildIntegrations() {

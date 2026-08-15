@@ -27,6 +27,15 @@ public class SpkIpdMonitorRespVO {
     @Schema(description = "集成健康（Plane/Gitea/Omnigent）")
     private List<IntegrationHealth> integrations;
 
+    @Schema(description = "决策记录（项目维度，含审批包哈希/决策结论/审批人）")
+    private List<Map<String, Object>> decisions;
+
+    @Schema(description = "门禁记录（项目维度，按 instance 聚合 pass/report）")
+    private List<Map<String, Object>> gates;
+
+    @Schema(description = "制品基线（项目维度，含哈希/签名状态/类型/摘要）")
+    private List<Map<String, Object>> artifacts;
+
     @Data
     @Schema(description = "集成健康")
     public static class IntegrationHealth {
