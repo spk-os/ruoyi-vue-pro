@@ -61,6 +61,8 @@ public class SpkIpdFlowRunService {
     @Resource
     private SpkIpdProjectBusinessService projectBusinessService;
     @Resource
+    private SpkIpdProcessProfileService processProfileService;
+    @Resource
     private HistoryService historyService;
     private final ObjectMapper json = new ObjectMapper();
 
@@ -135,7 +137,9 @@ public class SpkIpdFlowRunService {
 
     /**
      * 创建运行草稿：选择版本、类型、档案、裁剪项。设计文档 section 10.5 /flow-runs。
-     * S1 profile 仍待 S2 接入；以默认 spkIpdFlow 档案（profileVersion=1）建立最小快照。
+     * Profile 档案引用 ProcessProfile 当前已发布版本（§7.2 第 4 顶层表面）：
+     * - 命中已发布 Profile → 写 profileId/profileVersion/snapshot（真实治理产物）。
+     * - 无已发布 Profile → 降级用最小档案（profileId=0/profileVersion=1），不阻断创建，前端按 profileId=0 标注"未接入治理"。
      */
     @Transactional(rollbackFor = Exception.class)
     public SpkIpdFlowRunDO createFlowRun(SpkIpdFlowRunPreflightReqVO req) {
@@ -147,6 +151,8 @@ public class SpkIpdFlowRunService {
         if (req.getVersionId() != null && !flowRunMapper.selectActiveByVersion(req.getVersionId()).isEmpty()) {
             throw exception(IPD_FLOW_RUN_ACTIVE_EXISTS);
         }
+        // 解析当前已发布 Profile（治理产物，管理员在流程治理配置后生效）
+        SpkIpdProcessProfileService.PublishedProfile pub = resolvePublishedProfile(req.getFlowType());
         SpkIpdFlowRunDO run = SpkIpdFlowRunDO.builder()
                 .projectId(req.getProjectId())
                 .majorReleaseId(req.getVersionId() == null ? null
@@ -154,9 +160,9 @@ public class SpkIpdFlowRunService {
                 .versionId(req.getVersionId())
                 .issueCaseId(req.getIssueCaseId())
                 .flowType(req.getFlowType())
-                .profileId(0L)
-                .profileVersion(1)
-                .profileSnapshotJson(minimalProfileSnapshot(req))
+                .profileId(pub == null ? 0L : pub.profileId())
+                .profileVersion(pub == null ? 1 : pub.version())
+                .profileSnapshotJson(pub == null ? minimalProfileSnapshot(req) : pub.snapshotJson())
                 .tailoringSnapshotJson(tailoringJson(req.getTailoring()))
                 .status("DRAFT")
                 .health(HEALTH_UNKNOWN)
@@ -519,8 +525,23 @@ public class SpkIpdFlowRunService {
         snap.put("processDefinitionKey", IPD_FLOW_KEY);
         snap.put("flowType", req.getFlowType());
         snap.put("profileVersion", 1);
-        snap.put("note", "S1 默认档案；S2 接入完整 ProcessProfile 后替换");
+        snap.put("note", "未匹配已发布 ProcessProfile，使用最小降级档案；请在流程治理配置发布后生效");
         return writeJson(snap);
+    }
+
+    /**
+     * 解析 flowType 对应的当前已发布 Profile；无则返回 null（降级，不阻断创建）。
+     */
+    private SpkIpdProcessProfileService.PublishedProfile resolvePublishedProfile(String flowType) {
+        if (flowType == null || flowType.isBlank()) {
+            return null;
+        }
+        try {
+            return processProfileService.getPublishedForFlowType(flowType);
+        } catch (Exception e) {
+            log.warn("[resolvePublishedProfile][flowType={} 无已发布 Profile，降级最小档案：{}]", flowType, e.getMessage());
+            return null;
+        }
     }
 
     private String tailoringJson(SpkIpdFlowRunPreflightReqVO.Tailoring t) {

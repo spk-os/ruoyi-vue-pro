@@ -142,4 +142,13 @@ public interface ErrorCodeConstants {
     ErrorCode IPD_EVIDENCE_WAIVER_NOT_AUTHORIZED = new ErrorCode(1_050_116_085, "无证据豁免授权");
     ErrorCode IPD_REDIRECT_TARGET_REQUIRED = new ErrorCode(1_050_116_086, "REDIRECT/RETURN 必须指定目标节点 key");
 
+    // ========== IPD 流程治理（1-050-116-090） ==========
+    ErrorCode IPD_PROFILE_NOT_EXISTS = new ErrorCode(1_050_116_090, "流程模板 Profile 不存在");
+    ErrorCode IPD_PROFILE_CODE_DUPLICATE = new ErrorCode(1_050_116_091, "Profile 编码已存在");
+    ErrorCode IPD_PROFILE_NOT_PUBLISHED = new ErrorCode(1_050_116_092, "该流程类型暂无已发布 Profile，请在流程治理配置后重试");
+    ErrorCode IPD_PROFILE_VERSION_NOT_EXISTS = new ErrorCode(1_050_116_093, "Profile 版本不存在");
+    ErrorCode IPD_PROFILE_VERSION_ALREADY_PUBLISHED = new ErrorCode(1_050_116_094, "该版本已发布，不可重复发布");
+    ErrorCode IPD_PROFILE_FLOW_TYPE_MISMATCH = new ErrorCode(1_050_116_095, "Profile flowType 与请求不符");
+    ErrorCode IPD_PROFILE_VERSION_NOT_PUBLISHED = new ErrorCode(1_050_116_096, "该版本未发布，不可回滚/引用");
+
 }
