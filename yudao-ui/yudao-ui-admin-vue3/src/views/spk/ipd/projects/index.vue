@@ -123,8 +123,8 @@
 </template>
 
 <script lang="ts" setup>
-import { SpkIpdProjectBusinessApi as Api, type IpdProjectVO } from '@/api/spk/ipd/business'
 import * as BusinessApi from '@/api/spk/ipd/business'
+import type { SpkIpdProjectVO as IpdProjectVO } from '@/api/spk/ipd/business'
 import { getSimpleUserList, type UserVO } from '@/api/system/user'
 import { dateFormatter } from '@/utils/formatTime'
 import SpkStagePipeline from '@/views/spk/ipd/home/components/SpkStagePipeline.vue'
@@ -242,7 +242,7 @@ const getCards = async () => {
 const getTableList = async () => {
   loading.value = true
   try {
-    const data = await Api.getPage(queryParams)
+    const data = await BusinessApi.getPage(queryParams)
     tableList.value = data.list
     total.value = data.total
   } finally {
@@ -264,18 +264,18 @@ const resetQuery = () => {
 }
 
 const handleActivate = async (row: IpdProjectVO) => {
-  await Api.activate(row.id)
+  await BusinessApi.activate(row.id)
   message.success('已激活')
   reload()
 }
 const handlePause = async (row: IpdProjectVO) => {
-  await Api.pause(row.id)
+  await BusinessApi.pause(row.id)
   message.success('已暂停')
   reload()
 }
 const handleArchive = async (row: IpdProjectVO) => {
   await message.confirm(`确认归档项目「${row.name}」？归档后不可发起流程。`)
-  await Api.archive(row.id)
+  await BusinessApi.archive(row.id)
   message.success('已归档')
   reload()
 }
