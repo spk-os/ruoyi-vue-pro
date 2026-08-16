@@ -19,9 +19,11 @@ import javax.sql.DataSource;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * SPK-OS IPD 端到端集成测试基座。
@@ -122,6 +124,23 @@ public abstract class SpkIpdE2eBase {
         return (Map<String, Object>) r.get("data");
     }
 
+    /**
+     * POST（带鉴权 + Idempotency-Key），<b>不</b>剥壳也<b>不</b>断言业务码——返回完整 CommonResult
+     * （含 code/data/msg）。用于断言"应被状态机拒绝"的失败路径：调用方断言 {@code code != 0}。
+     */
+    @SuppressWarnings("unchecked")
+    protected Map<String, Object> postRaw(String path, Object body, String idempotencyKey) {
+        HttpHeaders h = authHeaders();
+        if (idempotencyKey != null) {
+            h.set("Idempotency-Key", idempotencyKey);
+        }
+        ResponseEntity<Map> resp = restTemplate.postForEntity(
+                url(path), new HttpEntity<>(body, h), Map.class);
+        Map<String, Object> r = resp.getBody();
+        assertNotNull(r, "POST " + path + " 返回空");
+        return r;
+    }
+
     /** GET（带鉴权），剥 CommonResult 壳返回 data（假设为 Map，用于单对象/分页 PageResult 端点）。 */
     @SuppressWarnings("unchecked")
     protected Map<String, Object> get(String path) {
@@ -181,5 +200,139 @@ public abstract class SpkIpdE2eBase {
 
     protected void awaitAtMost(Duration d) {
         Awaitility.setDefaultTimeout(d);
+    }
+
+    // ==================== IPD 流程 helpers（分层/全流程慢测共用） ====================
+
+    /**
+     * 创建一个可启动的 IPD 流程上下文：项目 + 大版本（自动建基线版本）+ preflight + FlowRun 草稿，
+     * 返回 FlowRun id。{@code uid} 用于保证 projectCode/majorNo 全局唯一（不主动清库只断言自建行）。
+     * <p>
+     * FULL_RELEASE 只能绑 BASELINE（validateFlowTypeContext 校验），故烟测/分层均用基线版本跑 FULL_RELEASE，
+     * INCREMENT_RELEASE + INCREMENT 版本组合留给专项测试。
+     */
+    protected Long provisionFlowRun(long uid) {
+        Map<String, Object> proj = post("/spk/ipd/projects", Map.of(
+                "projectCode", "E2E-" + uid,
+                "name", "E2E项目" + uid,
+                "objective", "端到端集成测试",
+                "ownerUserId", 1,
+                "plannedEndAt", "2026-12-31T00:00:00"));
+        Long projectId = ((Number) proj.get("id")).longValue();
+
+        Map<String, Object> mr = post("/spk/ipd/projects/" + projectId + "/major-releases", Map.of(
+                "majorNo", (int) (uid % 100000) + 1,
+                "name", "E2E大版本" + uid,
+                "objective", "E2E大版本目标",
+                "scopeSummary", "e2e scope",
+                "ownerUserId", 1,
+                "createBaselineVersion", true));
+        Long baselineVersionId = ((Number) mr.get("baselineVersionId")).longValue();
+
+        post("/spk/ipd/flow-runs/preflight", Map.of(
+                "projectId", projectId, "versionId", baselineVersionId, "flowType", "FULL_RELEASE"));
+        Map<String, Object> fr = post("/spk/ipd/flow-runs", Map.of(
+                "projectId", projectId, "versionId", baselineVersionId, "flowType", "FULL_RELEASE"));
+        return ((Number) fr.get("id")).longValue();
+    }
+
+    /**
+     * 等待并返回当前 flowRun 的首个 todo 审批任务（client 端按 flowRunId 过滤 approval-tasks?type=todo）。
+     * 超时抛 {@link org.awaitility.core.ConditionTimeoutError}——todo 不出现说明管道未通，测试理应失败。
+     * fast-mode 桩同步跑完 serviceTask 到 receiveTask，应在数秒~数十秒内出现。
+     */
+    @SuppressWarnings("unchecked")
+    protected Map<String, Object> awaitFirstTodo(Long flowRunId, Duration atMost) {
+        AtomicReference<Map<String, Object>> t = new AtomicReference<>();
+        Awaitility.await()
+                .atMost(atMost)
+                .pollInterval(Duration.ofSeconds(3))
+                .untilAsserted(() -> {
+                    Map<String, Object> data = get("/spk/ipd/approval-tasks?type=todo");
+                    List<Map<String, Object>> all = extractList(data);
+                    List<Map<String, Object>> mine = all.stream()
+                            .filter(x -> flowRunId.toString().equals(String.valueOf(x.get("flowRunId"))))
+                            .toList();
+                    assertTrue(!mine.isEmpty(),
+                            "todo 审批门未出现（FlowRun=" + flowRunId
+                                    + " 仍卡在 serviceTask/未到 receiveTask；当前用户 todo 总数=" + all.size() + ")");
+                    t.set(mine.get(0));
+                });
+        return t.get();
+    }
+
+    /** 立即查询当前 flowRun 是否还有 todo 审批门（非阻塞，供全流程慢测循环判断流程是否已尽）。 */
+    @SuppressWarnings("unchecked")
+    protected boolean hasTodo(Long flowRunId) {
+        Map<String, Object> data = get("/spk/ipd/approval-tasks?type=todo");
+        return extractList(data).stream()
+                .anyMatch(x -> flowRunId.toString().equals(String.valueOf(x.get("flowRunId"))));
+    }
+
+    /** 立即取当前 flowRun 的首个 todo 审批任务，无则返回 null（非阻塞）。 */
+    @SuppressWarnings("unchecked")
+    protected Map<String, Object> firstTodo(Long flowRunId) {
+        Map<String, Object> data = get("/spk/ipd/approval-tasks?type=todo");
+        return extractList(data).stream()
+                .filter(x -> flowRunId.toString().equals(String.valueOf(x.get("flowRunId"))))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * APPROVE 当前 flowRun 的首个 todo 审批门（非阻塞取，无则返回 false）：取决策包 →
+     * candidateActions 首个 enabled.action + decisionPackageHash + forceOverride=true → POST decisions。
+     * 供全流程慢测循环：返回 false 表示无 todo 可推（流程已尽或推进中 serviceTask 尚未到下一 receiveTask）。
+     */
+    protected boolean approveFirstTodo(Long flowRunId, String reason) {
+        Map<String, Object> task = firstTodo(flowRunId);
+        if (task == null) {
+            return false;
+        }
+        String taskId = taskIdOf(task);
+        Map<String, Object> pkg = get("/spk/ipd/approval-tasks/" + taskId + "/decision-package");
+        String hash = pkg.get("decisionPackageHash") == null ? null
+                : String.valueOf(pkg.get("decisionPackageHash"));
+        String decision = pickDecisionAction(pkg);
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("decision", decision);
+        body.put("reason", reason);
+        if (hash != null) {
+            body.put("decisionPackageHash", hash);
+        }
+        body.put("forceOverride", true);
+        post("/spk/ipd/approval-tasks/" + taskId + "/decisions", body);
+        return true;
+    }
+
+    /** 从决策包 candidateActions 取首个 enabled 的 action 作为 decision 值；兜底 APPROVE。 */
+    @SuppressWarnings("unchecked")
+    protected String pickDecisionAction(Map<String, Object> pkg) {
+        List<Map<String, Object>> actions = extractList(pkg.get("candidateActions"));
+        for (Map<String, Object> a : actions) {
+            Object enabled = a.get("enabled");
+            if (enabled == null || Boolean.parseBoolean(String.valueOf(enabled))) {
+                Object action = a.get("action");
+                if (action != null) {
+                    return String.valueOf(action);
+                }
+            }
+        }
+        return "APPROVE";
+    }
+
+    /**
+     * 兜底直查 spk_task_contract 行：SpkTaskContractDO 无 flowRunId 字段，关联键是 processInstanceId
+     * （列 process_instance_id），businessKey 是 "IPD:<runNo>" 非 projectId，故走 flowRunId→pid→contract 两步查。
+     */
+    protected String processInstanceIdOf(Long flowRunId) {
+        return jdbc.queryForObject(
+                "SELECT process_instance_id FROM spk_ipd_flow_run WHERE id = ?", String.class, flowRunId);
+    }
+
+    protected int contractCountByPid(String pid) {
+        Integer c = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM spk_task_contract WHERE process_instance_id = ?", Integer.class, pid);
+        return c == null ? 0 : c;
     }
 }

@@ -4,10 +4,12 @@ import cn.iocoder.yudao.module.bpm.api.event.BpmProcessInstanceStatusEvent;
 import cn.iocoder.yudao.module.bpm.api.event.BpmProcessInstanceStatusEventListener;
 import cn.iocoder.yudao.module.bpm.enums.task.BpmProcessInstanceStatusEnum;
 import cn.iocoder.yudao.module.spkdelivery.service.feedback.SpkFeedbackService;
+import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdFlowRunService;
 import cn.iocoder.yudao.module.spkdelivery.service.sunset.SpkSunsetService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 
 /**
  * SPK-OS IPD 主流程结束监听器
@@ -30,6 +32,9 @@ public class SpkIpdFlowFinishListener extends BpmProcessInstanceStatusEventListe
     private SpkSunsetService sunsetService;
     @Resource
     private SpkFeedbackService feedbackService;
+    @Resource
+    @Lazy // FlowRunService 间接依赖 BPM 引擎，延迟加载避免与监听器初始化循环
+    private SpkIpdFlowRunService flowRunService;
 
     @Override
     protected String getProcessDefinitionKey() {
@@ -42,9 +47,15 @@ public class SpkIpdFlowFinishListener extends BpmProcessInstanceStatusEventListe
         Integer status = event.getStatus();
         log.info("[onEvent][IPD 流程状态变更 instanceId={} status={} businessKey={} reason={}]",
                 instanceId, status, event.getBusinessKey(), event.getReason());
-        // 仅在流程正常通过（APPROVE）时启动 R8 退市 + R7 反馈
+        // 仅在流程正常通过（APPROVE）时回写 FlowRun COMPLETED + 启动 R8 退市 + 采集 R7 反馈
         if (!BpmProcessInstanceStatusEnum.APPROVE.getStatus().equals(status)) {
             return;
+        }
+        // P0：流程 APPROVE → 回写 FlowRun 终态 COMPLETED（此前无人置位致永远 RUNNING）
+        try {
+            flowRunService.markCompletedByInstance(instanceId);
+        } catch (Exception e) {
+            log.error("[onEvent][回写 FlowRun COMPLETED 失败 instanceId={}]", instanceId, e);
         }
         try {
             // R8 退市归档

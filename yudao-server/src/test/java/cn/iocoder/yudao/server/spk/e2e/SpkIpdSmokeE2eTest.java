@@ -142,20 +142,4 @@ class SpkIpdSmokeE2eTest extends SpkIpdE2eBase {
         assertTrue(contractCount != null && contractCount > 0,
                 "spk_task_contract 无 process_instance_id=" + pid + " 的行（dispatchActivityAsync 未落 contract）");
     }
-
-    /** 从决策包 candidateActions 取首个 enabled 的 action 作为 decision 值；兜底 APPROVE。 */
-    @SuppressWarnings("unchecked")
-    private String pickDecisionAction(Map<String, Object> pkg) {
-        List<Map<String, Object>> actions = extractList(pkg.get("candidateActions"));
-        for (Map<String, Object> a : actions) {
-            Object enabled = a.get("enabled");
-            if (enabled == null || Boolean.parseBoolean(String.valueOf(enabled))) {
-                Object action = a.get("action");
-                if (action != null) {
-                    return String.valueOf(action);
-                }
-            }
-        }
-        return "APPROVE";
-    }
 }

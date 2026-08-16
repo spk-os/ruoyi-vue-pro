@@ -491,6 +491,37 @@ public class SpkIpdFlowRunService {
         return flowRunMapper.selectByProcessInstanceId(processInstanceId);
     }
 
+    /**
+     * 流程正常结束（BpmProcessInstanceStatusEnum.APPROVE）回写 FlowRun 终态：COMPLETED + endedAt。
+     * <p>
+     * 由 {@code SpkIpdFlowFinishListener} 在流程实例 APPROVE 事件中回调，镜像
+     * {@code BpmOALeaveStatusListener.onEvent → leaveService.updateLeaveStatus} 模式。
+     * <p>
+     * P0 补救：此前 {@code start} 置 RUNNING 后无人再置 COMPLETED，导致流程跑完 FlowRun 永远 RUNNING
+     * （驾驶舱显示错误、C-14 违规）。本方法闭合状态机至终态。
+     * <b>终态保护</b>：已 COMPLETED/CANCELLED/FAILED/SUPERSEDED 的不重复置位（人工取消/失败优先）。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void markCompletedByInstance(String processInstanceId) {
+        if (processInstanceId == null || processInstanceId.isBlank()) {
+            return;
+        }
+        SpkIpdFlowRunDO run = flowRunMapper.selectByProcessInstanceId(processInstanceId);
+        if (run == null) {
+            log.warn("[markCompletedByInstance][未找到 processInstanceId={} 的 FlowRun]", processInstanceId);
+            return;
+        }
+        if (STATUS_COMPLETED.equals(run.getStatus()) || STATUS_CANCELLED.equals(run.getStatus())
+                || STATUS_FAILED.equals(run.getStatus()) || STATUS_SUPERSEDED.equals(run.getStatus())) {
+            return;
+        }
+        run.setStatus(STATUS_COMPLETED);
+        run.setEndedAt(LocalDateTime.now());
+        flowRunMapper.updateById(run);
+        log.info("[markCompletedByInstance][flowRunId={} processInstanceId={} → COMPLETED]",
+                run.getId(), processInstanceId);
+    }
+
     public PageResult<SpkIpdFlowRunDO> page(SpkIpdFlowRunPageReqVO req) {
         return flowRunMapper.selectPage(req);
     }
