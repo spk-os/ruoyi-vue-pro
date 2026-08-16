@@ -20,10 +20,10 @@
         <el-input v-model="formData.description" :rows="3" type="textarea" placeholder="说明项目边界与不在范围内的事项" />
       </el-form-item>
       <el-form-item label="计划开始" prop="plannedStartAt">
-        <el-date-picker v-model="formData.plannedStartAt" class="!w-full" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
+        <el-date-picker v-model="formData.plannedStartAt" class="!w-full" type="datetime" value-format="x" />
       </el-form-item>
       <el-form-item label="计划完成" prop="plannedEndAt">
-        <el-date-picker v-model="formData.plannedEndAt" class="!w-full" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
+        <el-date-picker v-model="formData.plannedEndAt" class="!w-full" type="datetime" value-format="x" />
       </el-form-item>
     </el-form>
     <el-alert class="mt-10px" type="info" :closable="false" show-icon>
@@ -57,8 +57,8 @@ const formData = reactive({
   ownerUserId: undefined as number | undefined,
   objective: '',
   description: '',
-  plannedStartAt: '',
-  plannedEndAt: ''
+  plannedStartAt: null,
+  plannedEndAt: null
 })
 const rules = {
   name: [{ required: true, message: '项目名称不能为空', trigger: 'blur' }],
@@ -77,7 +77,7 @@ const open = async (id?: number) => {
     Object.assign(formData, {
       name: d.name, projectCode: d.projectCode, ownerUserId: d.ownerUserId,
       objective: d.objective || '', description: d.description || '',
-      plannedStartAt: d.plannedStartAt || '', plannedEndAt: d.plannedEndAt || ''
+      plannedStartAt: d.plannedStartAt || null, plannedEndAt: d.plannedEndAt || null
     })
   } else {
     isUpdate.value = false
@@ -87,7 +87,7 @@ const open = async (id?: number) => {
 const reset = () => {
   Object.assign(formData, {
     name: '', projectCode: '', ownerUserId: undefined,
-    objective: '', description: '', plannedStartAt: '', plannedEndAt: ''
+    objective: '', description: '', plannedStartAt: null, plannedEndAt: null
   })
 }
 const close = () => { visible.value = false; reset() }

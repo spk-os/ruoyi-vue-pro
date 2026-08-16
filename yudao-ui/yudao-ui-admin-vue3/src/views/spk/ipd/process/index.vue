@@ -35,7 +35,7 @@
       <el-form-item label="发起时间" prop="createTime">
         <el-date-picker
           v-model="queryParams.createTime"
-          value-format="YYYY-MM-DD HH:mm:ss"
+          value-format="x"
           type="daterange"
           start-placeholder="开始日期"
           end-placeholder="结束日期"

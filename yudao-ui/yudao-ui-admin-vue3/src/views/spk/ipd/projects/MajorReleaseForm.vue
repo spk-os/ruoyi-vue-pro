@@ -25,10 +25,10 @@
       </el-form-item>
       <template v-if="formData.createBaselineVersion">
         <el-form-item label="基线计划开始">
-          <el-date-picker v-model="formData.baselinePlan.plannedStartAt" class="!w-full" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
+          <el-date-picker v-model="formData.baselinePlan.plannedStartAt" class="!w-full" type="datetime" value-format="x" />
         </el-form-item>
         <el-form-item label="基线计划完成">
-          <el-date-picker v-model="formData.baselinePlan.plannedEndAt" class="!w-full" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
+          <el-date-picker v-model="formData.baselinePlan.plannedEndAt" class="!w-full" type="datetime" value-format="x" />
         </el-form-item>
       </template>
     </el-form>
@@ -58,7 +58,7 @@ const formData = reactive({
   scopeSummary: '',
   ownerUserId: undefined as number | undefined,
   createBaselineVersion: true,
-  baselinePlan: { plannedStartAt: '', plannedEndAt: '' }
+  baselinePlan: { plannedStartAt: null, plannedEndAt: null }
 })
 const rules = {
   majorNo: [{ required: true, message: '序号不能为空', trigger: 'blur' }],

@@ -78,9 +78,21 @@ public class SpkVerifierService {
                 .setPrompt(prompt)
                 .setInstanceId(processInstanceId)
                 .setNodeKey("verify:" + artifact.getArtifactId());
-        SpkAgentDispatchResult result = frameworkAdapter.dispatchTask(req);
-        // 4. 解析结论
-        ParsedVerdict verdict = parseVerdict(result.getResult());
+        // 4. 调 LLM 验证（NativeAiAdapter 已重试 transient）。重试耗尽仍失败时降级 verdict=ERROR
+        //    继续落收据+证据——主产物已真实生成，验证未决是风险标记（落证据）非管道停止，
+        //    避免单次 LLM 超时致整条 IPD activity FAILED→receiveTask 永不推进→FlowRun 永卡 RUNNING。
+        ParsedVerdict verdict;
+        try {
+            SpkAgentDispatchResult result = frameworkAdapter.dispatchTask(req);
+            verdict = parseVerdict(result.getResult());
+        } catch (Exception e) {
+            log.error("[verify][activityRunId={} artifactId={} 验证器 LLM 调用失败（重试耗尽），"
+                    + "降级 verdict=ERROR 推进，主产物已真实生成]", activityRunId, artifact.getArtifactId(), e);
+            verdict = new ParsedVerdict();
+            verdict.conclusion = "ERROR";
+            verdict.summary = "验证器 LLM 调用失败（已重试）：" + truncate(e.getMessage(), 200);
+            verdict.pointsJson = "[]";
+        }
         // 5. 写 verification receipt
         String receiptId = "vrf-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         SpkVerificationReceiptDO receipt = SpkVerificationReceiptDO.builder()

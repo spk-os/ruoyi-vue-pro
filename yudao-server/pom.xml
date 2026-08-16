@@ -20,12 +20,21 @@
     </description>
     <url>https://github.com/YunaiV/ruoyi-vue-pro</url>
 
-    <!-- SPK-OS: surefire 默认排除 e2e/e2e-full tag 的慢测，命令行 -Dsurefire.excludedGroups= 覆盖为空跑 E2E -->
+    <!-- SPK-OS: surefire 默认排除 e2e/e2e-full/e2e-cortex tag 的慢测（e2e-cortex 调真实 spk-cortex 真实 LLM，
+         最慢且依赖真实服务在线，绝不默认跑），命令行 -Dsurefire.excludedGroups= 覆盖为空跑 E2E -->
     <properties>
-        <surefire.excludedGroups>e2e,e2e-full</surefire.excludedGroups>
+        <surefire.excludedGroups>e2e,e2e-full,e2e-cortex</surefire.excludedGroups>
     </properties>
 
     <dependencies>
+        <!-- SPK-OS: Spring Boot 4.1.0 quartz autoconfigure (QuartzAutoConfiguration$JdbcStoreTypeConfiguration)
+             运行时引用 spring-boot-sql 的 DatabaseInitializationDependencyConfigurer，但
+             spring-boot-quartz-4.1.0.pom 未声明该依赖（Boot4 拆模块 packaging 缺口）→ runtime classpath
+             缺失致启动 BeanDefinitionStoreException(FileNotFoundException)。显式补 runtime 依赖修复。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-sql</artifactId>
+        </dependency>
         <dependency>
             <groupId>cn.iocoder.boot</groupId>
             <artifactId>yudao-module-system</artifactId>
@@ -191,11 +200,15 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- SPK-OS: JDBC 直查断言（spk_task_contract/spk_artifact 行）。spring-boot-starter-test 已传递，兜底显式声明。 -->
+        <!-- SPK-OS: spring-boot-jdbc（含 DataSourceProperties）运行时必需。
+             Boot 4 拆模块后 DataSourceProperties 从 spring-boot-autoconfigure 主 jar 移至
+             spring-boot-jdbc 子 jar；mybatis-plus 传递路径在 Boot4 不稳定（曾因本 pom 显式
+             test scope 声明被 maven 最近者优先降级为 test，致运行时 classpath 缺该类 →
+             启动 ClassNotFoundException）。显式 compile scope 同时覆盖运行时与测试
+             （测试 JDBC 直查 spk_task_contract/spk_artifact 行亦用此依赖）。 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
-            <scope>test</scope>
         </dependency>
 
     </dependencies>

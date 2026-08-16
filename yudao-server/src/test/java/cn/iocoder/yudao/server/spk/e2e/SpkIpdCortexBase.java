@@ -3,20 +3,15 @@ package cn.iocoder.yudao.server.spk.e2e;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestInstance;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.client.RestTemplate;
 
-import javax.sql.DataSource;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -26,55 +21,43 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * SPK-OS IPD 端到端集成测试基座。
+ * SPK-OS IPD 对外接口真实端到端测试基座（spk-cortex 真实服务）。
  * <p>
- * 设计要点：
+ * 与 {@link SpkIpdE2eBase}（{@code @SpringBootTest} 内嵌 48081 + e2e-test 桩 profile）的本质区别：
  * <ul>
- *   <li>{@code webEnvironment = DEFINED_PORT}：触发器 URL 回环依赖固定端口 48081（见
- *       application-e2e-test.yaml 闭环命脉注释）。{@code @LocalServerPort}（Spring Boot 4 新包
- *       {@code web.server}）注入 48081。</li>
- *   <li>{@code @TestInstance(PER_CLASS)}：使非 static {@code @BeforeAll} 能访问注入字段（port/dataSource），
- *       登录一次性完成而非每方法重复登录。</li>
- *   <li>Spring Boot 4 已移除 TestRestTemplate，改用标准 {@link RestTemplate} + no-op error handler：
- *       4xx/5xx 不抛异常，走 CommonResult.code 断言（yudao 异常统一 200 + CommonResult）。</li>
- *   <li>{@code @ActiveProfiles({"dev","e2e-test"})}：叠加在 dev 之上复用真 PG/Redis/exclude，
- *       e2e-test 只覆盖 adapter=native-ai + fast-mode=true + port + quartz 关闭 + self.base-url 回环。</li>
- *   <li>断言走纯 API（timeline/artifacts/evidence/decisions 即"每个环节产物与信息"验证口），
- *       JdbcTemplate 仅兜底直查 spk_task_contract 行。</li>
- *   <li>登录用 admin/admin123 + tenant-id:1；dev 关闭验证码。</li>
+ *   <li><b>不起内嵌服务</b>：纯 {@link RestTemplate} 调真实在跑的 spk-cortex（systemd, 48080）对外
+ *       admin-api，验证的是真实部署的服务，不是测试自起的服务自调——杜绝"测试服务与生产服务行为不一致"。</li>
+ *   <li><b>不连 DB</b>：不注入 {@code DataSource}/{@code JdbcTemplate}，铁律"只调 spk-cortex 接口，
+ *       不往 DB 灌数据造假"。processInstanceId 等通过对外接口 GET flow-run 获取。</li>
+ *   <li><b>真实模式</b>：依赖 spk-cortex 跑 dev profile（adapter=omnigent + fast-mode=false）真实调 LLM；
+ *       mode=test 仅 prompt 轻量化，产物仍是真实 LLM 报告，<b>非</b> fast-mode 桩 {@code {"overall":"PASS"}}。</li>
  * </ul>
+ * baseUrl 用 {@code -Dcortex.base.url} 覆盖（默认 {@code http://192.168.56.101:48080}）。
+ * 登录 admin/admin123 + tenant-id:1；dev 关闭验证码。
  *
  * @author SPK-OS
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
-@ActiveProfiles({"dev", "e2e-test"})
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public abstract class SpkIpdE2eBase {
+public abstract class SpkIpdCortexBase {
 
     protected static final String BASE = "/admin-api";
 
-    @LocalServerPort
-    protected int port;
-
-    @Autowired
-    protected DataSource dataSource;
+    /** 真实 spk-cortex 服务地址；可用 -Dcortex.base.url 覆盖。 */
+    protected static final String CORTEX_URL =
+            System.getProperty("cortex.base.url", "http://192.168.56.101:48080");
 
     protected RestTemplate restTemplate;
-    protected JdbcTemplate jdbc;
     protected String token;
 
     @BeforeAll
     void baseSetUp() {
         restTemplate = new RestTemplate();
-        // yudao 异常统一返回 200 + CommonResult(code!=0)，RestTemplate 默认不因业务码抛异常；
-        // admin 持有效 token 访问受保护端点不会 401，故无需自定义 error handler。
-        jdbc = new JdbcTemplate(dataSource);
         token = login("admin", "admin123");
-        assertNotNull(token, "登录未拿到 accessToken，管道未通");
+        assertNotNull(token, "登录未拿到 accessToken，spk-cortex 管道未通：" + CORTEX_URL);
     }
 
-    private String url(String path) {
-        return "http://127.0.0.1:" + port + BASE + path;
+    protected String url(String path) {
+        return CORTEX_URL + BASE + path;
     }
 
     // ==================== HTTP helpers ====================
@@ -124,24 +107,7 @@ public abstract class SpkIpdE2eBase {
         return (Map<String, Object>) r.get("data");
     }
 
-    /**
-     * POST（带鉴权 + Idempotency-Key），<b>不</b>剥壳也<b>不</b>断言业务码——返回完整 CommonResult
-     * （含 code/data/msg）。用于断言"应被状态机拒绝"的失败路径：调用方断言 {@code code != 0}。
-     */
-    @SuppressWarnings("unchecked")
-    protected Map<String, Object> postRaw(String path, Object body, String idempotencyKey) {
-        HttpHeaders h = authHeaders();
-        if (idempotencyKey != null) {
-            h.set("Idempotency-Key", idempotencyKey);
-        }
-        ResponseEntity<Map> resp = restTemplate.postForEntity(
-                url(path), new HttpEntity<>(body, h), Map.class);
-        Map<String, Object> r = resp.getBody();
-        assertNotNull(r, "POST " + path + " 返回空");
-        return r;
-    }
-
-    /** GET（带鉴权），剥 CommonResult 壳返回 data（假设为 Map，用于单对象/分页 PageResult 端点）。 */
+    /** GET（带鉴权），剥 CommonResult 壳返回 data。 */
     @SuppressWarnings("unchecked")
     protected Map<String, Object> get(String path) {
         ResponseEntity<Map> resp = restTemplate.exchange(
@@ -152,7 +118,7 @@ public abstract class SpkIpdE2eBase {
         return (Map<String, Object>) r.get("data");
     }
 
-    /** GET（带鉴权），剥 CommonResult 壳返回列表 data（兼容裸 List 与 PageResult{list:[...]} 两种形态）。 */
+    /** GET（带鉴权），剥 CommonResult 壳返回列表 data（兼容裸 List 与 PageResult{list:[...]}）。 */
     @SuppressWarnings("unchecked")
     protected List<Map<String, Object>> getList(String path) {
         ResponseEntity<Map> resp = restTemplate.exchange(
@@ -165,9 +131,6 @@ public abstract class SpkIpdE2eBase {
 
     // ==================== 数据形态 helpers ====================
 
-    /**
-     * 从 CommonResult.data 抽取列表：兼容裸 List 与 PageResult（{list:[...]}）两种形态。
-     */
     @SuppressWarnings("unchecked")
     protected List<Map<String, Object>> extractList(Object data) {
         if (data instanceof List) {
@@ -187,7 +150,6 @@ public abstract class SpkIpdE2eBase {
         return List.of();
     }
 
-    /** 取审批任务 id（兼容 id / taskId 两种字段名）。 */
     protected String taskIdOf(Map<String, Object> task) {
         Object id = task.get("id");
         if (id == null) {
@@ -196,35 +158,26 @@ public abstract class SpkIpdE2eBase {
         return id == null ? null : String.valueOf(id);
     }
 
-    // ==================== Awaitility helpers ====================
-
-    protected void awaitAtMost(Duration d) {
-        Awaitility.setDefaultTimeout(d);
-    }
-
-    // ==================== IPD 流程 helpers（分层/全流程慢测共用） ====================
+    // ==================== IPD 流程 helpers（纯接口，不连 DB）====================
 
     /**
-     * 创建一个可启动的 IPD 流程上下文：项目 + 大版本（自动建基线版本）+ preflight + FlowRun 草稿，
-     * 返回 FlowRun id。{@code uid} 用于保证 projectCode/majorNo 全局唯一（不主动清库只断言自建行）。
-     * <p>
-     * FULL_RELEASE 只能绑 BASELINE（validateFlowTypeContext 校验），故烟测/分层均用基线版本跑 FULL_RELEASE，
-     * INCREMENT_RELEASE + INCREMENT 版本组合留给专项测试。
+     * 通过对外接口创建一个可启动的 IPD 流程上下文：项目 + 大版本（自动建基线版本）+ preflight + FlowRun 草稿。
+     * 全部走 spk-cortex admin-api，不连 DB。uid 保证 projectCode/majorNo 全局唯一。
      */
     protected Long provisionFlowRun(long uid) {
         Map<String, Object> proj = post("/spk/ipd/projects", Map.of(
-                "projectCode", "E2E-" + uid,
-                "name", "E2E项目" + uid,
-                "objective", "端到端集成测试",
+                "projectCode", "E2ECORTEX-" + uid,
+                "name", "E2E真实项目" + uid,
+                "objective", "对外接口真实端到端测试",
                 "ownerUserId", 1,
-                "plannedEndAt", 1798588800000L)); // = 2026-12-31 00:00:00 UTC+8 毫秒时间戳（避免字符串 ISO 回退 0 落 1970）
+                "plannedEndAt", 1798588800000L)); // = 2026-12-31 00:00:00 UTC+8 毫秒时间戳；字符串 ISO 会致 TimestampLocalDateTimeDeserializer 回退 0→落 1970
         Long projectId = ((Number) proj.get("id")).longValue();
 
         Map<String, Object> mr = post("/spk/ipd/projects/" + projectId + "/major-releases", Map.of(
                 "majorNo", (int) (uid % 100000) + 1,
-                "name", "E2E大版本" + uid,
-                "objective", "E2E大版本目标",
-                "scopeSummary", "e2e scope",
+                "name", "E2E真实大版本" + uid,
+                "objective", "E2E真实大版本目标",
+                "scopeSummary", "e2e-cortex scope",
                 "ownerUserId", 1,
                 "createBaselineVersion", true));
         Long baselineVersionId = ((Number) mr.get("baselineVersionId")).longValue();
@@ -236,11 +189,7 @@ public abstract class SpkIpdE2eBase {
         return ((Number) fr.get("id")).longValue();
     }
 
-    /**
-     * 等待并返回当前 flowRun 的首个 todo 审批任务（client 端按 flowRunId 过滤 approval-tasks?type=todo）。
-     * 超时抛 {@link org.awaitility.core.ConditionTimeoutError}——todo 不出现说明管道未通，测试理应失败。
-     * fast-mode 桩同步跑完 serviceTask 到 receiveTask，应在数秒~数十秒内出现。
-     */
+    /** 等待并返回当前 flowRun 的首个 todo 审批任务（接口轮询，真实 LLM 慢需较长 atMost）。 */
     @SuppressWarnings("unchecked")
     protected Map<String, Object> awaitFirstTodo(Long flowRunId, Duration atMost) {
         AtomicReference<Map<String, Object>> t = new AtomicReference<>();
@@ -255,13 +204,12 @@ public abstract class SpkIpdE2eBase {
                             .toList();
                     assertTrue(!mine.isEmpty(),
                             "todo 审批门未出现（FlowRun=" + flowRunId
-                                    + " 仍卡在 serviceTask/未到 receiveTask；当前用户 todo 总数=" + all.size() + ")");
+                                    + " 仍卡在 serviceTask 真实 LLM 执行中；当前用户 todo 总数=" + all.size() + ")");
                     t.set(mine.get(0));
                 });
         return t.get();
     }
 
-    /** 立即查询当前 flowRun 是否还有 todo 审批门（非阻塞，供全流程慢测循环判断流程是否已尽）。 */
     @SuppressWarnings("unchecked")
     protected boolean hasTodo(Long flowRunId) {
         Map<String, Object> data = get("/spk/ipd/approval-tasks?type=todo");
@@ -269,7 +217,6 @@ public abstract class SpkIpdE2eBase {
                 .anyMatch(x -> flowRunId.toString().equals(String.valueOf(x.get("flowRunId"))));
     }
 
-    /** 立即取当前 flowRun 的首个 todo 审批任务，无则返回 null（非阻塞）。 */
     @SuppressWarnings("unchecked")
     protected Map<String, Object> firstTodo(Long flowRunId) {
         Map<String, Object> data = get("/spk/ipd/approval-tasks?type=todo");
@@ -280,9 +227,8 @@ public abstract class SpkIpdE2eBase {
     }
 
     /**
-     * APPROVE 当前 flowRun 的首个 todo 审批门（非阻塞取，无则返回 false）：取决策包 →
-     * candidateActions 首个 enabled.action + decisionPackageHash + forceOverride=true → POST decisions。
-     * 供全流程慢测循环：返回 false 表示无 todo 可推（流程已尽或推进中 serviceTask 尚未到下一 receiveTask）。
+     * APPROVE 当前 flowRun 的首个 todo 审批门（纯接口）：取决策包 → candidateActions 首个 enabled.action
+     * + decisionPackageHash + forceOverride=true → POST decisions。返回 false 表示无 todo 可推。
      */
     protected boolean approveFirstTodo(Long flowRunId, String reason) {
         Map<String, Object> task = firstTodo(flowRunId);
@@ -294,7 +240,7 @@ public abstract class SpkIpdE2eBase {
         String hash = pkg.get("decisionPackageHash") == null ? null
                 : String.valueOf(pkg.get("decisionPackageHash"));
         String decision = pickDecisionAction(pkg);
-        Map<String, Object> body = new java.util.HashMap<>();
+        Map<String, Object> body = new HashMap<>();
         body.put("decision", decision);
         body.put("reason", reason);
         if (hash != null) {
@@ -305,7 +251,6 @@ public abstract class SpkIpdE2eBase {
         return true;
     }
 
-    /** 从决策包 candidateActions 取首个 enabled 的 action 作为 decision 值；兜底 APPROVE。 */
     @SuppressWarnings("unchecked")
     protected String pickDecisionAction(Map<String, Object> pkg) {
         List<Map<String, Object>> actions = extractList(pkg.get("candidateActions"));
@@ -321,18 +266,10 @@ public abstract class SpkIpdE2eBase {
         return "APPROVE";
     }
 
-    /**
-     * 兜底直查 spk_task_contract 行：SpkTaskContractDO 无 flowRunId 字段，关联键是 processInstanceId
-     * （列 process_instance_id），businessKey 是 "IPD:<runNo>" 非 projectId，故走 flowRunId→pid→contract 两步查。
-     */
+    /** 通过对外接口 GET flow-run 取 processInstanceId（不连 DB）。 */
     protected String processInstanceIdOf(Long flowRunId) {
-        return jdbc.queryForObject(
-                "SELECT process_instance_id FROM spk_ipd_flow_run WHERE id = ?", String.class, flowRunId);
-    }
-
-    protected int contractCountByPid(String pid) {
-        Integer c = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM spk_task_contract WHERE process_instance_id = ?", Integer.class, pid);
-        return c == null ? 0 : c;
+        Map<String, Object> run = get("/spk/ipd/flow-runs/" + flowRunId);
+        Object pid = run.get("processInstanceId");
+        return pid == null ? null : String.valueOf(pid);
     }
 }

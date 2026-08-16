@@ -93,12 +93,13 @@ public class NativeAiAdapter implements FrameworkAdapter {
                     + "<<<SUMMARY>>>\n{200 字以内的中文摘要}\n"
                     + "<<<CONCLUSION>>>\n{结论：PASS 或 FAIL，加一句话说明}\n";
         }
-        // 4. 同步发送消息
+        // 4. 同步发送消息（transient 网络/超时/网关抖动重试，避免单次 SocketTimeoutException
+        //    致整条 IPD activity 失败卡死流程；重试耗尽仍失败则抛出由上游处理）
         AiChatMessageSendReqVO sendReqVO = new AiChatMessageSendReqVO();
         sendReqVO.setConversationId(conversationId);
         sendReqVO.setContent(prompt);
         sendReqVO.setUseContext(Boolean.TRUE);
-        AiChatMessageSendRespVO respVO = chatMessageService.sendMessage(sendReqVO, systemUserId);
+        AiChatMessageSendRespVO respVO = sendMessageWithRetry(sendReqVO, systemUserId);
         // 5. 取 receive.content 作为产物
         String content = (respVO != null && respVO.getReceive() != null) ? respVO.getReceive().getContent() : null;
         // Verifier 原样返回 LLM JSON（parseVerdict 解析 overall/summary/evidencePoints）；Lead 封装三段 JSON 供 route 解析
@@ -171,6 +172,40 @@ public class NativeAiAdapter implements FrameworkAdapter {
         }
         log.info("[dispatchTask][fast-mode instanceId={} nodeKey={} roleId={} done]", req.getInstanceId(), nodeKey, req.getRoleId());
         return result;
+    }
+
+    /**
+     * 同步发送 LLM 消息，对 transient（网络/超时/网关抖动）失败重试。
+     * <p>
+     * reasoning 模型单次 30~40s，偶发 {@code SocketTimeoutException}/{@code Socket closed}
+     * 不应让整条 IPD activity 失败卡死流程；重试 N 次后仍失败则抛出由上游处理。
+     * 验证器路径另在 {@code SpkVerifierService#verify} 做降级兜底，保证验证器重试耗尽
+     * 不阻断主产物推进（主产物已真实生成时验证未决是风险标记非管道停止）。
+     */
+    private AiChatMessageSendRespVO sendMessageWithRetry(AiChatMessageSendReqVO req, Long userId) {
+        int maxAttempts = 3;
+        Exception last = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return chatMessageService.sendMessage(req, userId);
+            } catch (Exception e) {
+                last = e;
+                if (attempt < maxAttempts) {
+                    long backoff = 3000L * attempt;
+                    log.warn("[sendMessage][attempt={}/{} 失败，{}ms 后重试] err={}",
+                            attempt, maxAttempts, backoff, e.toString());
+                    try {
+                        Thread.sleep(backoff);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("LLM 发送被中断", ie);
+                    }
+                } else {
+                    log.error("[sendMessage][重试 {} 次仍失败，抛出由上游处理] err={}", maxAttempts, e.toString());
+                }
+            }
+        }
+        throw new RuntimeException("LLM 调用重试 " + maxAttempts + " 次仍失败", last);
     }
 
     private Long getOrCreateConversation(SpkAgentDispatchReq req) {

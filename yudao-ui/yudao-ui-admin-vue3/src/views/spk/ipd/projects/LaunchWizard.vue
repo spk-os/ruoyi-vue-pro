@@ -25,7 +25,7 @@
           <el-input v-model="projForm.objective" type="textarea" :rows="2" placeholder="一句话目标" />
         </el-form-item>
         <el-form-item label="计划完成">
-          <el-date-picker v-model="projForm.plannedEndAt" type="date" value-format="YYYY-MM-DD" class="!w-full" />
+          <el-date-picker v-model="projForm.plannedEndAt" type="date" value-format="x" class="!w-full" />
         </el-form-item>
       </el-form>
 
@@ -38,7 +38,7 @@
           <el-input v-model="mrForm.name" placeholder="如 首个正式大版本" />
         </el-form-item>
         <el-form-item label="里程碑">
-          <el-date-picker v-model="mrForm.milestoneDate" type="date" value-format="YYYY-MM-DD" class="!w-full" />
+          <el-date-picker v-model="mrForm.milestoneDate" type="date" value-format="x" class="!w-full" />
         </el-form-item>
       </el-form>
 
@@ -123,7 +123,7 @@ const projForm = reactive({
   projectCode: '',
   ownerUserId: undefined as number | undefined,
   objective: '',
-  plannedEndAt: ''
+  plannedEndAt: null
 })
 const projRules = {
   name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }],
@@ -131,7 +131,7 @@ const projRules = {
   ownerUserId: [{ required: true, message: '请选择负责人', trigger: 'change' }]
 }
 
-const mrForm = reactive({ majorVersion: 'V1.0', name: '', milestoneDate: '' })
+const mrForm = reactive({ majorVersion: 'V1.0', name: '', milestoneDate: null })
 const mrRules = { majorVersion: [{ required: true, message: '请输入大版本号', trigger: 'blur' }] }
 
 const verForm = reactive({ versionNo: 'V1.0.0', name: '', type: 'MAINLINE' })
@@ -165,8 +165,8 @@ const open = async () => {
   readiness.value = null
   preflightMsg.value = ''
   flowForm.idempotencyKey = ''
-  Object.assign(projForm, { name: '', projectCode: '', ownerUserId: undefined, objective: '', plannedEndAt: '' })
-  Object.assign(mrForm, { majorVersion: 'V1.0', name: '', milestoneDate: '' })
+  Object.assign(projForm, { name: '', projectCode: '', ownerUserId: undefined, objective: '', plannedEndAt: null })
+  Object.assign(mrForm, { majorVersion: 'V1.0', name: '', milestoneDate: null })
   Object.assign(verForm, { versionNo: 'V1.0.0', name: '', type: 'MAINLINE' })
   flowForm.flowType = 'CONCEPT_DELIVERY'
   flowForm.flowCode = 'spk-ipd-concept'

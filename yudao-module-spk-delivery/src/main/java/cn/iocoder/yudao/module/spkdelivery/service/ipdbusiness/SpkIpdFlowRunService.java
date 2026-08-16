@@ -14,6 +14,7 @@ import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdVers
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdFlowRunMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdIssueCaseMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdVersionMapper;
+import cn.iocoder.yudao.module.spkdelivery.enums.SpkActivityStageEnum;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -64,6 +65,8 @@ public class SpkIpdFlowRunService {
     private SpkIpdProcessProfileService processProfileService;
     @Resource
     private HistoryService historyService;
+    @Resource
+    private SpkStageResolver stageResolver;
     private final ObjectMapper json = new ObjectMapper();
 
     /**
@@ -456,7 +459,22 @@ public class SpkIpdFlowRunService {
     public SpkIpdFlowRunDO getFlowRun(Long flowRunId) {
         SpkIpdFlowRunDO run = getFlowRunOrThrow(flowRunId);
         assertFlowRunAccess(run);
+        enrichCurrent(run);
         return run;
+    }
+
+    /**
+     * 实时覆盖 DO 的 currentStage/currentActivity：历史遗留 DO 仅 start 置 "concept" 后无回写点，
+     * 从 task_contract 取最新活动 phase/activityId 覆盖；COMPLETED → lifecycle。不碰引擎，纯读。
+     */
+    private void enrichCurrent(SpkIpdFlowRunDO run) {
+        if (run == null) {
+            return;
+        }
+        run.setCurrentStage(stageResolver.resolveCurrentStage(
+                run.getProcessInstanceId(), run.getCurrentStage(), run.getStatus()));
+        run.setCurrentActivity(stageResolver.resolveCurrentActivity(
+                run.getProcessInstanceId(), run.getCurrentActivity()));
     }
 
     /**
@@ -517,6 +535,9 @@ public class SpkIpdFlowRunService {
         }
         run.setStatus(STATUS_COMPLETED);
         run.setEndedAt(LocalDateTime.now());
+        // Bug2-B：终态回写 current_stage=lifecycle（start 置 concept 后无推进回写点，DO 静态值
+        // 永停 concept；中间阶段靠读端 enrichCurrent 实时算覆盖，终态在此落库快照）
+        run.setCurrentStage(SpkActivityStageEnum.LIFECYCLE.getCode());
         flowRunMapper.updateById(run);
         log.info("[markCompletedByInstance][flowRunId={} processInstanceId={} → COMPLETED]",
                 run.getId(), processInstanceId);
@@ -537,7 +558,11 @@ public class SpkIpdFlowRunService {
         result.put("runNo", run.getRunNo());
         result.put("businessKey", run.getBusinessKey());
         result.put("status", run.getStatus());
-        result.put("currentStage", run.getCurrentStage());
+        // Bug2-A：currentStage/currentActivity 实时算（DO 静态值永停 concept，读端覆盖）
+        result.put("currentStage", stageResolver.resolveCurrentStage(
+                run.getProcessInstanceId(), run.getCurrentStage(), run.getStatus()));
+        result.put("currentActivity", stageResolver.resolveCurrentActivity(
+                run.getProcessInstanceId(), run.getCurrentActivity()));
         result.put("health", run.getHealth());
         result.put("processInstanceId", run.getProcessInstanceId());
 

@@ -27,10 +27,10 @@
         </el-select>
       </el-form-item>
       <el-form-item label="计划开始">
-        <el-date-picker v-model="formData.plannedStartAt" class="!w-full" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
+        <el-date-picker v-model="formData.plannedStartAt" class="!w-full" type="datetime" value-format="x" />
       </el-form-item>
       <el-form-item label="计划完成">
-        <el-date-picker v-model="formData.plannedEndAt" class="!w-full" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
+        <el-date-picker v-model="formData.plannedEndAt" class="!w-full" type="datetime" value-format="x" />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -58,15 +58,15 @@ const formData = reactive({
   objective: '',
   scopeSummary: '',
   ownerUserId: undefined as number | undefined,
-  plannedStartAt: '',
-  plannedEndAt: ''
+  plannedStartAt: null,
+  plannedEndAt: null
 })
 const rules = {
   versionType: [{ required: true, message: '类型不能为空', trigger: 'change' }],
   objective: [{ required: true, message: '目标不能为空', trigger: 'blur' }],
   ownerUserId: [{ required: true, message: '负责人不能为空', trigger: 'change' }]
 }
-const reset = () => Object.assign(formData, { versionType: 'INCREMENT', minorNo: undefined, name: '', objective: '', scopeSummary: '', ownerUserId: undefined, plannedStartAt: '', plannedEndAt: '' })
+const reset = () => Object.assign(formData, { versionType: 'INCREMENT', minorNo: undefined, name: '', objective: '', scopeSummary: '', ownerUserId: undefined, plannedStartAt: null, plannedEndAt: null })
 const open = async (mId: number) => {
   reset()
   majorReleaseId.value = mId

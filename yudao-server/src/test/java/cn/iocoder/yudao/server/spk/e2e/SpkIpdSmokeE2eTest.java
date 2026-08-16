@@ -37,7 +37,7 @@ class SpkIpdSmokeE2eTest extends SpkIpdE2eBase {
                 "name", "E2E烟测项目" + uid,
                 "objective", "端到端集成测试烟测",
                 "ownerUserId", 1,
-                "plannedEndAt", "2026-12-31T00:00:00"));
+                "plannedEndAt", 1798588800000L)); // = 2026-12-31 00:00:00 UTC+8 毫秒时间戳（避免字符串 ISO 回退 0 落 1970）
         Long projectId = ((Number) proj.get("id")).longValue();
         assertNotNull(projectId, "项目 id 为空");
         assertEquals("E2E-SMOKE-" + uid, proj.get("projectCode"), "projectCode 未回显");

@@ -69,10 +69,31 @@ public class SpkIpdProjectWorkspaceService {
     private SpkIpdActivityDefMapper activityDefMapper;
     @Resource
     private SpkIpdCockpitService cockpitService;
+    @Resource
+    private SpkStageResolver stageResolver;
 
     private static final List<SpkActivityStageEnum> PIPELINE = List.of(
             SpkActivityStageEnum.CONCEPT, SpkActivityStageEnum.PLAN, SpkActivityStageEnum.DEVELOP,
             SpkActivityStageEnum.QUALIFY, SpkActivityStageEnum.LAUNCH, SpkActivityStageEnum.LIFECYCLE);
+
+    /** epoch0 守卫区间下界（含）：1970-01-01 00:00。前端字符串日期反序列化回退 0 落此点。 */
+    private static final LocalDateTime EPOCH_GUARD_START = LocalDateTime.of(1970, 1, 1, 0, 0);
+    /** epoch0 守卫区间上界（不含）：2000-01-01。覆盖所有误传回退 0 的脏值，真实排期不会落此区间。 */
+    private static final LocalDateTime EPOCH_GUARD_END = LocalDateTime.of(2000, 1, 1, 0, 0);
+
+    /**
+     * epoch0 守卫：plannedStartAt/EndAt 落 [1970-01-01, 2000-01-01) 视为未排期（字符串日期反序列化回退 0
+     * 的脏值）输出 null，避免 dueIn 算出"逾期 20681 天"。真实排期保留原值。
+     */
+    private LocalDateTime guardEpoch(LocalDateTime t) {
+        if (t == null) {
+            return null;
+        }
+        if (!t.isBefore(EPOCH_GUARD_START) && t.isBefore(EPOCH_GUARD_END)) {
+            return null;
+        }
+        return t;
+    }
 
     // ==================== 1. 项目卡片网格 ====================
 
@@ -140,12 +161,23 @@ public class SpkIpdProjectWorkspaceService {
         m.put("status", p.getStatus());
         m.put("health", p.getHealth());
         m.put("ownerUserId", p.getOwnerUserId());
-        m.put("plannedStartAt", p.getPlannedStartAt());
-        m.put("plannedEndAt", p.getPlannedEndAt());
-        m.put("dueIn", p.getPlannedEndAt() == null ? null
-                : ChronoUnit.DAYS.between(LocalDateTime.now(), p.getPlannedEndAt()));
-        m.put("currentStage", active != null ? active.getCurrentStage() : null);
-        m.put("currentStageLabel", stageLabel(active != null ? active.getCurrentStage() : null));
+        // Bug1-C：epoch0 守卫——前端 date-picker 历史传字符串 ISO 日期，后端 TimestampLocalDateTimeDeserializer
+        // 解析失败回退 0 → DB 落 1970-01-01 08:00:00 → dueIn 算出"逾期 20681 天"。该区间视为未排期输出 null。
+        LocalDateTime pStart = guardEpoch(p.getPlannedStartAt());
+        LocalDateTime pEnd = guardEpoch(p.getPlannedEndAt());
+        m.put("plannedStartAt", pStart);
+        m.put("plannedEndAt", pEnd);
+        m.put("dueIn", pEnd == null ? null
+                : ChronoUnit.DAYS.between(LocalDateTime.now(), pEnd));
+        // Bug2-A：currentStage/currentActivity 实时算（DO 静态值永停 concept，读端覆盖）
+        String cStage = active != null
+                ? stageResolver.resolveCurrentStage(active.getProcessInstanceId(), active.getCurrentStage(), active.getStatus())
+                : null;
+        m.put("currentStage", cStage);
+        m.put("currentStageLabel", stageLabel(cStage));
+        m.put("currentActivity", active != null
+                ? stageResolver.resolveCurrentActivity(active.getProcessInstanceId(), active.getCurrentActivity())
+                : null);
         m.put("activeVersion", activeVer != null ? activeVer.getVersionNo() : null);
         m.put("activeVersionId", activeVer != null ? activeVer.getId() : null);
         m.put("activeFlowRunId", active != null ? active.getId() : null);
@@ -249,9 +281,11 @@ public class SpkIpdProjectWorkspaceService {
         m.put("runNo", r.getRunNo());
         m.put("flowType", r.getFlowType());
         m.put("status", r.getStatus());
-        m.put("currentStage", r.getCurrentStage());
-        m.put("currentStageLabel", stageLabel(r.getCurrentStage()));
-        m.put("currentActivity", r.getCurrentActivity());
+        // Bug2-A：currentStage/currentActivity 实时算覆盖 DO 静态值（永停 concept）
+        String cs = stageResolver.resolveCurrentStage(r.getProcessInstanceId(), r.getCurrentStage(), r.getStatus());
+        m.put("currentStage", cs);
+        m.put("currentStageLabel", stageLabel(cs));
+        m.put("currentActivity", stageResolver.resolveCurrentActivity(r.getProcessInstanceId(), r.getCurrentActivity()));
         m.put("health", r.getHealth());
         m.put("processInstanceId", r.getProcessInstanceId());
         m.put("versionId", r.getVersionId());
