@@ -1,0 +1,49 @@
+# ==================== SPK-OS IPD 端到端集成测试 profile =====================
+# 用法：@ActiveProfiles({"dev","e2e-test"}) 叠加在 dev 之上，复用 dev 的 PG/Redis/MQ/exclude 配置，
+#       本文件只覆盖"测试需与 dev 不同的关键项"。
+#
+# 闭环命脉（必读）：
+#   Flowable HTTP_CALLBACK 触发器 URL = http://${spk-base-url}/admin-api/spk/agent-task/run，
+#   ${spk-base-url} 由 SpkIpdFlowDeployRunner 读 spk-delivery.self.base-url 在部署期替换。
+#   部署期（Spring 启动早期）拿不到随机端口，故 server.port 必须固定，且 self.base-url 指向该端口，
+#   auto-deploy 才会部署一个 URL 回环本测试实例的流程版本——触发器回调命中测试自己的 /run，
+#   receiveTask 才会被推进，测试才不挂死。
+#   ⇒ 测试端口固定 48081（不与 dev 48080 冲突），self.base-url=127.0.0.1:48081。
+#   ⇒ 前置条件：跑 E2E 时 dev 48080 实例应停止，避免其 auto-deploy 把"最新流程版本"覆盖回 48080
+#     导致 start 用了指向 48080 的版本（回调打到未起的 dev 实例）。
+#
+# adapter=native-ai + fast-mode=true：NativeAiAdapter.fastDispatch 不调任何 AI service，
+#   直接合成桩产物（Verifier→{"overall":"PASS"}, Lead→{"deliverable":"stub"}），route 已能解析，
+#   测的就是"生产路由 + 真触发器回环 + 桩 adapter"真链路，不依赖 omnigent host/workspace。
+
+server:
+  port: 48081 # 固定端口：触发器 URL 回环依赖（见上方闭环命脉）
+
+--- #################### 覆盖 dev 的运行期配置 ####################
+
+spring:
+  # Quartz：测试不作为 Quartz 集群节点抢锁/跑定时任务，避免干扰 dev 实例
+  quartz:
+    auto-startup: false
+  # Spring Boot Admin Client：测试不注册到 Admin Server
+  boot:
+    admin:
+      client:
+        enabled: false
+
+--- #################### SPK-OS 覆盖 ####################
+
+spk-delivery:
+  flow:
+    auto-deploy: true # 部署 BPMN 流程定义（幂等：仅 hash 变更才重新部署）
+  execution:
+    adapter: native-ai # 覆盖 dev 的 omnigent → 用 native-ai 的 fast-mode 桩（不依赖外部 host/workspace）
+    fast-mode: true # 覆盖 dev 的 false → 走桩，跳过真实 LLM
+    default-mode: test
+  # 闭环命脉：触发器 URL 回环本测试实例（部署期替换进 BPMN JSON）
+  self:
+    base-url: 127.0.0.1:48081
+
+yudao:
+  captcha:
+    enable: false # 测试关闭验证码，便于登录

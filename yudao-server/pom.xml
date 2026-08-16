@@ -20,6 +20,11 @@
     </description>
     <url>https://github.com/YunaiV/ruoyi-vue-pro</url>
 
+    <!-- SPK-OS: surefire 默认排除 e2e/e2e-full tag 的慢测，命令行 -Dsurefire.excludedGroups= 覆盖为空跑 E2E -->
+    <properties>
+        <surefire.excludedGroups>e2e,e2e-full</surefire.excludedGroups>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>cn.iocoder.boot</groupId>
@@ -170,6 +175,29 @@
             <artifactId>postgresql</artifactId>
         </dependency>
 
+        <!-- SPK-OS: IPD 端到端集成测试基座。
+             yudao-spring-boot-starter-test 传递 spring-boot-starter-test（含 JUnit5/AssertJ/Mockito/
+             TestRestTemplate/Awaitility）。test scope 不传递，yudao-server 须显式声明。 -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-spring-boot-starter-test</artifactId>
+            <version>${revision}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- SPK-OS: Spring Boot Test（含 TestRestTemplate/Awaitility），yudao-spring-boot-starter-test 已传递，
+             此处显式声明以兜底 test scope 不传递场景。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- SPK-OS: JDBC 直查断言（spk_task_contract/spk_artifact 行）。spring-boot-starter-test 已传递，兜底显式声明。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -188,6 +216,21 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <!-- SPK-OS: Surefire 配置——E2E 测试连真库 + 起 full Spring context，单次数十秒，
+                 默认排除避免拖慢常规 mvn test/build。
+                 用 ${surefire.excludedGroups} 占位：surefire 3.5.3 命令行 -DexcludedGroups=
+                 不覆盖 <configuration> 显式值，故须占位 + properties 默认值，命令行才能覆盖为空跑 E2E。
+                 手动跑指定环节（覆盖为空→不排除 e2e tag）：
+                   mvn test -pl yudao-server -Dtest=SpkIpdSmokeE2eTest -Dsurefire.excludedGroups=
+                 跑全流程慢测：
+                   mvn test -pl yudao-server -Dtest=SpkIpdFullFlowE2eTest -Dsurefire.excludedGroups= -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludedGroups>${surefire.excludedGroups}</excludedGroups>
+                </configuration>
             </plugin>
         </plugins>
     </build>

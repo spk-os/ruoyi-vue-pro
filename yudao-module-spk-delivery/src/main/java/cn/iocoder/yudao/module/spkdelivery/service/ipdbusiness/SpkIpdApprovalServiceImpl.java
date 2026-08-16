@@ -471,10 +471,23 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
         return r;
     }
 
-    /** 决策包快照 hash：对关键聚合字段做规范化 JSON 后 sha256。 */
+    /**
+     * 决策包快照 hash：对关键聚合字段做规范化 JSON 后 sha256。
+     * <p>
+     * 稳定性铁律：hash 输入不得含 now() 派生的易变量。buildHeader 把 waitDurationMs
+     * （= Duration.between(startedAt, now())）放进 header，若原样纳入 hash，则前后两次
+     * getDecisionPackage（间隔数百 ms~几 s）算出的 hash 必不同，createDecision 重算校验
+     * 永远 IPD_DECISION_PACKAGE_HASH_MISMATCH（1050116083"决策包已变化"），前端无法审批。
+     * 故复制 header 剔除 waitDurationMs 后再 hash；后续新增 now() 派生字段亦须在此剔除。
+     */
     private String computeHash(SpkIpdDecisionPackageRespVO pkg) {
+        Map<String, Object> stableHeader = new LinkedHashMap<>();
+        if (pkg.getHeader() != null) {
+            stableHeader.putAll(pkg.getHeader());
+            stableHeader.remove("waitDurationMs");
+        }
         Map<String, Object> normalized = new LinkedHashMap<>();
-        normalized.put("header", pkg.getHeader());
+        normalized.put("header", stableHeader);
         normalized.put("requiredArtifacts", pkg.getRequiredArtifacts());
         normalized.put("gates", pkg.getGates());
         normalized.put("evidence", pkg.getEvidence());
