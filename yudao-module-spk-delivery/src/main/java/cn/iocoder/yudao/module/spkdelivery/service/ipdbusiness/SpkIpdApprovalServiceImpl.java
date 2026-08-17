@@ -112,10 +112,18 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
         bpmReq.setPageSize(req.getPageSize());
         bpmReq.setName(req.getName());
         bpmReq.setCategory(req.getCategory());
-        // 默认只看 IPD 主交付流；前端可显式覆盖
-        bpmReq.setProcessDefinitionKey(
-                req.getProcessDefinitionKey() != null ? req.getProcessDefinitionKey()
-                        : SpkIpdBusinessConstants.IPD_FLOW_KEY);
+        // 默认覆盖三 flowType 流程（spkIpdFlowFull/Increment/Issue）。62dabe2e92 三 flowType 路由三
+        // 独立 BPM 流程后，旧单 key spkIpdFlow 已废弃；若仍按旧单 key 过滤，CDCP/PDCP/ADCP/GA/LDCP
+        // 等 userTask 审批门 todo 0 匹配 → approval-tasks 返空 → 慢测 hasTodo=false 不 approve
+        // → receiveTask/userTask 永卡 → FlowRun 永卡 RUNNING/concept。前端可显式传 processDefinitionKey 覆盖。
+        if (req.getProcessDefinitionKey() != null) {
+            bpmReq.setProcessDefinitionKey(req.getProcessDefinitionKey());
+        } else {
+            bpmReq.setProcessDefinitionKeyIn(java.util.List.of(
+                    SpkIpdBusinessConstants.IPD_FLOW_KEY_FULL,
+                    SpkIpdBusinessConstants.IPD_FLOW_KEY_INCREMENT,
+                    SpkIpdBusinessConstants.IPD_FLOW_KEY_ISSUE));
+        }
         bpmReq.setStatus(req.getStatus());
         bpmReq.setCreateTime(req.getCreateTime());
 

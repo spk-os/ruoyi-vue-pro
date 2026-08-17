@@ -129,7 +129,11 @@ public class BpmTaskServiceImpl implements BpmTaskService {
         if (StrUtil.isNotEmpty(pageVO.getCategory())) {
             taskQuery.taskCategory(pageVO.getCategory());
         }
-        if (StrUtil.isNotEmpty(pageVO.getProcessDefinitionKey())) {
+        // keyIn 优先（多流程路由场景，如 IPD 三 flowType 各路由独立 BPM 流程，需同时覆盖多 key），
+        // 否则单 key 精准匹配；二者互斥，避免 Flowable AND 出空集。
+        if (CollUtil.isNotEmpty(pageVO.getProcessDefinitionKeyIn())) {
+            taskQuery.processDefinitionKeyIn(pageVO.getProcessDefinitionKeyIn());
+        } else if (StrUtil.isNotEmpty(pageVO.getProcessDefinitionKey())) {
             taskQuery.processDefinitionKey(pageVO.getProcessDefinitionKey());
         }
         if (ArrayUtil.isNotEmpty(pageVO.getCreateTime())) {
