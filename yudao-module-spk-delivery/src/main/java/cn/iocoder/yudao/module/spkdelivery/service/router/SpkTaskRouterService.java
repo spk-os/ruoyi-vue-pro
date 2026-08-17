@@ -92,6 +92,16 @@ public class SpkTaskRouterService {
     @Value("${spk-delivery.execution.adapter:native-ai}")
     private String defaultAdapterName;
     /**
+     * profile 级强制 adapter 覆盖：配置后忽略 lead.mode 强制所有 Activity 走指定 adapter。
+     * <p>
+     * 用途：e2e-test profile 设 {@code adapter-override=native-ai}，使含 mode=omnigent 的主 Lead
+     * （如 concept 阶段 lead-req-insight）也走 NativeAiAdapter 真实 LLM（new-api 网关 + test skill 简化产物），
+     * 不依赖 omnigent host/workspace，加速端到端验证。未配置（默认空）时保持 per-agent 按 lead.mode 路由
+     * （dev 真实流：主 Lead 走 omnigent，其余 native-ai），不影响生产行为。
+     */
+    @Value("${spk-delivery.execution.adapter-override:}")
+    private String adapterOverride;
+    /**
      * skill 根目录（env/skillName/SKILL.md 三段式解析的根）。默认指向仓内 resources/skills。
      * 见 spk-dev-cortex-ipd §G「节点 skill 绑定注入」——skills 按环境(default/test/commercial-release/prototype-release)分区。
      */
@@ -216,6 +226,10 @@ public class SpkTaskRouterService {
                 if (skillPath != null) {
                     req.setSkillPath(skillPath);
                 }
+                // skill 解析铁证：双用途——E2E LogCaptor 捕获证 route 解析链 + dev 真实模式 grep 证 skill 生效。
+                // skillPath 非空=SKILL.md 命中（三级回退成功），null=全部 miss 跳过注入（配置缺漏信号）。
+                log.info("[route][skill nodeKey={} activityId={} skillName={} skillEnv={} skillPath={}]",
+                        nodeKey, def.getActivityId(), skillName, skillEnv, skillPath);
             }
             FrameworkAdapter adapter = selectAdapter(def, effectiveLead);
             SpkAgentDispatchResult dispatch = adapter.dispatchTask(req);
@@ -375,6 +389,17 @@ public class SpkTaskRouterService {
      * mode=omnigent 但 omnigent adapter 不在线（:6767 不监听）由 OmnigentAdapter 内部捕获并降级，此处不拦截。
      */
     private FrameworkAdapter selectAdapter(SpkIpdActivityDefDO def, SpkAgentDefDO lead) {
+        // profile 级强制覆盖：adapter-override 配置时忽略 lead.mode 强制指定 adapter。
+        //   e2e-test 设 adapter-override=native-ai，使主 Lead（mode=omnigent）也走 NativeAiAdapter 真实 LLM，
+        //   不依赖 omnigent host/workspace，配合 test skill 简化指令加速端到端验证。
+        //   未配置时走下方 per-agent 按 lead.mode 路由（dev 真实流保持不变）。
+        if (adapterOverride != null && !adapterOverride.isBlank()) {
+            FrameworkAdapter forced = adapterMap.get(adapterOverride);
+            if (forced != null) {
+                return forced;
+            }
+            log.warn("[selectAdapter][adapter-override={} 不存在，回退 per-agent 路由]", adapterOverride);
+        }
         // per-agent 按 lead.mode 选 adapter；lead 无 mode 回退全局 defaultAdapterName
         String preferred = (lead != null && lead.getMode() != null && !lead.getMode().isBlank())
                 ? lead.getMode() : defaultAdapterName;

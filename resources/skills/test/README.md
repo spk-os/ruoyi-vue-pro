@@ -1,10 +1,12 @@
-# test 环境 skills（E2E 测试用）
+# test 环境 skills（E2E 加速用）
 
-> E2E 测试（e2e-test profile + fast-mode）使用本环境 skill。skill 内容为简化桩，
-> 保证 skillPath 解析 + NativeAiAdapter.injectSkill 注入机制真实工作即可，
-> 不依赖外部数据源（MRS/VOC/web-search 在测试环境不可用）。
+> E2E 默认用本环境 skill 跑（`spk-delivery.skill.default-env=test`）。完整一套 7 个 stage skill：
+> concept / plan / develop / verify / launch / tr-gate(lifecycle) / verifier，与 default 对齐。
 >
-> 真实 skill 方法论见 `../default/<skill-name>/SKILL.md`。本环境 skill 可引用 default
-> 内容的精简版（去除外部 MCP 依赖，保留方法论骨架 + JSON Schema + 验收标准）。
+> **简化策略（加速 E2E）**：每个 skill 只给产物 schema 骨架 + 简单生成指令，让 LLM **快速生成符合格式的产物**，
+> 字段填占位值即可，**不做业务深加工**——不查外部数据、不做深度推理。LLM 收到后直接出结果，加速端到端。
 >
-> 跑通机制后，可用 fast-mode 验证 skill 注入路径正确；切 default 环境验证真实 LLM 执行。
+> 真实业务方法论见 `../default/<skill-name>/SKILL.md`（完整一套保留不动）。
+>
+> - fast-mode（E2E 默认）：桩不调 LLM，本 skill 保证 skillPath 解析 + inject 注入机制全 stage 命中。
+> - 真实 LLM 模式（fast-mode=false）：本 skill 简化指令让 LLM 快速生成符合三段格式产物（verifier 走 JSON verdict）。

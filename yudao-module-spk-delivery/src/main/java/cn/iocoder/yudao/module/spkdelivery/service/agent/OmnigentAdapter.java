@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.spkdelivery.service.agent;
 
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.module.spkdelivery.enums.SpkAgentTaskStatusEnum;
+import cn.iocoder.yudao.module.spkdelivery.service.skill.SpkSkillInjector;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -231,19 +232,25 @@ public class OmnigentAdapter implements FrameworkAdapter {
         result.setTaskId("omnigent-fast#" + System.nanoTime());
         String nodeKey = req.getNodeKey() == null ? "" : req.getNodeKey();
         String promptDigest = Integer.toHexString((req.getPrompt() == null ? "" : req.getPrompt()).hashCode());
+        // echo skill 绑定（供 E2E fast-mode 断言 skillPath 解析正确：skill 名/路径/环境）
+        String skillName = req.getSkillName() == null ? "" : req.getSkillName().replace("\"", "'");
+        String skillPath = req.getSkillPath() == null ? "" : req.getSkillPath().replace("\\", "/").replace("\"", "'");
+        String skillBlock = ",\"skillName\":\"" + skillName + "\",\"skillPath\":\"" + skillPath + "\"";
         if (nodeKey.startsWith("verify:")) {
             result.setResult("{\"overall\":\"PASS\",\"summary\":\"omnigent fast-mode：Independent Verifier 自动通过（未调真实 Omnigent）\","
                     + "\"evidencePoints\":["
                     + "{\"point\":\"recheck\",\"verdict\":\"Confirmed\"},"
                     + "{\"point\":\"redteam\",\"verdict\":\"Confirmed\"},"
                     + "{\"point\":\"completeness\",\"verdict\":\"Confirmed\"},"
-                    + "{\"point\":\"traceback\",\"verdict\":\"Confirmed\"}]}");
+                    + "{\"point\":\"traceback\",\"verdict\":\"Confirmed\"}]"
+                    + skillBlock + "}");
         } else {
             result.setResult("{\"deliverable\":\"stub\",\"mode\":\"omnigent-fast\",\"provider\":\"omnigent\","
                     + "\"promptDigest\":\"" + promptDigest + "\","
                     + "\"summary\":\"omnigent fast-mode 合成产物（未调真实 Omnigent runtime）\","
                     + "\"content\":\"本产物由 omnigent fast-mode 合成。Activity 定义含真实 prompt（promptDigest="
-                    + promptDigest + "）。关闭 spk-delivery.execution.fast-mode 后走真实 Omnigent /v1/sessions。\"}");
+                    + promptDigest + "）。关闭 spk-delivery.execution.fast-mode 后走真实 Omnigent /v1/sessions。\""
+                    + skillBlock + "}");
         }
         log.info("[dispatchTask][omnigent fast-mode nodeKey={} done]", nodeKey);
         return result;
@@ -297,7 +304,9 @@ public class OmnigentAdapter implements FrameworkAdapter {
     }
 
     private String createSession(SpkAgentDispatchReq req, String effectiveAgentId) throws Exception {
-        String prompt = req.getPrompt() == null ? "" : req.getPrompt();
+        // skill 绑定前置指令块（与 NativeAiAdapter 同源 SpkSkillInjector）：把绑定 skill 的 SKILL.md 全文
+        // 前置进 seed user prompt，让 Omnigent agent（主 Lead 走此链）真遵循该 skill 方法论，闭合"主 Lead 漏注入 skill"缺口。
+        String prompt = SpkSkillInjector.inject(req.getPrompt(), req.getSkillName(), req.getSkillPath());
         String nodeKey = req.getNodeKey() == null ? "" : req.getNodeKey();
         Map<String, Object> textBlock = new LinkedHashMap<>();
         textBlock.put("type", "input_text");

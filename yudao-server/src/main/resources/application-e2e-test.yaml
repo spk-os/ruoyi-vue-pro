@@ -12,9 +12,12 @@
 #   ⇒ 前置条件：跑 E2E 时 dev 48080 实例应停止，避免其 auto-deploy 把"最新流程版本"覆盖回 48080
 #     导致 start 用了指向 48080 的版本（回调打到未起的 dev 实例）。
 #
-# adapter=native-ai + fast-mode=true：NativeAiAdapter.fastDispatch 不调任何 AI service，
-#   直接合成桩产物（Verifier→{"overall":"PASS"}, Lead→{"deliverable":"stub"}），route 已能解析，
-#   测的就是"生产路由 + 真触发器回环 + 桩 adapter"真链路，不依赖 omnigent host/workspace。
+# adapter=native-ai + adapter-override=native-ai + fast-mode=false：真实调 LLM（new-api 网关 ali_glm-5.2），
+#   adapter-override 强制所有 Lead（含 mode=omnigent 的 concept 主 Lead lead-req-insight）走 NativeAiAdapter，
+#   不依赖 omnigent host/workspace；test skill（default-env=test）简化指令让 LLM 快速生成符合三段格式的产物，
+#   验"产物生成 + skill 注入"真链路。较桩慢（每 Activity 一次真实 LLM 调用，依赖 new-api 网关可用），
+#   但验的是 skill 真前置 + LLM 真出格式产物，非桩合成。
+#   Verifier（mode=local）本就走 native-ai；test skill spk-ipd-verifier 驱动 LLM 直出 PASS verdict。
 
 server:
   port: 48081 # 固定端口：触发器 URL 回环依赖（见上方闭环命脉）
@@ -37,10 +40,12 @@ spk-delivery:
   flow:
     auto-deploy: true # 部署 BPMN 流程定义（幂等：仅 hash 变更才重新部署）
   execution:
-    adapter: native-ai # 覆盖 dev 的 omnigent → 用 native-ai 的 fast-mode 桩（不依赖外部 host/workspace）
-    fast-mode: true # 覆盖 dev 的 false → 走桩，跳过真实 LLM
+    adapter: native-ai # 覆盖 dev 的 omnigent → 全走 native-ai（不依赖外部 host/workspace）
+    adapter-override: native-ai # 强制忽略 lead.mode（concept 主 Lead mode=omnigent 也走 native-ai 真实 LLM）
+    fast-mode: false # 覆盖 dev 的 false → 真实调 LLM（test skill 简化指令快速生成符合格式产物，验 skill 注入+产物生成）
     default-mode: test
-  # 节点 skill 绑定 env=E2E 走 test 环境（验 skillPath 解析正确）；test 未配全的 skill 自动回退 default。
+  # 节点 skill 绑定 env=test 走 test 环境（已配全 7 stage，E2E 全 stage 命中 test 简化 skill）；
+  # default 作三级回退兜底（test 未命中时 default/{name}/SKILL.md）。
   skill:
     root: /work/SPK-OS/soft/basic/ruoyi/resources/skills
     default-env: test

@@ -83,6 +83,10 @@ public class SpkIpdFlowRunService {
     @Resource
     private SpkIpdFailedJobMapper failedJobMapper;
     private final ObjectMapper json = new ObjectMapper();
+    // 默认 skill 环境（spk-delivery.skill.default-env）：start 未显式传 skillEnv 时归一到此值，
+    // 让配置 default-env=test 在 e2e 真正生效（而非硬编码 default）。route 内 resolveSkillEnv 读流程变量解析。
+    @org.springframework.beans.factory.annotation.Value("${spk-delivery.skill.default-env:default}")
+    private String defaultSkillEnv;
 
     /**
      * 预检：不落运行或仅落检查记录；返回可启动性与逐项检查。
@@ -275,7 +279,9 @@ public class SpkIpdFlowRunService {
             //   二者正交：mode 决定 prompt 轻量化，env 决定 skill 文件分区。
             String normMode = (mode == null || mode.isBlank()) ? "test" : mode.trim().toLowerCase();
             variables.put("spk_mode", normMode);
-            String normEnv = (skillEnv == null || skillEnv.isBlank()) ? "default" : skillEnv.trim();
+            // skillEnv：决定用哪套 skill 文件；空/null 归一到配置 spk-delivery.skill.default-env（e2e 设 test
+            // 即生效），而非硬编码 default——让 default-env 配置真正驱动 E2E 走 test skill。
+            String normEnv = (skillEnv == null || skillEnv.isBlank()) ? defaultSkillEnv : skillEnv.trim();
             variables.put("spk_skill_env", normEnv);
             createReq.setVariables(variables);
             // 同步发起：type2 后至首个 receiveTask 即返 processInstanceId

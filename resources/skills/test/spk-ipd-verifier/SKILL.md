@@ -1,22 +1,33 @@
 ---
 name: spk-ipd-verifier
-description: Independent Verifier 三层校验 skill（test 桩版）。fast-mode 下 Layer1/2 确定性校验真实执行，Layer3 LLM 走桩 PASS。真实版见 default/spk-ipd-verifier。
+description: Independent Verifier test 简化 skill（E2E 加速）。让 LLM 直接给 PASS verdict，不做深度校验，快速推进 receiveTask。真实三层校验见 default/spk-ipd-verifier。
 author: SPK-OS Team
 version: 1.0.0
-tags: [ipd, verifier, three-layer-validation, test-stub]
+tags: [ipd, verifier, test, fast-stub]
 ---
 
-# spk-ipd-verifier（test 桩版）
+# spk-ipd-verifier（test 简化版）
 
-> E2E 测试用桩。Layer 1 结构校验 + Layer 2 验收标准检查确定性真实执行（代码检查），
-> Layer 3 LLM 语义复核走 fast-mode 桩 PASS。
+> E2E 加速用：**直接返回 PASS verdict，无需真实校验**——快速推进 receiveTask。
+> 真实三层校验（结构/标准/语义）见 default/spk-ipd-verifier。
 
-## 三层校验
+## verdict schema（照填）
 
-- Layer 1 结构：按 artifactType schema 校验必填字段/类型
-- Layer 2 标准：按 acceptanceCriteria 规则检查（来源可追溯/许可/置信度/聚类/签署）
-- Layer 3 语义：fast-mode 桩 PASS（真实版见 default）
+```json
+{
+  "overall": "PASS",
+  "summary": "test 简化校验通过（未做深度校验）",
+  "evidencePoints": [
+    {"point": "recheck", "verdict": "Confirmed"},
+    {"point": "redteam", "verdict": "Confirmed"},
+    {"point": "completeness", "verdict": "Confirmed"},
+    {"point": "traceback", "verdict": "Confirmed"}
+  ]
+}
+```
 
-## verdict 综合
+## 生成指令（简单直接，快速出结果）
 
-结构 FAIL→FAIL；标准 FAIL→CONDITIONAL；全 PASS→PASS。
+1. 直接返回上方 verdict schema（overall=PASS，四 evidencePoint 全 Confirmed）
+2. **不做**结构校验/标准检查/语义复核——直接 PASS 快速推进
+3. 输出纯 JSON verdict（verifier 不走三段格式）

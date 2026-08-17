@@ -1,25 +1,25 @@
 ---
-name: spk-ipd-concept
-description: IPD 概念阶段 test 简化 skill（E2E 加速）。让 LLM 快速生成符合 schema 的产物骨架，不做业务深加工。真实业务方法论见 default/spk-ipd-concept。
+name: spk-ipd-develop
+description: IPD 开发阶段 test 简化 skill（E2E 加速）。让 LLM 快速生成符合 schema 的产物骨架，不做业务深加工。真实业务方法论见 default/spk-ipd-develop。
 author: SPK-OS Team
 version: 1.0.0
-tags: [ipd, concept, test, fast-stub]
+tags: [ipd, develop, test, fast-stub]
 ---
 
-# spk-ipd-concept（test 简化版）
+# spk-ipd-develop（test 简化版）
 
 > E2E 加速用：**直接快速生成符合下方 schema 的产物骨架，无需真实业务加工**——
-> 字段填合理占位值即可，保证格式合规 + 可落库 + 可追溯。真实业务方法论见 default/spk-ipd-concept。
+> 字段填合理占位值即可，保证格式合规 + 可落库 + 可追溯。真实业务方法论见 default/spk-ipd-develop。
 
 ## 产物 schema（照填，勿空字段）
 
 ```json
 {
-  "artifact_type": "OpportunitySignalSet",
+  "artifact_type": "ImplementationDraft",
   "version": "1.0.0",
-  "stage": "concept",
-  "summary": "概念阶段产物（test 占位）",
-  "content_markdown": "# 机会信号集\n\n## 信号\n- 占位信号\n## 聚类\n- 占位簇\n## 签署\n- admitted",
+  "stage": "develop",
+  "summary": "开发阶段产物（test 占位）",
+  "content_markdown": "# 实现草案\n\n## 代码骨架\n- 占位模块\n## 单测\n- 占位用例\n## TODO\n- 占位项",
   "evidence": [{"source": "占位源", "locator": "占位定位", "hash": "sha256:placeholder"}]
 }
 ```

@@ -67,6 +67,10 @@ public class SpkIpdProjectService {
     private DeliveryPathResolver deliveryPathResolver;
     @Resource
     private FlowStateWriter flowStateWriter;
+    // 默认 skill 环境（spk-delivery.skill.default-env）：startProject 未显式传 skillEnv 时归一到此值，
+    // 让配置 default-env=test 在 e2e 真正生效（而非硬编码 default）。route 内 resolveSkillEnv 读流程变量解析。
+    @org.springframework.beans.factory.annotation.Value("${spk-delivery.skill.default-env:default}")
+    private String defaultSkillEnv;
 
     /**
      * 发起 IPD 主流程（同步）。
@@ -134,8 +138,9 @@ public class SpkIpdProjectService {
         String normMode = (mode == null || mode.isBlank()) ? "test" : mode.trim().toLowerCase();
         variables.put("spk_mode", normMode);
         // spk_skill_env：决定 route 用哪套 skill 文件（default/test/commercial-release/prototype-release）。
-        // 空/null 归 default（与 spk-delivery.skill.default-env 配置一致）。route 内 resolveSkillEnv 只读解析。
-        String normEnv = (skillEnv == null || skillEnv.isBlank()) ? "default" : skillEnv.trim();
+        // 空/null 归一到配置 spk-delivery.skill.default-env（e2e 设 test 即生效），而非硬编码 default。
+        // route 内 resolveSkillEnv 只读解析。
+        String normEnv = (skillEnv == null || skillEnv.isBlank()) ? defaultSkillEnv : skillEnv.trim();
         variables.put("spk_skill_env", normEnv);
         createReq.setVariables(variables);
 
