@@ -20,6 +20,7 @@ import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdVersionMa
 import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkGiteaIntegrationService;
 import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkOmnigentProxyService;
 import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkPlaneIntegrationService;
+import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkStageResolver;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
@@ -59,6 +60,8 @@ public class SpkIpdMonitorServiceImpl implements SpkIpdMonitorService {
     private SpkGiteaIntegrationService giteaService;
     @Resource
     private SpkOmnigentProxyService omnigentService;
+    @Resource
+    private SpkStageResolver stageResolver;
 
     @Override
     public SpkIpdMonitorRespVO monitor(Long projectId) {
@@ -79,8 +82,9 @@ public class SpkIpdMonitorServiceImpl implements SpkIpdMonitorService {
             m.put("runNo", f.getRunNo());
             m.put("flowType", f.getFlowType());
             m.put("status", f.getStatus());
-            m.put("currentStage", f.getCurrentStage());
-            m.put("currentActivity", f.getCurrentActivity());
+            // Bug2-A：currentStage/currentActivity 实时算（DO 静态值永停 concept，读端覆盖；与 buildCard 同源 SpkStageResolver）
+            m.put("currentStage", stageResolver.resolveCurrentStage(f.getProcessInstanceId(), f.getCurrentStage(), f.getStatus()));
+            m.put("currentActivity", stageResolver.resolveCurrentActivity(f.getProcessInstanceId(), f.getCurrentActivity()));
             m.put("health", f.getHealth());
             m.put("startedAt", f.getStartedAt());
             m.put("endedAt", f.getEndedAt());

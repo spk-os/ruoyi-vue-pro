@@ -14,6 +14,7 @@ import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdMajorRele
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdProjectMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdVersionMapper;
 import cn.iocoder.yudao.module.spkdelivery.framework.monitoring.SpkIpdMetrics;
+import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkStageResolver;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
@@ -51,6 +52,8 @@ public class SpkIpdOverviewServiceImpl implements SpkIpdOverviewService {
     private SpkIpdIssueCaseMapper issueCaseMapper;
     @Resource
     private SpkIpdMetrics metrics;
+    @Resource
+    private SpkStageResolver stageResolver;
 
     @Override
     public SpkIpdOverviewRespVO snapshot() {
@@ -152,7 +155,8 @@ public class SpkIpdOverviewServiceImpl implements SpkIpdOverviewService {
                     m.put("runNo", f.getRunNo());
                     m.put("flowType", f.getFlowType());
                     m.put("status", f.getStatus());
-                    m.put("currentStage", f.getCurrentStage());
+                    // Bug2-A：currentStage 实时算（DO 静态值永停 concept，读端覆盖；与 buildCard 同源 SpkStageResolver）
+                    m.put("currentStage", stageResolver.resolveCurrentStage(f.getProcessInstanceId(), f.getCurrentStage(), f.getStatus()));
                     m.put("health", f.getHealth());
                     m.put("startedAt", f.getStartedAt());
                     SpkIpdProjectDO p = f.getProjectId() == null ? null : projMap.get(f.getProjectId());
