@@ -10,7 +10,8 @@ import lombok.*;
  * IPD 裁剪规则 DO。设计文档 §9.5.3 / §6.3 裁剪。
  * <p>
  * 绑定 ProfileVersion。按 stage/activity_def_id 定义裁剪条件与动作。
- * action: SKIP/OPTIONAL/SIMPLIFY。
+ * action: {@link cn.iocoder.yudao.module.spkdelivery.enums.TrimAction}
+ * （SKIP/OPTIONAL/SIMPLIFY），运行时由 SpkIpdTrimRuleEvaluator 消费（修 G6）。
  *
  * @author SPK-OS
  */

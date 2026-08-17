@@ -34,8 +34,33 @@ public final class SpkIpdBusinessConstants {
     public static final String HEALTH_WARN = "WARN";
     public static final String HEALTH_CRITICAL = "CRITICAL";
 
-    // ---------- Flowable 主流程 key（与 spk-ipd-flow.json / SpkIpdProjectService 对齐） ----------
+    // ---------- Flowable 流程 key（治理层 flowType → BPM 流程定义映射，D1） ----------
+    /** 旧主流程 key（历史实例兼容查询；新启动不再用它） */
     public static final String IPD_FLOW_KEY = "spkIpdFlow";
+    /** FULL_RELEASE → 完整 IPD 六阶段重型流程（概念/计划/开发/验证/发布/生命周期 + 4DCP + 6TR + R1-R8 回退） */
+    public static final String IPD_FLOW_KEY_FULL = "spkIpdFlowFull";
+    /** INCREMENT_RELEASE → 增量发布裁剪轻量流程（跳概念、TR 减为关键 2 个、DCP 合并） */
+    public static final String IPD_FLOW_KEY_INCREMENT = "spkIpdFlowIncrement";
+    /** ISSUE_RESOLUTION → 问题解决四段轻流程（ROOT_CAUSE/FIX_DEVELOP/VERIFY/CLOSE） */
+    public static final String IPD_FLOW_KEY_ISSUE = "spkIpdFlowIssue";
+
+    /**
+     * 按 flowType 解析对应的 BPM 流程定义 key。
+     * <p>
+     * 治理层入口（FlowRunService.start / ProjectService / IntellectService）统一经此方法取 key，
+     * 保证「不同 flowType 走不同真实 BPM 流程」（修 G1/G8）。未知 flowType 回退旧 key 兼容历史。
+     */
+    public static String flowKeyOf(String flowType) {
+        if (flowType == null) {
+            return IPD_FLOW_KEY;
+        }
+        return switch (flowType) {
+            case FLOW_FULL_RELEASE -> IPD_FLOW_KEY_FULL;
+            case FLOW_INCREMENT_RELEASE -> IPD_FLOW_KEY_INCREMENT;
+            case FLOW_ISSUE_RESOLUTION -> IPD_FLOW_KEY_ISSUE;
+            default -> IPD_FLOW_KEY;
+        };
+    }
 
     // ---------- 流程变量受控键（启动时写入，route/触发器只读，遵守互锁铁律） ----------
     public static final String VAR_FLOW_RUN_ID = "flowRunId";

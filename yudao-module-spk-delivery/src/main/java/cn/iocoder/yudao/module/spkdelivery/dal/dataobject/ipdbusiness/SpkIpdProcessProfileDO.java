@@ -34,6 +34,12 @@ public class SpkIpdProcessProfileDO extends BaseDO {
     private String name;
     /** FULL_RELEASE/INCREMENT_RELEASE/ISSUE_RESOLUTION */
     private String flowType;
+    /**
+     * 该 flowType 绑定的 BPM 流程定义 key（如 spkIpdFlowFull）。
+     * <p>建 Profile 时由 {@code SpkIpdBusinessConstants.flowKeyOf(flowType)} 自动填入，不可手改。
+     * 修 G1/G3：治理层与 BPM 执行层的绑定字段。
+     */
+    private String processDefinitionKey;
     private String description;
     private String status;
     /** 当前发布版本号，指向 profile_version.version */

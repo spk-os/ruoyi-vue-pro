@@ -532,3 +532,155 @@ ALTER TABLE "spk_agent_task" ADD COLUMN IF NOT EXISTS "worker_of" varchar(64) NU
 ALTER TABLE "spk_agent_task" ADD COLUMN IF NOT EXISTS "artifact_uris" text NULL;
 ALTER TABLE "spk_agent_task" ADD COLUMN IF NOT EXISTS "run_receipt_id" varchar(64) NULL;
 ALTER TABLE "spk_agent_task" ADD COLUMN IF NOT EXISTS "verification_conclusion" varchar(16) NULL;
+
+-- =====================================================================
+-- 19. IPD 流程治理模块（§9.5 / D1 多流程改造）
+-- 镜像 yudao-module-spk-delivery/src/main/resources/sql/spk_ipd_governance_init.sql
+-- 6 张治理表 + Profile/Version 绑定 BPM 流程定义 key（D1）。
+-- 幂等：CREATE TABLE IF NOT EXISTS + ADD COLUMN IF NOT EXISTS。
+-- =====================================================================
+
+CREATE SEQUENCE IF NOT EXISTS spk_ipd_process_profile_seq;
+CREATE SEQUENCE IF NOT EXISTS spk_ipd_process_profile_version_seq;
+CREATE SEQUENCE IF NOT EXISTS spk_ipd_trim_rule_seq;
+CREATE SEQUENCE IF NOT EXISTS spk_ipd_engine_instance_seq;
+CREATE SEQUENCE IF NOT EXISTS spk_ipd_failed_job_seq;
+CREATE SEQUENCE IF NOT EXISTS spk_ipd_governance_audit_seq;
+
+-- 19.1 spk_ipd_process_profile 流程模板（一个 flow_type 对应一个已发布 Profile）
+CREATE TABLE IF NOT EXISTS "spk_ipd_process_profile" (
+  "id"               BIGINT       NOT NULL,
+  "profile_code"     VARCHAR(64)  NOT NULL,
+  "name"             VARCHAR(128) NOT NULL,
+  "flow_type"        VARCHAR(32) NOT NULL,
+  "process_definition_key" VARCHAR(128),
+  "description"      TEXT,
+  "status"           VARCHAR(24) NOT NULL DEFAULT 'DRAFT',
+  "current_version"  INT          NOT NULL DEFAULT 0,
+  "published_by"     VARCHAR(64),
+  "published_at"     TIMESTAMP,
+  "lock_version"     INT          NOT NULL DEFAULT 0,
+  "creator"          VARCHAR(64) DEFAULT '',
+  "create_time"      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updater"          VARCHAR(64) DEFAULT '',
+  "update_time"      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "deleted"          SMALLINT     NOT NULL DEFAULT 0,
+  "tenant_id"        BIGINT       NOT NULL DEFAULT 0,
+  CONSTRAINT "spk_ipd_process_profile_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "uk_spk_ipd_process_profile_code" ON "spk_ipd_process_profile" ("profile_code") WHERE "deleted" = 0;
+CREATE INDEX IF NOT EXISTS "idx_spk_ipd_process_profile_type" ON "spk_ipd_process_profile" ("flow_type","status");
+
+-- 19.2 spk_ipd_process_profile_version Profile 版本（发布/回滚/兼容检查）
+CREATE TABLE IF NOT EXISTS "spk_ipd_process_profile_version" (
+  "id"                     BIGINT       NOT NULL,
+  "profile_id"             BIGINT       NOT NULL,
+  "version"                INT          NOT NULL,
+  "snapshot_json"          TEXT         NOT NULL,
+  "status"                 VARCHAR(24) NOT NULL DEFAULT 'DRAFT',
+  "compatibility_hash"     VARCHAR(128),
+  "process_definition_key" VARCHAR(128),
+  "process_definition_id" VARCHAR(128),
+  "published_by"           VARCHAR(64),
+  "published_at"           TIMESTAMP,
+  "supersedes_version_id"  BIGINT,
+  "lock_version"           INT          NOT NULL DEFAULT 0,
+  "creator"                VARCHAR(64) DEFAULT '',
+  "create_time"            TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updater"                VARCHAR(64) DEFAULT '',
+  "update_time"            TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "deleted"                SMALLINT     NOT NULL DEFAULT 0,
+  "tenant_id"              BIGINT       NOT NULL DEFAULT 0,
+  CONSTRAINT "spk_ipd_process_profile_version_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "uk_spk_ipd_profile_version" ON "spk_ipd_process_profile_version" ("profile_id","version") WHERE "deleted" = 0;
+CREATE INDEX IF NOT EXISTS "idx_spk_ipd_profile_version_status" ON "spk_ipd_process_profile_version" ("profile_id","status");
+
+-- 19.3 spk_ipd_trim_rule 裁剪规则（绑定 ProfileVersion，SKIP/OPTIONAL/SIMPLIFY）
+CREATE TABLE IF NOT EXISTS "spk_ipd_trim_rule" (
+  "id"                  BIGINT       NOT NULL,
+  "profile_version_id"  BIGINT       NOT NULL,
+  "stage"               VARCHAR(32),
+  "activity_def_id"     VARCHAR(64),
+  "trim_condition"     VARCHAR(128),
+  "action"              VARCHAR(32) NOT NULL,
+  "reason"              TEXT,
+  "lock_version"         INT          NOT NULL DEFAULT 0,
+  "creator"             VARCHAR(64) DEFAULT '',
+  "create_time"         TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updater"             VARCHAR(64) DEFAULT '',
+  "update_time"         TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "deleted"             SMALLINT     NOT NULL DEFAULT 0,
+  "tenant_id"           BIGINT       NOT NULL DEFAULT 0,
+  CONSTRAINT "spk_ipd_trim_rule_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "idx_spk_ipd_trim_rule_pv" ON "spk_ipd_trim_rule" ("profile_version_id","stage");
+
+-- 19.4 spk_ipd_engine_instance 引擎实例档案（Flowable process_instance ↔ FlowRun/ProfileVersion）
+CREATE TABLE IF NOT EXISTS "spk_ipd_engine_instance" (
+  "id"                   BIGINT       NOT NULL,
+  "process_instance_id"  VARCHAR(64) NOT NULL,
+  "flow_run_id"          BIGINT,
+  "profile_version_id"   BIGINT,
+  "engine_health"        VARCHAR(16) NOT NULL DEFAULT 'UNKNOWN',
+  "last_synced_at"       TIMESTAMP,
+  "meta_json"            TEXT,
+  "lock_version"         INT          NOT NULL DEFAULT 0,
+  "creator"              VARCHAR(64) DEFAULT '',
+  "create_time"          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updater"              VARCHAR(64) DEFAULT '',
+  "update_time"          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "deleted"             SMALLINT     NOT NULL DEFAULT 0,
+  "tenant_id"            BIGINT       NOT NULL DEFAULT 0,
+  CONSTRAINT "spk_ipd_engine_instance_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "uk_spk_ipd_engine_instance_pid" ON "spk_ipd_engine_instance" ("process_instance_id") WHERE "deleted" = 0;
+CREATE INDEX IF NOT EXISTS "idx_spk_ipd_engine_instance_run" ON "spk_ipd_engine_instance" ("flow_run_id");
+
+-- 19.5 spk_ipd_failed_job 失败作业（触发器/回调失败登记与重试）
+CREATE TABLE IF NOT EXISTS "spk_ipd_failed_job" (
+  "id"             BIGINT       NOT NULL,
+  "job_type"       VARCHAR(64) NOT NULL,
+  "ref_id"         BIGINT,
+  "reason"         TEXT,
+  "retry_count"    INT          NOT NULL DEFAULT 0,
+  "status"         VARCHAR(24) NOT NULL DEFAULT 'PENDING',
+  "next_retry_at"  TIMESTAMP,
+  "lock_version"   INT          NOT NULL DEFAULT 0,
+  "creator"        VARCHAR(64) DEFAULT '',
+  "create_time"    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updater"        VARCHAR(64) DEFAULT '',
+  "update_time"    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "deleted"        SMALLINT     NOT NULL DEFAULT 0,
+  "tenant_id"      BIGINT       NOT NULL DEFAULT 0,
+  CONSTRAINT "spk_ipd_failed_job_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "idx_spk_ipd_failed_job_status" ON "spk_ipd_failed_job" ("status","next_retry_at");
+
+-- 19.6 spk_ipd_governance_audit 治理审计（发布/回滚/裁剪变更前后态）
+CREATE TABLE IF NOT EXISTS "spk_ipd_governance_audit" (
+  "id"           BIGINT       NOT NULL,
+  "action_type"  VARCHAR(64) NOT NULL,
+  "ref_id"       BIGINT,
+  "operator_id"  VARCHAR(64),
+  "before_json"  TEXT,
+  "after_json"   TEXT,
+  "remark"       TEXT,
+  "lock_version" INT          NOT NULL DEFAULT 0,
+  "creator"      VARCHAR(64) DEFAULT '',
+  "create_time"  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updater"      VARCHAR(64) DEFAULT '',
+  "update_time"  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "deleted"      SMALLINT     NOT NULL DEFAULT 0,
+  "tenant_id"    BIGINT       NOT NULL DEFAULT 0,
+  CONSTRAINT "spk_ipd_governance_audit_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "idx_spk_ipd_governance_audit_ref" ON "spk_ipd_governance_audit" ("action_type","ref_id");
+
+-- 19.7 D1 多流程改造：Profile/Version 绑定 BPM 流程定义 key（已存在库 ALTER 补列）
+ALTER TABLE "spk_ipd_process_profile" ADD COLUMN IF NOT EXISTS "process_definition_key" VARCHAR(128);
+ALTER TABLE "spk_ipd_process_profile_version" ADD COLUMN IF NOT EXISTS "process_definition_key" VARCHAR(128);
+ALTER TABLE "spk_ipd_process_profile_version" ADD COLUMN IF NOT EXISTS "process_definition_id" VARCHAR(128);
+COMMENT ON COLUMN "spk_ipd_process_profile"."process_definition_key" IS '绑定 BPM 流程定义 key（flowKeyOf(flow_type) 自动派生）';
+COMMENT ON COLUMN "spk_ipd_process_profile_version"."process_definition_key" IS '发布时固化的 BPM 流程定义 key';
+COMMENT ON COLUMN "spk_ipd_process_profile_version"."process_definition_id" IS '发布时固化的 Flowable 流程定义 id（回滚定位历史版本）';

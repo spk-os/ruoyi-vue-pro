@@ -33,3 +33,11 @@ export const listFailedJobs = (status = 'PENDING') =>
   request.get({ url: '/spk/ipd/admin/workflows/failed-jobs', params: { status } })
 export const listAudit = (params?: { actionType?: string; refId?: number }) =>
   request.get({ url: '/spk/ipd/admin/workflows/audit', params })
+
+// ==================== 引擎档案 / 快照契约（D4/D2） ====================
+/** 引擎实例档案：按 flowRunId 查；无数据返回 null（前端标"样本不足"） */
+export const getEngineInstance = (flowRunId: number) =>
+  request.get({ url: '/spk/ipd/admin/workflows/engine-instances', params: { flowRunId } })
+/** snapshotJson 结构契约：按 flowType 返回阶段/门/DCP/TR/活动 */
+export const getSnapshotSchema = (flowType: string) =>
+  request.get({ url: '/spk/ipd/admin/workflows/snapshot-schema', params: { flowType } })

@@ -4,6 +4,8 @@ import cn.iocoder.yudao.framework.apilog.core.annotation.ApiAccessLog;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.gate.SpkGateRecordDO;
 import cn.iocoder.yudao.module.spkdelivery.service.gate.SpkGateService;
+import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.TrimDecision;
+import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdTrimRuleEvaluator;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,6 +39,8 @@ public class SpkGateController {
 
     @Resource
     private SpkGateService gateService;
+    @Resource
+    private SpkIpdTrimRuleEvaluator trimRuleEvaluator;
 
     @PostMapping("/dispatch")
     @PermitAll
@@ -48,6 +52,11 @@ public class SpkGateController {
             @Parameter(description = "门禁标识 g1..g8 / tr2..tr6") @RequestParam("gate") String gate,
             @Parameter(description = "触发器传入的 receiveTask key") @RequestParam(value = "taskDefineKey", required = false) String taskDefineKey,
             @Parameter(description = "派发附带上文") @RequestParam(value = "report", required = false) String report) {
+        // D3：前置裁剪规则评估（修 G6）。gate 作为 activityDefId 匹配；SKIP 直接应答成功跳过该门禁。
+        TrimDecision trim = trimRuleEvaluator.evaluate(processInstanceId, null, gate);
+        if (trim.shouldSkip()) {
+            return success(true);
+        }
         gateService.onDispatch(token, processInstanceId, gate, taskDefineKey, report);
         return success(true);
     }

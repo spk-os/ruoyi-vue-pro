@@ -15,6 +15,8 @@ import java.util.Map;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.INTELLECT_REQ_NOT_EXISTS;
+import static cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdBusinessConstants.FLOW_FULL_RELEASE;
+import static cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdBusinessConstants.flowKeyOf;
 
 /**
  * SPK-OS OR 池需求队列服务
@@ -26,7 +28,11 @@ import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.INTEL
 @Validated
 public class SpkIntellectService {
 
-    public static final String IPD_FLOW_KEY = "spk-ipd-flow";
+    /**
+     * 修 G8：此前硬编码 "spk-ipd-flow"（连字符）与部署 key spkIpdFlow（驼峰）/新 key spkIpdFlowFull 不匹配，
+     * 该入口启动的实例永不被 FinishListener 捕获。统一经 flowKeyOf(FULL_RELEASE) 解析。
+     */
+    public static final String IPD_FLOW_KEY = flowKeyOf(FLOW_FULL_RELEASE);
 
     @Resource
     private SpkIntellectQueueMapper intellectQueueMapper;

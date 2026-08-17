@@ -1,22 +1,29 @@
 package cn.iocoder.yudao.module.spkdelivery.framework.flowable.listener;
 
 import cn.iocoder.yudao.module.bpm.api.event.BpmProcessInstanceStatusEvent;
-import cn.iocoder.yudao.module.bpm.api.event.BpmProcessInstanceStatusEventListener;
 import cn.iocoder.yudao.module.bpm.enums.task.BpmProcessInstanceStatusEnum;
 import cn.iocoder.yudao.module.spkdelivery.service.feedback.SpkFeedbackService;
+import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdBusinessConstants;
 import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdFlowRunService;
 import cn.iocoder.yudao.module.spkdelivery.service.sunset.SpkSunsetService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 
+import java.util.Set;
+
 /**
- * SPK-OS IPD 主流程结束监听器
+ * SPK-OS IPD 主流程结束监听器（D1 多 key 改造）。
  * <p>
- * 镜像 {@code BpmOALeaveStatusListener}：按 processDefinitionKey=spkIpdFlow 过滤。
+ * 原实现继承 {@code BpmProcessInstanceStatusEventListener}，其 {@code onApplicationEvent} 为 final 且
+ * 仅按单个 {@code getProcessDefinitionKey()} 过滤。三种 flowType 各走独立 BPM key 后，单 key 监听器会漏掉
+ * INCREMENT/ISSUE 实例的结束事件（隐性 bug，同 G8 类）。故改为直接实现 {@link ApplicationListener}，
+ * 对 3 个新 key（spkIpdFlowFull / spkIpdFlowIncrement / spkIpdFlowIssue）+ 旧 spkIpdFlow（历史实例兼容）
+ * 做集合匹配。
  * <ul>
- *   <li>APPROVE(2)：流程正常结束 → 启动 R8 退市归档 + 采集 R7 反馈。</li>
+ *   <li>APPROVE(2)：流程正常结束 → 回写 FlowRun COMPLETED + 启动 R8 退市归档 + 采集 R7 反馈。</li>
  *   <li>REJECT(3)/CANCEL(4)：No-Go / 取消 → 仅记录，不触发退市。</li>
  * </ul>
  *
@@ -24,9 +31,17 @@ import org.springframework.context.annotation.Lazy;
  */
 @Slf4j
 @Configuration
-public class SpkIpdFlowFinishListener extends BpmProcessInstanceStatusEventListener {
+public class SpkIpdFlowFinishListener implements ApplicationListener<BpmProcessInstanceStatusEvent> {
 
-    public static final String PROCESS_KEY = "spkIpdFlow";
+    /** 旧单 key（保留兼容历史实例） */
+    private static final String LEGACY_KEY = "spkIpdFlow";
+
+    /** 监听的全部流程定义 key：3 个新 key + 旧 key 兼容 */
+    private static final Set<String> WATCH_KEYS = Set.of(
+            SpkIpdBusinessConstants.IPD_FLOW_KEY_FULL,
+            SpkIpdBusinessConstants.IPD_FLOW_KEY_INCREMENT,
+            SpkIpdBusinessConstants.IPD_FLOW_KEY_ISSUE,
+            LEGACY_KEY);
 
     @Resource
     private SpkSunsetService sunsetService;
@@ -37,12 +52,10 @@ public class SpkIpdFlowFinishListener extends BpmProcessInstanceStatusEventListe
     private SpkIpdFlowRunService flowRunService;
 
     @Override
-    protected String getProcessDefinitionKey() {
-        return PROCESS_KEY;
-    }
-
-    @Override
-    protected void onEvent(BpmProcessInstanceStatusEvent event) {
+    public void onApplicationEvent(BpmProcessInstanceStatusEvent event) {
+        if (!WATCH_KEYS.contains(event.getProcessDefinitionKey())) {
+            return;
+        }
         String instanceId = event.getId();
         Integer status = event.getStatus();
         log.info("[onEvent][IPD 流程状态变更 instanceId={} status={} businessKey={} reason={}]",

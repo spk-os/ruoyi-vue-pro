@@ -8,9 +8,14 @@ import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.flowr
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.flowrun.SpkIpdFlowRunPreflightReqVO;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.version.SpkIpdReadinessRespVO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdCommandLogDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdEngineInstanceDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdFailedJobDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdFlowRunDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdIssueCaseDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdProcessProfileDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdVersionDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdEngineInstanceMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdFailedJobMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdFlowRunMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdIssueCaseMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdVersionMapper;
@@ -67,6 +72,11 @@ public class SpkIpdFlowRunService {
     private HistoryService historyService;
     @Resource
     private SpkStageResolver stageResolver;
+    // D4：引擎实例档案 / 失败作业真实回写（修 G4/G5，此前全模块零写入致运行统计页永远空）
+    @Resource
+    private SpkIpdEngineInstanceMapper engineInstanceMapper;
+    @Resource
+    private SpkIpdFailedJobMapper failedJobMapper;
     private final ObjectMapper json = new ObjectMapper();
 
     /**
@@ -218,8 +228,13 @@ public class SpkIpdFlowRunService {
             flowRunMapper.updateById(run);
 
             Long userId = currentUserId();
+            // D1：按 flowType 经治理层解析已发布 Profile，取固化 key + versionId（修 G1——三种 flowType 各走对应真实 BPM 流程）
+            // 治理层未发布 Profile 时降级用 flowKeyOf(flowType) 直取默认 key，不阻断启动。
+            SpkIpdProcessProfileService.PublishedProfile pub = resolvePublishedProfile(run.getFlowType());
+            String flowKey = (pub != null && pub.processDefinitionKey() != null)
+                    ? pub.processDefinitionKey() : flowKeyOf(run.getFlowType());
             BpmProcessInstanceCreateReqDTO createReq = new BpmProcessInstanceCreateReqDTO();
-            createReq.setProcessDefinitionKey(IPD_FLOW_KEY);
+            createReq.setProcessDefinitionKey(flowKey);
             createReq.setBusinessKey(run.getBusinessKey());
             Map<String, Object> variables = new LinkedHashMap<>();
             variables.put(VAR_BUSINESS_KEY, run.getBusinessKey());
@@ -247,6 +262,8 @@ public class SpkIpdFlowRunService {
             run.setStartedAt(LocalDateTime.now());
             run.setCurrentStage("concept");
             flowRunMapper.updateById(run);
+            // D4：写引擎实例档案（修 G4——此前全模块零写入致运行统计页永远空）
+            writeEngineInstance(run, processInstanceId, flowKey, pub);
             commandService.markSuccess(cmd.commandId(),
                     "{\"processInstanceId\":\"" + processInstanceId + "\"}");
             Map<String, Object> r = new LinkedHashMap<>();
@@ -263,6 +280,8 @@ public class SpkIpdFlowRunService {
             commandService.markFailed(cmd.commandId(), "START_FAIL", e.getMessage());
             run.setStatus("FAILED");
             flowRunMapper.updateById(run);
+            // D4：启动失败写 failed_job 档案（修 G5——此前失败作业无登记）
+            writeFailedJob("FLOW_START", flowRunId, null, "START_FAIL", e.getMessage());
             log.error("[start][flowRunId={} 启动失败 {}]", flowRunId, e.getMessage());
             throw exception(IPD_FLOW_START_FAIL);
         }
@@ -607,7 +626,8 @@ public class SpkIpdFlowRunService {
 
     private String minimalProfileSnapshot(SpkIpdFlowRunPreflightReqVO req) {
         Map<String, Object> snap = new LinkedHashMap<>();
-        snap.put("processDefinitionKey", IPD_FLOW_KEY);
+        // D1：降级快照也按 flowType 写 key（修 G1——此前三种 flowType 都写 IPD_FLOW_KEY）
+        snap.put("processDefinitionKey", flowKeyOf(req.getFlowType()));
         snap.put("flowType", req.getFlowType());
         snap.put("profileVersion", 1);
         snap.put("note", "未匹配已发布 ProcessProfile，使用最小降级档案；请在流程治理配置发布后生效");
@@ -626,6 +646,56 @@ public class SpkIpdFlowRunService {
         } catch (Exception e) {
             log.warn("[resolvePublishedProfile][flowType={} 无已发布 Profile，降级最小档案：{}]", flowType, e.getMessage());
             return null;
+        }
+    }
+
+    /**
+     * D4：写引擎实例档案（修 G4）。启动成功后登记 processInstanceId↔flowRunId↔profileVersionId。
+     * 写入失败不阻断主流程（仅告警），引擎实例是运维统计产物，非业务强一致数据。
+     */
+    private void writeEngineInstance(SpkIpdFlowRunDO run, String processInstanceId, String flowKey,
+                                     SpkIpdProcessProfileService.PublishedProfile pub) {
+        try {
+            Map<String, Object> meta = new LinkedHashMap<>();
+            meta.put("flowKey", flowKey);
+            meta.put("flowType", run.getFlowType());
+            if (run.getProfileId() != null) meta.put("profileId", run.getProfileId());
+            if (run.getProfileVersion() != null) meta.put("profileVersionNo", run.getProfileVersion());
+            SpkIpdEngineInstanceDO ei = SpkIpdEngineInstanceDO.builder()
+                    .processInstanceId(processInstanceId)
+                    .flowRunId(run.getId())
+                    .profileVersionId(pub == null ? null : pub.versionId())
+                    .engineHealth("HEALTHY")
+                    .lastSyncedAt(LocalDateTime.now())
+                    .metaJson(writeJson(meta))
+                    .lockVersion(0)
+                    .build();
+            engineInstanceMapper.insert(ei);
+        } catch (Exception e) {
+            log.warn("[writeEngineInstance][flowRunId={} 写引擎实例档案失败：{}]", run.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * D4：写失败作业档案（修 G5）。启动/触发器入口失败登记，供运行统计页失败作业区展示。
+     * refId 存 flowRunId（failed_job 表无独立 processInstanceId 列，processInstanceId 已在 engine_instance 登记）。
+     */
+    private void writeFailedJob(String jobType, Long flowRunId, String processInstanceId,
+                                String reasonCode, String reason) {
+        try {
+            String reasonText = reasonCode + (reason == null || reason.isBlank() ? "" : ": " + reason);
+            SpkIpdFailedJobDO job = SpkIpdFailedJobDO.builder()
+                    .jobType(jobType)
+                    .refId(flowRunId)
+                    .reason(reasonText.substring(0, Math.min(reasonText.length(), 500)))
+                    .retryCount(0)
+                    .status("FAILED")
+                    .lockVersion(0)
+                    .build();
+            failedJobMapper.insert(job);
+        } catch (Exception e) {
+            log.warn("[writeFailedJob][jobType={} flowRunId={} 写失败作业档案失败：{}]",
+                    jobType, flowRunId, e.getMessage());
         }
     }
 

@@ -7,33 +7,38 @@
 -- =====================================================================
 
 -- 三模板 Profile 主行（id 段 7001/7002/7003）
+-- D1：process_definition_key 由 flowKeyOf(flow_type) 自动派生固化（FULL→spkIpdFlowFull / INCREMENT→spkIpdFlowIncrement / ISSUE→spkIpdFlowIssue）。
 INSERT INTO "spk_ipd_process_profile"
-("id","profile_code","name","flow_type","description","status","current_version","published_by","published_at","tenant_id") VALUES
-(7001,'FULL_RELEASE_V1','完整发布流程模板','FULL_RELEASE',
+("id","profile_code","name","flow_type","process_definition_key","description","status","current_version","published_by","published_at","tenant_id") VALUES
+(7001,'FULL_RELEASE_V1','完整发布流程模板','FULL_RELEASE','spkIpdFlowFull',
  'IPD 完整发布：概念→计划→开发→验证→发布→生命周期 6 阶段全量门径（CDCP/PDCP/ADCP/GA/LDCP）。',
  'PUBLISHED',1,'1',now(),1),
-(7002,'INCREMENT_RELEASE_V1','增量发布流程模板','INCREMENT_RELEASE',
+(7002,'INCREMENT_RELEASE_V1','增量发布流程模板','INCREMENT_RELEASE','spkIpdFlowIncrement',
  'IPD 增量发布：基于基线版本的增量交付，裁剪概念阶段，从计划阶段起按 ADCP 门径推进。',
  'PUBLISHED',1,'1',now(),1),
-(7003,'ISSUE_RESOLUTION_V1','问题流模板','ISSUE_RESOLUTION',
+(7003,'ISSUE_RESOLUTION_V1','问题流模板','ISSUE_RESOLUTION','spkIpdFlowIssue',
  'IPD 问题流：针对线上 Issue 的快速修复流，裁剪至开发+验证+热修复发布，TR4 门径。',
  'PUBLISHED',1,'1',now(),1)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  "process_definition_key"=EXCLUDED."process_definition_key";
 
 -- 各 Profile 的 v1 已发布版本快照（id 段 7101/7102/7103）
 -- snapshot_json 含 stages（阶段序列）+ gates（门径）+ defaultTrim（默认裁剪）+ requiredArtifacts（门禁产物）
+-- D1：发布时固化 process_definition_key 进版本，回滚可定位历史流程定义。
 INSERT INTO "spk_ipd_process_profile_version"
-("id","profile_id","version","snapshot_json","status","compatibility_hash","published_by","published_at","tenant_id") VALUES
+("id","profile_id","version","snapshot_json","status","compatibility_hash","process_definition_key","process_definition_id","published_by","published_at","tenant_id") VALUES
 (7101,7001,1,
 '{"profileCode":"FULL_RELEASE_V1","flowType":"FULL_RELEASE","stages":["concept","plan","develop","qualify","launch","lifecycle"],"gates":["CDCP","PDCP","ADCP","GA","LDCP"],"defaultTrim":{},"requiredArtifactsByGate":{"CDCP":["feasibility-report","concept-decision-brief"],"PDCP":["proj-plan","risk-assessment"],"ADCP":["integration-build","code-review-report"],"GA":["release-package","system-test-report"],"LDCP":["ops-monitoring-report","improvement-plan"]}}',
- 'PUBLISHED','sha256:full-release-v1','1',now(),1),
+ 'PUBLISHED','sha256:full-release-v1','spkIpdFlowFull','spkIpdFlowFull:1','1',now(),1),
 (7102,7002,1,
 '{"profileCode":"INCREMENT_RELEASE_V1","flowType":"INCREMENT_RELEASE","stages":["plan","develop","qualify","launch"],"gates":["ADCP","GA"],"defaultTrim":{"skipStages":["concept"],"reason":"增量发布基于既有基线，跳过概念阶段"},"requiredArtifactsByGate":{"ADCP":["integration-build","code-review-report"],"GA":["release-package","system-test-report"]}}',
- 'PUBLISHED','sha256:increment-release-v1','1',now(),1),
+ 'PUBLISHED','sha256:increment-release-v1','spkIpdFlowIncrement','spkIpdFlowIncrement:1','1',now(),1),
 (7103,7003,1,
 '{"profileCode":"ISSUE_RESOLUTION_V1","flowType":"ISSUE_RESOLUTION","stages":["develop","qualify","launch"],"gates":["TR4"],"defaultTrim":{"skipStages":["concept","plan"],"reason":"问题流聚焦热修复，裁剪概念与计划阶段"},"requiredArtifactsByGate":{"TR4":["hotfix-report","security-test-report"]}}',
- 'PUBLISHED','sha256:issue-resolution-v1','1',now(),1)
-ON CONFLICT (id) DO NOTHING;
+ 'PUBLISHED','sha256:issue-resolution-v1','spkIpdFlowIssue','spkIpdFlowIssue:1','1',now(),1)
+ON CONFLICT (id) DO UPDATE SET
+  "process_definition_key"=EXCLUDED."process_definition_key",
+  "process_definition_id"=EXCLUDED."process_definition_id";
 
 -- 增量发布与问题流的显式裁剪规则（绑定 ProfileVersion）
 INSERT INTO "spk_ipd_trim_rule"

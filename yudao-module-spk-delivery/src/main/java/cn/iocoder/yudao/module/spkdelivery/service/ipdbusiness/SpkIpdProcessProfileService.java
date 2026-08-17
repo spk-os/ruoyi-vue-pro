@@ -5,6 +5,7 @@ import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkIpdProcessProfilePageReqVO;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkIpdProcessProfileSaveReqVO;
+import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkIpdSnapshotSchemaRespVO;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkIpdTrimRuleSaveReqVO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdEngineInstanceDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdFailedJobDO;
@@ -60,6 +61,8 @@ public class SpkIpdProcessProfileService {
         SpkIpdProcessProfileDO p = SpkIpdProcessProfileDO.builder()
                 .profileCode(req.getProfileCode()).name(req.getName())
                 .flowType(req.getFlowType()).description(req.getDescription())
+                // D1：按 flowType 自动绑定 BPM 流程定义 key（修 G1/G3），不可手改
+                .processDefinitionKey(SpkIpdBusinessConstants.flowKeyOf(req.getFlowType()))
                 .status(req.getStatus() == null ? "DRAFT" : req.getStatus())
                 .currentVersion(0).lockVersion(0).build();
         profileMapper.insert(p);
@@ -140,6 +143,8 @@ public class SpkIpdProcessProfileService {
         profileVersionMapper.updateById(v);
         // 同步 Profile.current_version
         SpkIpdProcessProfileDO p = getProfileOrThrow(v.getProfileId());
+        // D1：发布时把 Profile 绑定的 BPM key 固化进版本（回滚可定位历史流程定义，修 G3）
+        v.setProcessDefinitionKey(p.getProcessDefinitionKey());
         p.setCurrentVersion(v.getVersion());
         p.setStatus("PUBLISHED");
         p.setPublishedBy(operator);
@@ -190,11 +195,16 @@ public class SpkIpdProcessProfileService {
         if (v == null) {
             throw exception(IPD_PROFILE_NOT_PUBLISHED);
         }
-        return new PublishedProfile(p.getId(), v.getId(), v.getVersion(), v.getSnapshotJson());
+        // D1：返回 Profile 绑定的 BPM key，供 FlowRunService.start 按 flowType 启动对应流程（修 G1）
+        String key = v.getProcessDefinitionKey() != null ? v.getProcessDefinitionKey()
+                : (p.getProcessDefinitionKey() != null ? p.getProcessDefinitionKey()
+                : SpkIpdBusinessConstants.flowKeyOf(flowType));
+        return new PublishedProfile(p.getId(), v.getId(), v.getVersion(), key, v.getSnapshotJson());
     }
 
-    /** 已发布 Profile 的轻量值对象（profileId/versionId/version/snapshot）。 */
-    public record PublishedProfile(Long profileId, Long versionId, Integer version, String snapshotJson) {}
+    /** 已发布 Profile 的轻量值对象（profileId/versionId/version/processDefinitionKey/snapshot）。 */
+    public record PublishedProfile(Long profileId, Long versionId, Integer version,
+                                   String processDefinitionKey, String snapshotJson) {}
     /* ============ 裁剪规则 ============ */
     // METHODS_TRIM
     @Transactional(rollbackFor = Exception.class)
@@ -236,6 +246,72 @@ public class SpkIpdProcessProfileService {
 
     public List<SpkIpdGovernanceAuditDO> listAudit(String actionType, Long refId) {
         return governanceAuditMapper.selectListByActionTypeAndRefId(actionType, refId);
+    }
+
+    /**
+     * D2：按 flowType 返回 snapshotJson 结构契约（阶段/门/DCP/TR/活动）。
+     * 供前端版本编辑器按字段构造强类型快照。三种 flowType 各自不同阶段集，体现流程差异。
+     */
+    public SpkIpdSnapshotSchemaRespVO buildSnapshotSchema(String flowType) {
+        SpkIpdSnapshotSchemaRespVO resp = new SpkIpdSnapshotSchemaRespVO();
+        resp.setMode(flowType);
+        List<SpkIpdSnapshotSchemaRespVO.StageDef> stages = new java.util.ArrayList<>();
+        if (SpkIpdBusinessConstants.FLOW_INCREMENT_RELEASE.equals(flowType)) {
+            // 轻量增量：跳概念阶段，DCP 合并，TR 仅关键 2 个
+            stages.add(stage("plan", gates(1, 2), List.of("PDCP"), List.of("tr3"),
+                    List.of("plan.scope", "plan.schedule")));
+            stages.add(stage("develop", gates(3, 4), List.of("ADCP"), List.of("tr4"),
+                    List.of("develop.impl", "develop.unit_test")));
+            stages.add(stage("qualify", gates(5, 6), List.of(), List.of("tr5"),
+                    List.of("qualify.integration", "qualify.regression")));
+            stages.add(stage("launch", gates(7, 8), List.of("LDCP"), List.of(),
+                    List.of("launch.deploy", "launch.monitor")));
+        } else if (SpkIpdBusinessConstants.FLOW_ISSUE_RESOLUTION.equals(flowType)) {
+            // 问题处置：四段轻流程，每段一审批一触发器
+            stages.add(stage("root_cause", List.of(), List.of("RCDCP"), List.of("tr_rc"),
+                    List.of("root_cause.analyze")));
+            stages.add(stage("fix_develop", List.of(), List.of("FDCP"), List.of("tr_fix"),
+                    List.of("fix_develop.patch")));
+            stages.add(stage("verify", List.of(), List.of("VDCP"), List.of("tr_verify"),
+                    List.of("verify.repro")));
+            stages.add(stage("close", List.of(), List.of("CDCP_CLOSE"), List.of(),
+                    List.of("close.archive")));
+        } else {
+            // 默认 FULL_RELEASE：完整六阶段 + 4 DCP + 6 TR + g1-g8
+            stages.add(stage("concept", gates(1, 1), List.of("CDCP"), List.of("tr2"),
+                    List.of("concept.charter", "concept.feasibility")));
+            stages.add(stage("plan", gates(2, 2), List.of("PDCP"), List.of("tr3"),
+                    List.of("plan.scope", "plan.schedule", "plan.resource")));
+            stages.add(stage("develop", gates(3, 4), List.of("ADCP"), List.of("tr4"),
+                    List.of("develop.impl", "develop.unit_test", "develop.integration")));
+            stages.add(stage("qualify", gates(5, 6), List.of(), List.of("tr5"),
+                    List.of("qualify.integration", "qualify.regression", "qualify.system")));
+            stages.add(stage("launch", gates(7, 7), List.of("LDCP"), List.of("tr6"),
+                    List.of("launch.deploy", "launch.monitor")));
+            stages.add(stage("lifecycle", gates(8, 8), List.of(), List.of(),
+                    List.of("lifecycle.handover")));
+        }
+        resp.setStages(stages);
+        List<SpkIpdSnapshotSchemaRespVO.TrimRuleDef> trims = new java.util.ArrayList<>();
+        SpkIpdSnapshotSchemaRespVO.TrimRuleDef t = new SpkIpdSnapshotSchemaRespVO.TrimRuleDef();
+        t.setAction("SKIP"); t.setTrimCondition("mode==INCREMENT_RELEASE && stage==concept");
+        t.setReason("增量发布跳过概念阶段");
+        trims.add(t);
+        resp.setTrimRules(trims);
+        return resp;
+    }
+
+    private SpkIpdSnapshotSchemaRespVO.StageDef stage(String name, List<String> gates,
+                                                      List<String> dcps, List<String> trs, List<String> activities) {
+        SpkIpdSnapshotSchemaRespVO.StageDef s = new SpkIpdSnapshotSchemaRespVO.StageDef();
+        s.setStage(name); s.setGates(gates); s.setDcps(dcps); s.setTrs(trs); s.setActivities(activities);
+        return s;
+    }
+
+    private List<String> gates(int from, int to) {
+        List<String> list = new java.util.ArrayList<>();
+        for (int i = from; i <= to; i++) list.add("g" + i);
+        return list;
     }
 
     // ---------- 内部辅助 ----------

@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS "spk_ipd_process_profile" (
   "profile_code"     VARCHAR(64)  NOT NULL,
   "name"             VARCHAR(128) NOT NULL,
   "flow_type"        VARCHAR(32) NOT NULL,
+  "process_definition_key" VARCHAR(128),
   "description"      TEXT,
   "status"           VARCHAR(24) NOT NULL DEFAULT 'DRAFT',
   "current_version"  INT          NOT NULL DEFAULT 0,
@@ -50,6 +51,8 @@ CREATE TABLE IF NOT EXISTS "spk_ipd_process_profile_version" (
   "snapshot_json"          TEXT         NOT NULL,
   "status"                 VARCHAR(24) NOT NULL DEFAULT 'DRAFT',
   "compatibility_hash"     VARCHAR(128),
+  "process_definition_key" VARCHAR(128),
+  "process_definition_id" VARCHAR(128),
   "published_by"           VARCHAR(64),
   "published_at"           TIMESTAMP,
   "supersedes_version_id"  BIGINT,
@@ -153,3 +156,14 @@ CREATE INDEX IF NOT EXISTS "idx_spk_ipd_governance_audit_ref" ON "spk_ipd_govern
 -- ---------- ActivityDef 追加 required_artifacts 列（§9.3 治理字段） ----------
 -- 该 Activity 产出/消费的必需制品类型列表（JSON 数组文本），供 Profile 引用做门禁校验。
 ALTER TABLE "spk_ipd_activity_def" ADD COLUMN IF NOT EXISTS "required_artifacts" TEXT;
+
+-- ---------- D1 多流程改造：Profile/Version 绑定 BPM 流程定义 key ----------
+-- 已存在库需用 ALTER 补列（与上方 CREATE TABLE 内联定义双保险，IF NOT EXISTS 幂等）。
+-- Profile.process_definition_key：建 Profile 时由 flow_type 经 flowKeyOf 自动填，不可手改。
+ALTER TABLE "spk_ipd_process_profile" ADD COLUMN IF NOT EXISTS "process_definition_key" VARCHAR(128);
+-- Version.process_definition_key/Id：发布时固化，回滚可定位历史流程定义。
+ALTER TABLE "spk_ipd_process_profile_version" ADD COLUMN IF NOT EXISTS "process_definition_key" VARCHAR(128);
+ALTER TABLE "spk_ipd_process_profile_version" ADD COLUMN IF NOT EXISTS "process_definition_id" VARCHAR(128);
+COMMENT ON COLUMN "spk_ipd_process_profile"."process_definition_key" IS '绑定 BPM 流程定义 key（flowKeyOf(flow_type) 自动派生）';
+COMMENT ON COLUMN "spk_ipd_process_profile_version"."process_definition_key" IS '发布时固化的 BPM 流程定义 key';
+COMMENT ON COLUMN "spk_ipd_process_profile_version"."process_definition_id" IS '发布时固化的 Flowable 流程定义 id（回滚定位历史版本）';

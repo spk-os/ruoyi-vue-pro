@@ -1,0 +1,221 @@
+{
+  "id": "n_start",
+  "type": 10,
+  "name": "IPD 增量发布·立项发起",
+  "childNode": {
+    "id": "n_plan_t1",
+    "type": 15,
+    "name": "计划阶段·范围裁剪",
+    "triggerSetting": {
+      "type": 2,
+      "httpRequestSetting": {
+        "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+        "body": [
+          {
+            "type": 1,
+            "key": "activityId",
+            "value": "ACT-INCR-PLAN-1"
+          },
+          {
+            "type": 1,
+            "key": "activityVersion",
+            "value": "1.0.0"
+          },
+          {
+            "type": 1,
+            "key": "nodeKey",
+            "value": "n_plan_t1"
+          },
+          {
+            "type": 1,
+            "key": "processInstanceId",
+            "value": "${processInstanceId}"
+          }
+        ]
+      }
+    },
+    "childNode": {
+      "id": "n_plan_tr3",
+      "type": 15,
+      "name": "TR3 计划技术评审",
+      "triggerSetting": {
+        "type": 2,
+        "httpRequestSetting": {
+          "url": "http://${spk-base-url}/admin-api/spk/aegis/review",
+          "body": [
+            {
+              "type": 1,
+              "key": "nodeKey",
+              "value": "n_plan_tr3"
+            },
+            {
+              "type": 1,
+              "key": "processInstanceId",
+              "value": "${processInstanceId}"
+            }
+          ]
+        }
+      },
+      "childNode": {
+        "id": "n_pdcp",
+        "type": 11,
+        "name": "PDCP 计划决策评审",
+        "candidateStrategy": 36,
+        "childNode": {
+          "id": "n_dev_t1",
+          "type": 15,
+          "name": "开发阶段·实现",
+          "triggerSetting": {
+            "type": 2,
+            "httpRequestSetting": {
+              "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+              "body": [
+                {
+                  "type": 1,
+                  "key": "activityId",
+                  "value": "ACT-INCR-DEV-1"
+                },
+                {
+                  "type": 1,
+                  "key": "activityVersion",
+                  "value": "1.0.0"
+                },
+                {
+                  "type": 1,
+                  "key": "nodeKey",
+                  "value": "n_dev_t1"
+                },
+                {
+                  "type": 1,
+                  "key": "processInstanceId",
+                  "value": "${processInstanceId}"
+                }
+              ]
+            }
+          },
+          "childNode": {
+            "id": "n_dev_tr4",
+            "type": 15,
+            "name": "TR4 开发技术评审",
+            "triggerSetting": {
+              "type": 2,
+              "httpRequestSetting": {
+                "url": "http://${spk-base-url}/admin-api/spk/aegis/review",
+                "body": [
+                  {
+                    "type": 1,
+                    "key": "nodeKey",
+                    "value": "n_dev_tr4"
+                  },
+                  {
+                    "type": 1,
+                    "key": "processInstanceId",
+                    "value": "${processInstanceId}"
+                  }
+                ]
+              }
+            },
+            "childNode": {
+              "id": "n_adcp",
+              "type": 11,
+              "name": "ADCP 开发决策评审",
+              "candidateStrategy": 36,
+              "childNode": {
+                "id": "n_qual_t1",
+                "type": 15,
+                "name": "验证阶段·回归",
+                "triggerSetting": {
+                  "type": 2,
+                  "httpRequestSetting": {
+                    "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                    "body": [
+                      {
+                        "type": 1,
+                        "key": "activityId",
+                        "value": "ACT-INCR-QUAL-1"
+                      },
+                      {
+                        "type": 1,
+                        "key": "activityVersion",
+                        "value": "1.0.0"
+                      },
+                      {
+                        "type": 1,
+                        "key": "nodeKey",
+                        "value": "n_qual_t1"
+                      },
+                      {
+                        "type": 1,
+                        "key": "processInstanceId",
+                        "value": "${processInstanceId}"
+                      }
+                    ]
+                  }
+                },
+                "childNode": {
+                  "id": "n_launch_t1",
+                  "type": 15,
+                  "name": "发布阶段·部署",
+                  "triggerSetting": {
+                    "type": 2,
+                    "httpRequestSetting": {
+                      "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                      "body": [
+                        {
+                          "type": 1,
+                          "key": "activityId",
+                          "value": "ACT-INCR-LAUNCH-1"
+                        },
+                        {
+                          "type": 1,
+                          "key": "activityVersion",
+                          "value": "1.0.0"
+                        },
+                        {
+                          "type": 1,
+                          "key": "nodeKey",
+                          "value": "n_launch_t1"
+                        },
+                        {
+                          "type": 1,
+                          "key": "processInstanceId",
+                          "value": "${processInstanceId}"
+                        }
+                      ]
+                    }
+                  },
+                  "childNode": {
+                    "id": "n_ldcp",
+                    "type": 11,
+                    "name": "LDCP 发布决策评审",
+                    "candidateStrategy": 36,
+                    "childNode": {
+                      "id": "n_end",
+                      "type": 1,
+                      "name": "结束"
+                    },
+                    "approveType": 1,
+                    "approveMethod": 1,
+                    "rejectHandler": {
+                      "type": 1
+                    }
+                  }
+                }
+              },
+              "approveType": 1,
+              "approveMethod": 1,
+              "rejectHandler": {
+                "type": 1
+              }
+            }
+          }
+        },
+        "approveType": 1,
+        "approveMethod": 1,
+        "rejectHandler": {
+          "type": 1
+        }
+      }
+    }
+  }
+}

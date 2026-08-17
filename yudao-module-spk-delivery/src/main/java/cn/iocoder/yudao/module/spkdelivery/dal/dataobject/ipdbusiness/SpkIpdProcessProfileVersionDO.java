@@ -34,6 +34,16 @@ public class SpkIpdProcessProfileVersionDO extends BaseDO {
     private String snapshotJson;
     private String status;
     private String compatibilityHash;
+    /**
+     * 发布时固化的 BPM 流程定义 key（与 Profile.processDefinitionKey 一致）。
+     * <p>版本回滚时可据此 key 定位历史流程定义，修 G3。
+     */
+    private String processDefinitionKey;
+    /**
+     * 发布时固化的 Flowable 流程定义 id（act_re_procdef.id_）。
+     * <p>用于精确指向某次部署的流程定义版本，回滚可还原。
+     */
+    private String processDefinitionId;
     private String publishedBy;
     private LocalDateTime publishedAt;
     /** 被本版本替代的上一版本 id */

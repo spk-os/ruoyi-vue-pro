@@ -1,0 +1,175 @@
+{
+  "id": "n_start",
+  "type": 10,
+  "name": "IPD 问题处置·立项发起",
+  "childNode": {
+    "id": "n_rc_t1",
+    "type": 15,
+    "name": "根因分析·定位",
+    "triggerSetting": {
+      "type": 2,
+      "httpRequestSetting": {
+        "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+        "body": [
+          {
+            "type": 1,
+            "key": "activityId",
+            "value": "ACT-ISSUE-RC-1"
+          },
+          {
+            "type": 1,
+            "key": "activityVersion",
+            "value": "1.0.0"
+          },
+          {
+            "type": 1,
+            "key": "nodeKey",
+            "value": "n_rc_t1"
+          },
+          {
+            "type": 1,
+            "key": "processInstanceId",
+            "value": "${processInstanceId}"
+          }
+        ]
+      }
+    },
+    "childNode": {
+      "id": "n_rcdcp",
+      "type": 11,
+      "name": "RCDCP 根因决策评审",
+      "candidateStrategy": 36,
+      "childNode": {
+        "id": "n_fix_t1",
+        "type": 15,
+        "name": "修复开发·补丁",
+        "triggerSetting": {
+          "type": 2,
+          "httpRequestSetting": {
+            "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+            "body": [
+              {
+                "type": 1,
+                "key": "activityId",
+                "value": "ACT-ISSUE-FIX-1"
+              },
+              {
+                "type": 1,
+                "key": "activityVersion",
+                "value": "1.0.0"
+              },
+              {
+                "type": 1,
+                "key": "nodeKey",
+                "value": "n_fix_t1"
+              },
+              {
+                "type": 1,
+                "key": "processInstanceId",
+                "value": "${processInstanceId}"
+              }
+            ]
+          }
+        },
+        "childNode": {
+          "id": "n_fdcp",
+          "type": 11,
+          "name": "FDCP 修复决策评审",
+          "candidateStrategy": 36,
+          "childNode": {
+            "id": "n_verify_t1",
+            "type": 15,
+            "name": "验证·复现确认",
+            "triggerSetting": {
+              "type": 2,
+              "httpRequestSetting": {
+                "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                "body": [
+                  {
+                    "type": 1,
+                    "key": "activityId",
+                    "value": "ACT-ISSUE-VERIFY-1"
+                  },
+                  {
+                    "type": 1,
+                    "key": "activityVersion",
+                    "value": "1.0.0"
+                  },
+                  {
+                    "type": 1,
+                    "key": "nodeKey",
+                    "value": "n_verify_t1"
+                  },
+                  {
+                    "type": 1,
+                    "key": "processInstanceId",
+                    "value": "${processInstanceId}"
+                  }
+                ]
+              }
+            },
+            "childNode": {
+              "id": "n_vdcp",
+              "type": 11,
+              "name": "VDCP 验证决策评审",
+              "candidateStrategy": 36,
+              "childNode": {
+                "id": "n_close_t1",
+                "type": 15,
+                "name": "关闭·归档",
+                "triggerSetting": {
+                  "type": 2,
+                  "httpRequestSetting": {
+                    "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                    "body": [
+                      {
+                        "type": 1,
+                        "key": "activityId",
+                        "value": "ACT-ISSUE-CLOSE-1"
+                      },
+                      {
+                        "type": 1,
+                        "key": "activityVersion",
+                        "value": "1.0.0"
+                      },
+                      {
+                        "type": 1,
+                        "key": "nodeKey",
+                        "value": "n_close_t1"
+                      },
+                      {
+                        "type": 1,
+                        "key": "processInstanceId",
+                        "value": "${processInstanceId}"
+                      }
+                    ]
+                  }
+                },
+                "childNode": {
+                  "id": "n_end",
+                  "type": 1,
+                  "name": "结束"
+                }
+              },
+              "approveType": 1,
+              "approveMethod": 1,
+              "rejectHandler": {
+                "type": 1
+              }
+            }
+          },
+          "approveType": 1,
+          "approveMethod": 1,
+          "rejectHandler": {
+            "type": 1
+          }
+        }
+      },
+      "approveType": 1,
+      "approveMethod": 1,
+      "rejectHandler": {
+        "type": 1
+      }
+    }
+  }
+}

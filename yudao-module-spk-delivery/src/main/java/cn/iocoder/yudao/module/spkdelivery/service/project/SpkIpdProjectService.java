@@ -22,6 +22,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdBusinessConstants.FLOW_FULL_RELEASE;
+import static cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdBusinessConstants.flowKeyOf;
+
 /**
  * SPK-OS Cortext-IPD 项目服务
  * <p>
@@ -36,8 +39,11 @@ import java.util.Map;
 @Validated
 public class SpkIpdProjectService {
 
-    /** IPD 主流程定义 key（与 SpkIpdFlowDeployRunner / simpleModel 对齐） */
-    public static final String IPD_FLOW_KEY = "spkIpdFlow";
+    /**
+     * IPD 主流程定义 key。D1：改经 flowKeyOf(FULL_RELEASE) 解析为 spkIpdFlowFull（修 G1/G8）。
+     * 项目级入口默认发起全量发布流程；保留旧 spkIpdFlow key 仅用于历史实例查询兼容。
+     */
+    public static final String IPD_FLOW_KEY = flowKeyOf(FLOW_FULL_RELEASE);
 
     /** 六阶段固定顺序（与 spk_ipd_activity_def.stage 枚举对齐） */
     private static final List<String> STAGE_ORDER = Arrays.asList(

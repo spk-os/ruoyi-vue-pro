@@ -1,0 +1,367 @@
+{
+  "id": "n_start",
+  "type": 10,
+  "name": "IPD 全量发布·立项发起",
+  "childNode": {
+    "id": "n_concept_t1",
+    "type": 15,
+    "name": "概念阶段·需求洞察",
+    "triggerSetting": {
+      "type": 2,
+      "httpRequestSetting": {
+        "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+        "body": [
+          {
+            "type": 1,
+            "key": "activityId",
+            "value": "ACT-FULL-CONCEPT-1"
+          },
+          {
+            "type": 1,
+            "key": "activityVersion",
+            "value": "1.0.0"
+          },
+          {
+            "type": 1,
+            "key": "nodeKey",
+            "value": "n_concept_t1"
+          },
+          {
+            "type": 1,
+            "key": "processInstanceId",
+            "value": "${processInstanceId}"
+          }
+        ]
+      }
+    },
+    "childNode": {
+      "id": "n_concept_tr2",
+      "type": 15,
+      "name": "TR2 概念技术评审",
+      "triggerSetting": {
+        "type": 2,
+        "httpRequestSetting": {
+          "url": "http://${spk-base-url}/admin-api/spk/aegis/review",
+          "body": [
+            {
+              "type": 1,
+              "key": "nodeKey",
+              "value": "n_concept_tr2"
+            },
+            {
+              "type": 1,
+              "key": "processInstanceId",
+              "value": "${processInstanceId}"
+            }
+          ]
+        }
+      },
+      "childNode": {
+        "id": "n_cdcp",
+        "type": 11,
+        "name": "CDCP 概念决策评审",
+        "candidateStrategy": 36,
+        "childNode": {
+          "id": "n_plan_t1",
+          "type": 15,
+          "name": "计划阶段·范围与进度",
+          "triggerSetting": {
+            "type": 2,
+            "httpRequestSetting": {
+              "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+              "body": [
+                {
+                  "type": 1,
+                  "key": "activityId",
+                  "value": "ACT-FULL-PLAN-1"
+                },
+                {
+                  "type": 1,
+                  "key": "activityVersion",
+                  "value": "1.0.0"
+                },
+                {
+                  "type": 1,
+                  "key": "nodeKey",
+                  "value": "n_plan_t1"
+                },
+                {
+                  "type": 1,
+                  "key": "processInstanceId",
+                  "value": "${processInstanceId}"
+                }
+              ]
+            }
+          },
+          "childNode": {
+            "id": "n_plan_tr3",
+            "type": 15,
+            "name": "TR3 计划技术评审",
+            "triggerSetting": {
+              "type": 2,
+              "httpRequestSetting": {
+                "url": "http://${spk-base-url}/admin-api/spk/aegis/review",
+                "body": [
+                  {
+                    "type": 1,
+                    "key": "nodeKey",
+                    "value": "n_plan_tr3"
+                  },
+                  {
+                    "type": 1,
+                    "key": "processInstanceId",
+                    "value": "${processInstanceId}"
+                  }
+                ]
+              }
+            },
+            "childNode": {
+              "id": "n_pdcp",
+              "type": 11,
+              "name": "PDCP 计划决策评审",
+              "candidateStrategy": 36,
+              "childNode": {
+                "id": "n_dev_t1",
+                "type": 15,
+                "name": "开发阶段·实现与单元测试",
+                "triggerSetting": {
+                  "type": 2,
+                  "httpRequestSetting": {
+                    "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                    "body": [
+                      {
+                        "type": 1,
+                        "key": "activityId",
+                        "value": "ACT-FULL-DEV-1"
+                      },
+                      {
+                        "type": 1,
+                        "key": "activityVersion",
+                        "value": "1.0.0"
+                      },
+                      {
+                        "type": 1,
+                        "key": "nodeKey",
+                        "value": "n_dev_t1"
+                      },
+                      {
+                        "type": 1,
+                        "key": "processInstanceId",
+                        "value": "${processInstanceId}"
+                      }
+                    ]
+                  }
+                },
+                "childNode": {
+                  "id": "n_dev_tr4",
+                  "type": 15,
+                  "name": "TR4 开发技术评审",
+                  "triggerSetting": {
+                    "type": 2,
+                    "httpRequestSetting": {
+                      "url": "http://${spk-base-url}/admin-api/spk/aegis/review",
+                      "body": [
+                        {
+                          "type": 1,
+                          "key": "nodeKey",
+                          "value": "n_dev_tr4"
+                        },
+                        {
+                          "type": 1,
+                          "key": "processInstanceId",
+                          "value": "${processInstanceId}"
+                        }
+                      ]
+                    }
+                  },
+                  "childNode": {
+                    "id": "n_adcp",
+                    "type": 11,
+                    "name": "ADCP 开发决策评审",
+                    "candidateStrategy": 36,
+                    "childNode": {
+                      "id": "n_qual_t1",
+                      "type": 15,
+                      "name": "验证阶段·集成与回归",
+                      "triggerSetting": {
+                        "type": 2,
+                        "httpRequestSetting": {
+                          "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                          "body": [
+                            {
+                              "type": 1,
+                              "key": "activityId",
+                              "value": "ACT-FULL-QUAL-1"
+                            },
+                            {
+                              "type": 1,
+                              "key": "activityVersion",
+                              "value": "1.0.0"
+                            },
+                            {
+                              "type": 1,
+                              "key": "nodeKey",
+                              "value": "n_qual_t1"
+                            },
+                            {
+                              "type": 1,
+                              "key": "processInstanceId",
+                              "value": "${processInstanceId}"
+                            }
+                          ]
+                        }
+                      },
+                      "childNode": {
+                        "id": "n_qual_tr5",
+                        "type": 15,
+                        "name": "TR5 验证技术评审",
+                        "triggerSetting": {
+                          "type": 2,
+                          "httpRequestSetting": {
+                            "url": "http://${spk-base-url}/admin-api/spk/aegis/review",
+                            "body": [
+                              {
+                                "type": 1,
+                                "key": "nodeKey",
+                                "value": "n_qual_tr5"
+                              },
+                              {
+                                "type": 1,
+                                "key": "processInstanceId",
+                                "value": "${processInstanceId}"
+                              }
+                            ]
+                          }
+                        },
+                        "childNode": {
+                          "id": "n_launch_t1",
+                          "type": 15,
+                          "name": "发布阶段·部署与监控",
+                          "triggerSetting": {
+                            "type": 2,
+                            "httpRequestSetting": {
+                              "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                              "body": [
+                                {
+                                  "type": 1,
+                                  "key": "activityId",
+                                  "value": "ACT-FULL-LAUNCH-1"
+                                },
+                                {
+                                  "type": 1,
+                                  "key": "activityVersion",
+                                  "value": "1.0.0"
+                                },
+                                {
+                                  "type": 1,
+                                  "key": "nodeKey",
+                                  "value": "n_launch_t1"
+                                },
+                                {
+                                  "type": 1,
+                                  "key": "processInstanceId",
+                                  "value": "${processInstanceId}"
+                                }
+                              ]
+                            }
+                          },
+                          "childNode": {
+                            "id": "n_launch_tr6",
+                            "type": 15,
+                            "name": "TR6 发布技术评审",
+                            "triggerSetting": {
+                              "type": 2,
+                              "httpRequestSetting": {
+                                "url": "http://${spk-base-url}/admin-api/spk/aegis/review",
+                                "body": [
+                                  {
+                                    "type": 1,
+                                    "key": "nodeKey",
+                                    "value": "n_launch_tr6"
+                                  },
+                                  {
+                                    "type": 1,
+                                    "key": "processInstanceId",
+                                    "value": "${processInstanceId}"
+                                  }
+                                ]
+                              }
+                            },
+                            "childNode": {
+                              "id": "n_ldcp",
+                              "type": 11,
+                              "name": "LDCP 发布决策评审",
+                              "candidateStrategy": 36,
+                              "childNode": {
+                                "id": "n_life_t1",
+                                "type": 15,
+                                "name": "生命周期·移交运维",
+                                "triggerSetting": {
+                                  "type": 2,
+                                  "httpRequestSetting": {
+                                    "url": "http://${spk-base-url}/admin-api/spk/agent-task/run",
+                                    "body": [
+                                      {
+                                        "type": 1,
+                                        "key": "activityId",
+                                        "value": "ACT-FULL-LIFE-1"
+                                      },
+                                      {
+                                        "type": 1,
+                                        "key": "activityVersion",
+                                        "value": "1.0.0"
+                                      },
+                                      {
+                                        "type": 1,
+                                        "key": "nodeKey",
+                                        "value": "n_life_t1"
+                                      },
+                                      {
+                                        "type": 1,
+                                        "key": "processInstanceId",
+                                        "value": "${processInstanceId}"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "childNode": {
+                                  "id": "n_end",
+                                  "type": 1,
+                                  "name": "结束"
+                                }
+                              },
+                              "approveType": 1,
+                              "approveMethod": 1,
+                              "rejectHandler": {
+                                "type": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "approveType": 1,
+                    "approveMethod": 1,
+                    "rejectHandler": {
+                      "type": 1
+                    }
+                  }
+                }
+              },
+              "approveType": 1,
+              "approveMethod": 1,
+              "rejectHandler": {
+                "type": 1
+              }
+            }
+          }
+        },
+        "approveType": 1,
+        "approveMethod": 1,
+        "rejectHandler": {
+          "type": 1
+        }
+      }
+    }
+  }
+}

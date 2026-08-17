@@ -4,6 +4,8 @@ import cn.iocoder.yudao.framework.apilog.core.annotation.ApiAccessLog;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.aegis.SpkAegisReviewDO;
 import cn.iocoder.yudao.module.spkdelivery.service.aegis.SpkAegisReviewService;
+import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.TrimDecision;
+import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdTrimRuleEvaluator;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,6 +40,8 @@ public class SpkAegisController {
 
     @Resource
     private SpkAegisReviewService aegisReviewService;
+    @Resource
+    private SpkIpdTrimRuleEvaluator trimRuleEvaluator;
 
     @PostMapping("/review")
     @PermitAll
@@ -46,6 +50,16 @@ public class SpkAegisController {
     public CommonResult<Map<String, Object>> review(
             @Parameter(description = "流程实例编号") @RequestParam("processInstanceId") String processInstanceId,
             @Parameter(description = "BPM 节点 key") @RequestParam(value = "nodeKey", required = false) String nodeKey) {
+        // D3：前置裁剪规则评估（修 G6）。nodeKey 作为 activityDefId 匹配；SKIP 直接返回 PASS 占位跳过审查。
+        TrimDecision trim = trimRuleEvaluator.evaluate(processInstanceId, null, nodeKey);
+        if (trim.shouldSkip()) {
+            Map<String, Object> data = new HashMap<>();
+            data.put("aegisVerdict", "PASS");
+            data.put("aegisReport", "裁剪规则 SKIP：" + (trim.reason() == null ? "" : trim.reason()));
+            data.put("skipped", true);
+            data.put("matchedRuleId", trim.matchedRuleId());
+            return success(data);
+        }
         SpkAegisReviewDO review = aegisReviewService.review(processInstanceId, nodeKey);
         Map<String, Object> data = new HashMap<>();
         data.put("aegisVerdict", review.getVerdict());

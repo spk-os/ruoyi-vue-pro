@@ -6,6 +6,8 @@ import cn.iocoder.yudao.module.spkdelivery.controller.admin.agent.vo.SpkAgentLoa
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.agent.vo.SpkAgentTaskCallbackReqVO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agent.SpkAgentTaskDO;
 import cn.iocoder.yudao.module.spkdelivery.service.agent.SpkAgentTaskService;
+import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.TrimDecision;
+import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdTrimRuleEvaluator;
 import cn.iocoder.yudao.module.spkdelivery.service.router.SpkRouteResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -42,6 +44,8 @@ public class SpkAgentTaskController {
 
     @Resource
     private SpkAgentTaskService agentTaskService;
+    @Resource
+    private SpkIpdTrimRuleEvaluator trimRuleEvaluator;
 
     @PostMapping("/run")
     @PermitAll
@@ -58,6 +62,18 @@ public class SpkAgentTaskController {
             @Parameter(description = "IPD Activity 版本") @RequestParam(value = "activityVersion", required = false) String activityVersion,
             @Parameter(description = "业务 key") @RequestParam(value = "businessKey", required = false) String businessKey) {
         Map<String, Object> data = new HashMap<>();
+        // D3：前置裁剪规则评估（修 G6——此前 TrimRule 是死数据，执行层从不读它）。
+        // activityId/nodeKey 任一作为 activityDefId 匹配；SKIP 直接返回成功占位跳过该活动派发。
+        String trimKey = (activityId != null && !activityId.isBlank()) ? activityId : nodeKey;
+        TrimDecision trim = trimRuleEvaluator.evaluate(processInstanceId, null, trimKey);
+        if (trim.shouldSkip()) {
+            data.put("status", "skipped");
+            data.put("activityId", activityId);
+            data.put("nodeKey", nodeKey);
+            data.put("reason", trim.reason() == null ? "裁剪规则 SKIP" : trim.reason());
+            data.put("matchedRuleId", trim.matchedRuleId());
+            return success(data);
+        }
         // IPD 路由路径：按 Activity 定义异步派发，落三件套
         if (activityId != null && !activityId.isBlank()) {
             // 方案 A 异步派发：type=2 HTTP_CALLBACK 触发器发请求即卡 receiveTask 等回调推进；

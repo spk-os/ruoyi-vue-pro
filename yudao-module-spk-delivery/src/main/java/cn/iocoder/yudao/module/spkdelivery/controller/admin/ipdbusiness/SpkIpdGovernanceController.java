@@ -4,7 +4,9 @@ import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkIpdProcessProfilePageReqVO;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkIpdProcessProfileSaveReqVO;
+import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkIpdSnapshotSchemaRespVO;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkIpdTrimRuleSaveReqVO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdEngineInstanceDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdFailedJobDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdGovernanceAuditDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdProcessProfileDO;
@@ -155,5 +157,22 @@ public class SpkIpdGovernanceController {
     public CommonResult<List<SpkIpdGovernanceAuditDO>> listAudit(@RequestParam(value = "actionType", required = false) String actionType,
                                                                   @RequestParam(value = "refId", required = false) Long refId) {
         return success(profileService.listAudit(actionType, refId));
+    }
+
+    // ==================== 引擎档案 / 快照契约（D4/D2） ====================
+
+    @GetMapping("/engine-instances")
+    @Operation(summary = "引擎实例档案（按 flowRunId 查；无数据返回 null，前端标样本不足）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-governance:query')")
+    public CommonResult<SpkIpdEngineInstanceDO> getEngineInstance(@RequestParam("flowRunId") Long flowRunId) {
+        return success(profileService.getEngineInstanceByFlowRunId(flowRunId));
+    }
+
+    @GetMapping("/snapshot-schema")
+    @Operation(summary = "snapshotJson 结构契约（按 flowType 返回阶段/门/DCP/TR/活动）")
+    @Parameter(name = "flowType", description = "FULL_RELEASE/INCREMENT_RELEASE/ISSUE_RESOLUTION", required = true)
+    @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-governance:query')")
+    public CommonResult<SpkIpdSnapshotSchemaRespVO> getSnapshotSchema(@RequestParam("flowType") String flowType) {
+        return success(profileService.buildSnapshotSchema(flowType));
     }
 }
