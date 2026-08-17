@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OpportunitySignalSet",
+  "description": "IPD 概念阶段 ACT-03-02-01 机会信号聚合产物结构（SpkVerifierService Layer 1 结构校验用）",
+  "type": "object",
+  "required": ["signal_set_id", "version", "created_at", "created_by", "statistics", "signals", "clusters"],
+  "properties": {
+    "signal_set_id": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 1},
+    "created_by": {"type": "string", "minLength": 1},
+    "signed_by": {
+      "type": "object",
+      "properties": {
+        "user_id": {"type": "string"},
+        "signed_at": {"type": "string"},
+        "decision": {"type": "string", "enum": ["admitted", "rejected", "revision"]}
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "required": ["total_signals"],
+      "properties": {
+        "total_signals": {"type": "integer", "minimum": 0},
+        "mrs_count": {"type": "integer"},
+        "voc_count": {"type": "integer"},
+        "external_count": {"type": "integer"},
+        "clusters_count": {"type": "integer"},
+        "high_confidence_count": {"type": "integer"},
+        "needs_review_count": {"type": "integer"}
+      }
+    },
+    "signals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["signal_id", "source_type", "source_uri", "locator", "captured_at", "license", "content_hash", "confidence"],
+        "properties": {
+          "signal_id": {"type": "string", "minLength": 1},
+          "source_type": {"type": "string", "enum": ["mrs", "voc", "external"]},
+          "source_uri": {"type": "string", "minLength": 1},
+          "locator": {"type": "string", "minLength": 1},
+          "captured_at": {"type": "string", "minLength": 1},
+          "license": {"type": "string", "minLength": 1},
+          "content_hash": {"type": "string", "pattern": "^sha256:"},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "needs_review": {"type": "boolean"},
+          "cluster_id": {"type": "string"},
+          "summary": {"type": "string"}
+        }
+      }
+    },
+    "clusters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["cluster_id", "topic", "signal_count", "trend"],
+        "properties": {
+          "cluster_id": {"type": "string", "minLength": 1},
+          "topic": {"type": "string", "minLength": 1},
+          "signal_count": {"type": "integer", "minimum": 1},
+          "trend": {"type": "string", "enum": ["rising", "stable", "falling"]}
+        }
+      }
+    }
+  }
+}

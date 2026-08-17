@@ -88,7 +88,7 @@ public class SpkIpdProjectService {
      * @return {businessKey, processInstanceId, mode}
      */
     public Map<String, Object> start(String businessKey, String projectName, String payload, String mode) {
-        return start(businessKey, projectName, payload, mode, null);
+        return start(businessKey, projectName, payload, mode, null, null);
     }
 
     /**
@@ -100,6 +100,18 @@ public class SpkIpdProjectService {
      */
     public Map<String, Object> start(String businessKey, String projectName, String payload, String mode,
                                      String deliveryRoot) {
+        return start(businessKey, projectName, payload, mode, deliveryRoot, null);
+    }
+
+    /**
+     * 发起 IPD 主流程（同步），支持指定交付根目录 + skill 环境。
+     *
+     * @param skillEnv skill 环境（default/test/commercial-release/prototype-release，写入流程变量 spk_skill_env，
+     *                 route 内 resolveSkillEnv 只读解析 → {skillsRoot}/{env}/{skillName}/SKILL.md；
+     *                 空/null 归一为 default。与 spk_mode 正交：env 决定用哪套 skill 文件，mode 决定 prompt 轻量化）
+     */
+    public Map<String, Object> start(String businessKey, String projectName, String payload, String mode,
+                                     String deliveryRoot, String skillEnv) {
         if (businessKey == null || businessKey.isBlank()) {
             businessKey = "ipd-" + System.currentTimeMillis();
         }
@@ -121,6 +133,10 @@ public class SpkIpdProjectService {
         // 遵守 [[flowable-sync-trigger-deadlock]] 铁律）。空/null 归一为 test。
         String normMode = (mode == null || mode.isBlank()) ? "test" : mode.trim().toLowerCase();
         variables.put("spk_mode", normMode);
+        // spk_skill_env：决定 route 用哪套 skill 文件（default/test/commercial-release/prototype-release）。
+        // 空/null 归 default（与 spk-delivery.skill.default-env 配置一致）。route 内 resolveSkillEnv 只读解析。
+        String normEnv = (skillEnv == null || skillEnv.isBlank()) ? "default" : skillEnv.trim();
+        variables.put("spk_skill_env", normEnv);
         createReq.setVariables(variables);
 
         // 同步发起：type2 后 ~0.06s 到首 receiveTask 即返 processInstanceId

@@ -91,6 +91,17 @@ public class SpkTaskRouterService {
     private final Map<String, FrameworkAdapter> adapterMap = new java.util.concurrent.ConcurrentHashMap<>();
     @Value("${spk-delivery.execution.adapter:native-ai}")
     private String defaultAdapterName;
+    /**
+     * skill 根目录（env/skillName/SKILL.md 三段式解析的根）。默认指向仓内 resources/skills。
+     * 见 spk-dev-cortex-ipd §G「节点 skill 绑定注入」——skills 按环境(default/test/commercial-release/prototype-release)分区。
+     */
+    @Value("${spk-delivery.skill.root:/work/SPK-OS/soft/basic/ruoyi/resources/skills}")
+    private String skillsRoot;
+    /**
+     * 默认 skill 环境（def.envRequirements 无 skillEnv 键且流程变量 spk_skill_env 未设时回退到此）。
+     */
+    @Value("${spk-delivery.skill.default-env:default}")
+    private String defaultSkillEnv;
     @Resource
     private SpkAgentDefService agentDefService;
     @Resource
@@ -193,11 +204,18 @@ public class SpkTaskRouterService {
                     .setOmnigentAgentId(effectiveLead.getOmnigentAgentId())
                     .setStage(def.getStage())
                     .setOutputArtifactType(def.getOutputArtifactType());
-            // G：节点 skill 绑定注入（Phase1 最小闭环——adapter 前置 skill 指令块进 prompt）
+            // G：节点 skill 绑定注入（skill 名来自 def.skills/stage 回退；路径按 env 三段式解析）
+            //   skillPath = {skillsRoot}/{env}/{skillName}/SKILL.md，env 解析链：
+            //   def.envRequirements.skillEnv（per-activity 覆盖）→ 流程变量 spk_skill_env（启动选择）→ 配置默认。
+            //   文件缺失自动回退 default 环境再回退跳过，保证不阻断派发（真实 LLM 路径 injectSkillInstruction 读全文）。
             String skillName = resolveSkill(def);
             if (skillName != null) {
+                String skillEnv = resolveSkillEnv(def, processInstanceId);
+                String skillPath = resolveSkillPath(skillName, skillEnv, def.getStage());
                 req.setSkillName(skillName);
-                req.setSkillPath("/root/.claude/skills/" + skillName + "/SKILL.md");
+                if (skillPath != null) {
+                    req.setSkillPath(skillPath);
+                }
             }
             FrameworkAdapter adapter = selectAdapter(def, effectiveLead);
             SpkAgentDispatchResult dispatch = adapter.dispatchTask(req);
@@ -791,5 +809,96 @@ public class SpkTaskRouterService {
             }
         }
         return def.getStage() != null ? STAGE_SKILL_FALLBACK.get(def.getStage()) : null;
+    }
+
+    /**
+     * 解析 skill 环境（default/test/commercial-release/prototype-release），解析链：
+     * <ol>
+     *   <li>def.envRequirements JSON 的 {@code skillEnv} 键（per-activity 覆盖，流程配置页可改）；</li>
+     *   <li>流程变量 {@code spk_skill_env}（启动流程时选择的环境，写于 start）；</li>
+     *   <li>配置默认 {@code spk-delivery.skill.default-env}（default）。</li>
+     * </ol>
+     * 与只读流程变量 {@code spk_mode}（test/product）正交：env 决定用哪套 skill 文件，mode 决定 prompt 轻量化。
+     * 读流程变量只读不持写锁，遵守 [[flowable-sync-trigger-deadlock]] 互锁铁律。
+     */
+    private String resolveSkillEnv(SpkIpdActivityDefDO def, String processInstanceId) {
+        // 1. per-activity 覆盖
+        if (def.getEnvRequirements() != null && !def.getEnvRequirements().isBlank()) {
+            try {
+                JsonNode node = JsonUtils.parseTree(def.getEnvRequirements());
+                if (node != null && node.isObject()) {
+                    JsonNode se = node.get("skillEnv");
+                    if (se != null && !se.isNull()) {
+                        String s = se.asText().trim();
+                        if (!s.isBlank()) {
+                            return s;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[resolveSkillEnv][activityId={} envRequirements 解析失败，归默认：{}]",
+                        def.getActivityId(), truncate(e.getMessage(), 200));
+            }
+        }
+        // 2. 启动选择（流程变量）
+        if (processInstanceId != null && !processInstanceId.isBlank()) {
+            try {
+                Object v = runtimeService.getVariable(processInstanceId, "spk_skill_env");
+                if (v != null) {
+                    String s = v.toString().trim();
+                    if (!s.isBlank()) {
+                        return s;
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[resolveSkillEnv][processInstanceId={} 读 spk_skill_env 失败，归默认：{}]",
+                        processInstanceId, truncate(e.getMessage(), 200));
+            }
+        }
+        // 3. 配置默认
+        return defaultSkillEnv;
+    }
+
+    /**
+     * 解析 skill 文件路径，三级回退保证每节点都有方法论注入：
+     * <ol>
+     *   <li>{@code {skillsRoot}/{env}/{skillName}/SKILL.md}（指定环境的具体 skill，test/commercial 未配全时 miss）；</li>
+     *   <li>{@code {skillsRoot}/default/{skillName}/SKILL.md}（回退 default 环境的具体 skill）；</li>
+     *   <li>{@code {skillsRoot}/default/{stageFallback}/SKILL.md}（stage 级回退 skill，如 spk-ipd-concept）——
+     *       当 def.skills 绑定的细粒度 skill 文件尚未创建时，仍注入该 stage 通用方法论，不阻断派发。</li>
+     * </ol>
+     * 全部 miss 返回 null（跳过 skillPath 注入；真实 LLM 路径 injectSkillInstruction 只注入 skill 名占位，
+     * E2E fast-mode 桩 skillPath 字段为空可被断言发现配置缺漏）。def.skills 记录的设计意图 skill 名仍保留。
+     */
+    private String resolveSkillPath(String skillName, String env, String stage) {
+        String normEnv = (env == null || env.isBlank()) ? defaultSkillEnv : env.trim();
+        // 1. 指定环境
+        String primary = skillsRoot + "/" + normEnv + "/" + skillName + "/SKILL.md";
+        if (new java.io.File(primary).isFile()) {
+            return primary;
+        }
+        // 2. default 环境
+        if (!"default".equals(normEnv)) {
+            String fallback = skillsRoot + "/default/" + skillName + "/SKILL.md";
+            if (new java.io.File(fallback).isFile()) {
+                log.warn("[resolveSkillPath][skill={} env={} 无 SKILL.md，回退 default：{}]", skillName, normEnv, fallback);
+                return fallback;
+            }
+        }
+        // 3. stage 级回退 skill（细粒度 skill 文件未创建时，注入 stage 通用方法论）
+        if (stage != null) {
+            String stageFallback = STAGE_SKILL_FALLBACK.get(stage);
+            if (stageFallback != null) {
+                String stagePath = skillsRoot + "/default/" + stageFallback + "/SKILL.md";
+                if (new java.io.File(stagePath).isFile()) {
+                    log.warn("[resolveSkillPath][skill={} 无具体 SKILL.md，回退 stage={} 方法论：{}]",
+                            skillName, stage, stagePath);
+                    return stagePath;
+                }
+            }
+        }
+        log.warn("[resolveSkillPath][skill={} env={} stage={} 全部 miss，跳过 skill 注入（primary={}）]",
+                skillName, normEnv, stage, primary);
+        return null;
     }
 }

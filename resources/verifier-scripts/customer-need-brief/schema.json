@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CustomerNeedBrief",
+  "description": "IPD 概念阶段 ACT-03-02-02 客户需求深度分析产物结构（SpkVerifierService Layer 1 结构校验用）",
+  "type": "object",
+  "required": ["need_brief_id", "version", "created_at", "created_by", "statistics", "needs", "clusters"],
+  "properties": {
+    "need_brief_id": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 1},
+    "created_by": {"type": "string", "minLength": 1},
+    "signed_by": {
+      "type": "object",
+      "properties": {
+        "user_id": {"type": "string"},
+        "signed_at": {"type": "string"},
+        "decision": {"type": "string", "enum": ["admitted", "rejected", "revision"]}
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "required": ["total_needs"],
+      "properties": {
+        "total_needs": {"type": "integer", "minimum": 0},
+        "high_priority": {"type": "integer"},
+        "counter_evidence_count": {"type": "integer"},
+        "clusters_count": {"type": "integer"},
+        "needs_review_count": {"type": "integer"}
+      }
+    },
+    "needs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["need_id", "scenario", "priority", "customer_quote", "customer_id_hash", "confidence"],
+        "properties": {
+          "need_id": {"type": "string", "minLength": 1},
+          "scenario": {"type": "string", "minLength": 1},
+          "priority": {"type": "string", "enum": ["P0", "P1", "P2"]},
+          "customer_quote": {"type": "string", "minLength": 1},
+          "customer_id_hash": {"type": "string", "minLength": 1},
+          "counter_evidence": {
+            "type": "object",
+            "properties": {
+              "source": {"type": "string"},
+              "summary": {"type": "string"}
+            }
+          },
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "needs_review": {"type": "boolean"},
+          "cluster_id": {"type": "string"},
+          "summary": {"type": "string"}
+        }
+      }
+    },
+    "clusters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["cluster_id", "topic", "need_count", "trend"],
+        "properties": {
+          "cluster_id": {"type": "string", "minLength": 1},
+          "topic": {"type": "string", "minLength": 1},
+          "need_count": {"type": "integer", "minimum": 1},
+          "trend": {"type": "string", "enum": ["rising", "stable", "falling"]},
+          "representative_quote": {"type": "string"}
+        }
+      }
+    },
+    "sample_limitation": {"type": "string"}
+  }
+}

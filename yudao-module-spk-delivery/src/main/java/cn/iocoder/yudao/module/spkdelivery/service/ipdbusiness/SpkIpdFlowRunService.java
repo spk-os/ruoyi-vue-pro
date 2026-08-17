@@ -208,6 +208,17 @@ public class SpkIpdFlowRunService {
      */
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> start(Long flowRunId, String idempotencyKey) {
+        return start(flowRunId, idempotencyKey, null, null);
+    }
+
+    /**
+     * 幂等启动 Flowable，支持启动时选择运行模式（test/product）与 skill 环境
+     * （default/test/commercial-release/prototype-release），二者写入流程变量 spk_mode / spk_skill_env，
+     * route 内只读解析（与 [[flowable-sync-trigger-deadlock]] 铁律一致：仅 setVariables 于 createProcessInstance 同步路径，
+     * 不在触发器回调内 set）。空/null 归一：mode→test，skillEnv→default。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> start(Long flowRunId, String idempotencyKey, String mode, String skillEnv) {
         SpkIpdFlowRunDO run = getFlowRunOrThrow(flowRunId);
         if (!"DRAFT".equals(run.getStatus()) && !"READY".equals(run.getStatus())) {
             throw exception(IPD_FLOW_RUN_NOT_READY);
@@ -258,6 +269,14 @@ public class SpkIpdFlowRunService {
             if (run.getProjectId() != null) {
                 variables.put(VAR_PROJECT_NAME, "IPD-Project-" + run.getProjectId());
             }
+            // spk_mode / spk_skill_env：启动时选择（端点 query 参传入）。route 内只读 getVariable 解析。
+            //   mode：test=桩仅测试 / product=真实交付（buildPrompt 按此分叉）；空归 test。
+            //   skillEnv：决定用哪套 skill 文件；空归 default（与 spk-delivery.skill.default-env 配置一致）。
+            //   二者正交：mode 决定 prompt 轻量化，env 决定 skill 文件分区。
+            String normMode = (mode == null || mode.isBlank()) ? "test" : mode.trim().toLowerCase();
+            variables.put("spk_mode", normMode);
+            String normEnv = (skillEnv == null || skillEnv.isBlank()) ? "default" : skillEnv.trim();
+            variables.put("spk_skill_env", normEnv);
             createReq.setVariables(variables);
             // 同步发起：type2 后至首个 receiveTask 即返 processInstanceId
             String processInstanceId = processInstanceApi.createProcessInstance(userId, createReq);

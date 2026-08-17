@@ -1,0 +1,46 @@
+{
+  "artifactType": "opportunity-signal-set",
+  "description": "OpportunitySignalSet 验收标准规则（SpkVerifierService Layer 2 确定性检查）。check 字段供回执人类可读，assert 字段为机器执行体。",
+  "rules": [
+    {
+      "id": "traceability",
+      "name": "来源可追溯",
+      "severity": "fail",
+      "check": "every signal has non-empty source_uri AND locator AND captured_at AND content_hash",
+      "field": "signals[*].source_uri, locator, captured_at, content_hash",
+      "assert": {"op": "every", "path": "signals", "item": {"op": "and", "of": [{"op": "nonEmpty", "path": "source_uri"}, {"op": "nonEmpty", "path": "locator"}, {"op": "nonEmpty", "path": "captured_at"}, {"op": "nonEmpty", "path": "content_hash"}]}}
+    },
+    {
+      "id": "license_compliance",
+      "name": "许可合规",
+      "severity": "fail",
+      "check": "every signal has non-empty license",
+      "field": "signals[*].license",
+      "assert": {"op": "every", "path": "signals", "item": {"op": "nonEmpty", "path": "license"}}
+    },
+    {
+      "id": "confidence_annotation",
+      "name": "置信度标注",
+      "severity": "fail",
+      "check": "every signal has confidence in [0,1]; signals with confidence < 0.6 must have needs_review=true",
+      "field": "signals[*].confidence, needs_review",
+      "assert": {"op": "every", "path": "signals", "item": {"op": "and", "of": [{"op": "range", "path": "confidence", "min": 0, "max": 1}, {"op": "implies", "if": {"op": "not", "assert": {"op": "range", "path": "confidence", "min": 0.6}}, "then": {"op": "equals", "path": "needs_review", "value": true}}]}}
+    },
+    {
+      "id": "cluster_quality",
+      "name": "聚类质量",
+      "severity": "conditional",
+      "check": "every cluster has signal_count >= 3",
+      "field": "clusters[*].signal_count",
+      "assert": {"op": "every", "path": "clusters", "item": {"op": "range", "path": "signal_count", "min": 3}}
+    },
+    {
+      "id": "signoff_complete",
+      "name": "签署完整",
+      "severity": "conditional",
+      "check": "signed_by.decision == 'admitted'",
+      "field": "signed_by.decision",
+      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
+    }
+  ]
+}

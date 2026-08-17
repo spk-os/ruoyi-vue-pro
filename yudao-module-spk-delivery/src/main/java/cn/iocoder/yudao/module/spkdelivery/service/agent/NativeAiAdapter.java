@@ -188,6 +188,10 @@ public class NativeAiAdapter implements FrameworkAdapter {
         result.setTaskId("fast#" + System.nanoTime());
         String nodeKey = req.getNodeKey() == null ? "" : req.getNodeKey();
         String promptDigest = Integer.toHexString((req.getPrompt() == null ? "" : req.getPrompt()).hashCode());
+        // echo skill 绑定（供 E2E fast-mode 断言 skillPath 解析正确：skill 名/路径/环境）
+        String skillName = req.getSkillName() == null ? "" : req.getSkillName().replace("\"", "'");
+        String skillPath = req.getSkillPath() == null ? "" : req.getSkillPath().replace("\\", "/").replace("\"", "'");
+        String skillBlock = ",\"skillName\":\"" + skillName + "\",\"skillPath\":\"" + skillPath + "\"";
         if (nodeKey.startsWith("verify:")) {
             // Verifier 桩：结构化 PASS 结论（parseVerdict 解析 overall/summary/evidencePoints）
             result.setResult("{\"overall\":\"PASS\",\"summary\":\"P1 快速模式：Independent Verifier 自动通过（未调用真实 LLM）\","
@@ -195,14 +199,16 @@ public class NativeAiAdapter implements FrameworkAdapter {
                     + "{\"point\":\"recheck\",\"verdict\":\"Confirmed\"},"
                     + "{\"point\":\"redteam\",\"verdict\":\"Confirmed\"},"
                     + "{\"point\":\"completeness\",\"verdict\":\"Confirmed\"},"
-                    + "{\"point\":\"traceback\",\"verdict\":\"Confirmed\"}]}");
+                    + "{\"point\":\"traceback\",\"verdict\":\"Confirmed\"}]"
+                    + skillBlock + "}");
         } else {
             // Lead 桩：合成产物正文（落 ArtifactManifest metadata）
             result.setResult("{\"deliverable\":\"stub\",\"mode\":\"fast\","
                     + "\"promptDigest\":\"" + promptDigest + "\","
                     + "\"summary\":\"P1 快速模式合成产物（未调用真实 LLM）\","
                     + "\"content\":\"本产物由 fast-mode 合成。Activity 定义含真实 prompt（promptDigest="
-                    + promptDigest + "），P2 起接入真实 runtime 执行。\"}");
+                    + promptDigest + "），P2 起接入真实 runtime 执行。\""
+                    + skillBlock + "}");
         }
         log.info("[dispatchTask][fast-mode instanceId={} nodeKey={} roleId={} done]", req.getInstanceId(), nodeKey, req.getRoleId());
         return result;

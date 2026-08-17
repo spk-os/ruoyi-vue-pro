@@ -141,5 +141,7 @@ class SpkIpdSmokeE2eTest extends SpkIpdE2eBase {
                 "SELECT COUNT(*) FROM spk_task_contract WHERE process_instance_id = ?", Integer.class, pid);
         assertTrue(contractCount != null && contractCount > 0,
                 "spk_task_contract 无 process_instance_id=" + pid + " 的行（dispatchActivityAsync 未落 contract）");
+        // 三层校验端到端证明见 SpkIpdVerifierLayerE2eTest（FULL_RELEASE 首审批门前 concept/plan 活动
+        // 均 ACT-FULL-* verifier=0，触不到三层脚本；专项测试直接调 verify 真实跑三层）。
     }
 }

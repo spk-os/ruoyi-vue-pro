@@ -254,6 +254,12 @@ spk-delivery:
     fast-mode: false
     # 默认运行模式 test=桩仅测试 / product=真实交付。发起时前端可选 mode 覆盖；未传归 test。
     default-mode: test
+  # 节点 skill 绑定（G：prompt 前置 SKILL.md 方法论）。skills 按 env 分区：
+  # default（真实交付）/ test（E2E 桩）/ commercial-release / prototype-release。
+  # env 解析链：def.envRequirements.skillEnv → 流程变量 spk_skill_env → 此处默认。
+  skill:
+    root: /work/SPK-OS/soft/basic/ruoyi/resources/skills
+    default-env: default
   # Omnigent 执行域（192.168.56.101:6767）。鉴权已由 drop-in 临时关闭（OMNIGENT_AUTH_ENABLED=0），cookie 留空。
   # 跑完恢复鉴权后需重新注入 ap_session cookie（见 application-local.yaml omnigent.cookie）。
   omnigent:

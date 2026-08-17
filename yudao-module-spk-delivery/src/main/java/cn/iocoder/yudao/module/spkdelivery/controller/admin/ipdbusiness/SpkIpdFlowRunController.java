@@ -78,15 +78,17 @@ public class SpkIpdFlowRunController {
     }
 
     @PostMapping("/flow-runs/{flowRunId}/start")
-    @Operation(summary = "幂等启动 Flowable；返回当前命令状态")
+    @Operation(summary = "幂等启动 Flowable；返回当前命令状态。可选 mode(test/product) 与 skillEnv(default/test/commercial-release/prototype-release)")
     @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:create')")
     public CommonResult<Map<String, Object>> start(@PathVariable("flowRunId") Long flowRunId,
                                                    @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+                                                   @RequestParam(value = "mode", required = false) String mode,
+                                                   @RequestParam(value = "skillEnv", required = false) String skillEnv,
                                                    HttpServletRequest request) {
         // Idempotency-Key 缺失时用 traceId 兜底，保证幂等性
         String key = idempotencyKey != null ? idempotencyKey
                 : "start-" + flowRunId + "-" + System.nanoTime();
-        return success(flowRunService.start(flowRunId, key));
+        return success(flowRunService.start(flowRunId, key, mode, skillEnv));
     }
 
     @PostMapping("/flow-runs/{flowRunId}/cancel")

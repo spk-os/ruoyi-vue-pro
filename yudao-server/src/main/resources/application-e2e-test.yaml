@@ -40,6 +40,10 @@ spk-delivery:
     adapter: native-ai # 覆盖 dev 的 omnigent → 用 native-ai 的 fast-mode 桩（不依赖外部 host/workspace）
     fast-mode: true # 覆盖 dev 的 false → 走桩，跳过真实 LLM
     default-mode: test
+  # 节点 skill 绑定 env=E2E 走 test 环境（验 skillPath 解析正确）；test 未配全的 skill 自动回退 default。
+  skill:
+    root: /work/SPK-OS/soft/basic/ruoyi/resources/skills
+    default-env: test
   # 闭环命脉：触发器 URL 回环本测试实例（部署期替换进 BPMN JSON）
   self:
     base-url: 127.0.0.1:48081

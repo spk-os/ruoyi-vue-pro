@@ -1,0 +1,54 @@
+{
+  "artifactType": "customer-need-brief",
+  "description": "CustomerNeedBrief 验收标准规则（SpkVerifierService Layer 2 确定性检查）。check 字段供回执人类可读，assert 字段为机器执行体。",
+  "rules": [
+    {
+      "id": "traceability",
+      "name": "来源可追溯",
+      "severity": "fail",
+      "check": "every need has non-empty customer_quote AND customer_id_hash",
+      "field": "needs[*].customer_quote, customer_id_hash",
+      "assert": {"op": "every", "path": "needs", "item": {"op": "and", "of": [{"op": "nonEmpty", "path": "customer_quote"}, {"op": "nonEmpty", "path": "customer_id_hash"}]}}
+    },
+    {
+      "id": "counter_evidence",
+      "name": "反例校验",
+      "severity": "fail",
+      "check": "every need with confidence >= 0.6 must have non-empty counter_evidence.source",
+      "field": "needs[*].counter_evidence.source",
+      "assert": {"op": "every", "path": "needs", "item": {"op": "implies", "if": {"op": "range", "path": "confidence", "min": 0.6}, "then": {"op": "nonEmpty", "path": "counter_evidence.source"}}}
+    },
+    {
+      "id": "confidence_annotation",
+      "name": "置信度标注",
+      "severity": "fail",
+      "check": "every need has confidence in [0,1]; needs with confidence < 0.6 must have needs_review=true",
+      "field": "needs[*].confidence, needs_review",
+      "assert": {"op": "every", "path": "needs", "item": {"op": "and", "of": [{"op": "range", "path": "confidence", "min": 0, "max": 1}, {"op": "implies", "if": {"op": "not", "assert": {"op": "range", "path": "confidence", "min": 0.6}}, "then": {"op": "equals", "path": "needs_review", "value": true}}]}}
+    },
+    {
+      "id": "priority_valid",
+      "name": "优先级规范",
+      "severity": "conditional",
+      "check": "every need has priority in [P0,P1,P2]",
+      "field": "needs[*].priority",
+      "assert": {"op": "every", "path": "needs", "item": {"op": "in", "path": "priority", "values": ["P0", "P1", "P2"]}}
+    },
+    {
+      "id": "sample_limitation",
+      "name": "样本局限声明",
+      "severity": "conditional",
+      "check": "sample_limitation is non-empty",
+      "field": "sample_limitation",
+      "assert": {"op": "nonEmpty", "path": "sample_limitation"}
+    },
+    {
+      "id": "signoff_complete",
+      "name": "签署完整",
+      "severity": "conditional",
+      "check": "signed_by.decision == 'admitted'",
+      "field": "signed_by.decision",
+      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
+    }
+  ]
+}
