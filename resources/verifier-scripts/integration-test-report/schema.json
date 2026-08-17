@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IntegrationTestReport",
+  "description": "IPD 问题解决验证阶段 ACT-ISSUE-VERIFY-1 问题验证报告产物结构（SpkVerifierService Layer 1，TR 验证器）。对齐 def prompt：复现原问题确认已修复/回归无新增缺陷/验证结论。",
+  "type": "object",
+  "required": ["report_id", "version", "created_at", "created_by", "issue_ref", "verification", "regression", "conclusion"],
+  "properties": {
+    "report_id": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 1},
+    "created_by": {"type": "string", "minLength": 1},
+    "signed_by": {
+      "type": "object",
+      "properties": {
+        "user_id": {"type": "string"},
+        "signed_at": {"type": "string"},
+        "decision": {"type": "string", "enum": ["admitted", "rejected", "revision"]}
+      }
+    },
+    "issue_ref": {
+      "type": "object",
+      "required": ["issue_id"],
+      "properties": {
+        "issue_id": {"type": "string", "minLength": 1},
+        "original_symptom": {"type": "string", "minLength": 1},
+        "root_cause": {"type": "string"}
+      }
+    },
+    "verification": {
+      "type": "object",
+      "required": ["original_reproduced_pre_fix", "fix_confirmed"],
+      "properties": {
+        "original_reproduced_pre_fix": {"type": "boolean", "description": "修复前是否成功复现原问题（确认可复现）"},
+        "fix_confirmed": {"type": "boolean", "description": "修复后原问题是否已确认不再复现"},
+        "reproduce_steps": {"type": "string"}
+      }
+    },
+    "regression": {
+      "type": "object",
+      "required": ["no_new_defects"],
+      "properties": {
+        "no_new_defects": {"type": "boolean", "description": "回归是否未引入新增缺陷"},
+        "pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "case_matrix": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["case_id", "name", "result"],
+            "properties": {
+              "case_id": {"type": "string", "minLength": 1},
+              "name": {"type": "string", "minLength": 1},
+              "result": {"type": "string", "enum": ["pass", "fail"]}
+            }
+          }
+        }
+      }
+    },
+    "conclusion": {
+      "type": "object",
+      "required": ["fixed", "can_close"],
+      "properties": {
+        "fixed": {"type": "boolean", "description": "原问题是否已修复"},
+        "can_close": {"type": "boolean", "description": "是否可进入问题关闭归档"},
+        "rationale": {"type": "string"}
+      }
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "artifactType": "integration-test-report",
+  "description": "问题验证报告验收标准规则（SpkVerifierService Layer 2 确定性检查，TR 验证器）。",
+  "rules": [
+    {
+      "id": "issue_ref_present",
+      "name": "问题引用完整",
+      "severity": "fail",
+      "check": "issue_ref.issue_id is non-empty",
+      "field": "issue_ref.issue_id",
+      "assert": {"op": "nonEmpty", "path": "issue_ref.issue_id"}
+    },
+    {
+      "id": "original_reproduced",
+      "name": "原问题修复前已复现",
+      "severity": "fail",
+      "check": "verification.original_reproduced_pre_fix == true（修复前须复现确认可复现）",
+      "field": "verification.original_reproduced_pre_fix",
+      "assert": {"op": "equals", "path": "verification.original_reproduced_pre_fix", "value": true}
+    },
+    {
+      "id": "fix_confirmed",
+      "name": "修复已确认",
+      "severity": "fail",
+      "check": "verification.fix_confirmed == true（修复后原问题不再复现）",
+      "field": "verification.fix_confirmed",
+      "assert": {"op": "equals", "path": "verification.fix_confirmed", "value": true}
+    },
+    {
+      "id": "no_new_defects",
+      "name": "回归无新增缺陷",
+      "severity": "fail",
+      "check": "regression.no_new_defects == true",
+      "field": "regression.no_new_defects",
+      "assert": {"op": "equals", "path": "regression.no_new_defects", "value": true}
+    },
+    {
+      "id": "conclusion_fixed",
+      "name": "验证结论修复",
+      "severity": "conditional",
+      "check": "conclusion.fixed == true",
+      "field": "conclusion.fixed",
+      "assert": {"op": "equals", "path": "conclusion.fixed", "value": true}
+    },
+    {
+      "id": "can_close",
+      "name": "可关闭归档",
+      "severity": "conditional",
+      "check": "conclusion.can_close == true",
+      "field": "conclusion.can_close",
+      "assert": {"op": "equals", "path": "conclusion.can_close", "value": true}
+    },
+    {
+      "id": "signoff_complete",
+      "name": "签署完整",
+      "severity": "conditional",
+      "check": "signed_by.decision == 'admitted'",
+      "field": "signed_by.decision",
+      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
+    }
+  ]
+}

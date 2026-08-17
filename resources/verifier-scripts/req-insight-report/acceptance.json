@@ -1,0 +1,54 @@
+{
+  "artifactType": "req-insight-report",
+  "description": "需求洞察报告验收标准规则（SpkVerifierService Layer 2 确定性检查）。check 字段供回执人类可读，assert 字段为机器执行体。",
+  "rules": [
+    {
+      "id": "requirement_acceptance",
+      "name": "需求验收标准可追溯",
+      "severity": "fail",
+      "check": "every requirement has non-empty acceptance_criteria",
+      "field": "requirements[*].acceptance_criteria",
+      "assert": {"op": "every", "path": "requirements", "item": {"op": "nonEmpty", "path": "acceptance_criteria"}}
+    },
+    {
+      "id": "requirement_priority_valid",
+      "name": "优先级规范",
+      "severity": "fail",
+      "check": "every requirement has priority in [P0,P1,P2]",
+      "field": "requirements[*].priority",
+      "assert": {"op": "every", "path": "requirements", "item": {"op": "in", "path": "priority", "values": ["P0", "P1", "P2"]}}
+    },
+    {
+      "id": "pain_severity_valid",
+      "name": "痛点严重度规范",
+      "severity": "fail",
+      "check": "every pain_point has severity in [P0,P1,P2]",
+      "field": "pain_points[*].severity",
+      "assert": {"op": "every", "path": "pain_points", "item": {"op": "in", "path": "severity", "values": ["P0", "P1", "P2"]}}
+    },
+    {
+      "id": "pain_evidence",
+      "name": "痛点证据校验",
+      "severity": "fail",
+      "check": "every pain_point with severity P0 must have non-empty evidence",
+      "field": "pain_points[*].evidence",
+      "assert": {"op": "every", "path": "pain_points", "item": {"op": "implies", "if": {"op": "equals", "path": "severity", "value": "P0"}, "then": {"op": "nonEmpty", "path": "evidence"}}}
+    },
+    {
+      "id": "persona_defined",
+      "name": "用户画像完整",
+      "severity": "conditional",
+      "check": "persona.target_user is non-empty",
+      "field": "persona.target_user",
+      "assert": {"op": "nonEmpty", "path": "persona.target_user"}
+    },
+    {
+      "id": "signoff_complete",
+      "name": "签署完整",
+      "severity": "conditional",
+      "check": "signed_by.decision == 'admitted'",
+      "field": "signed_by.decision",
+      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
+    }
+  ]
+}

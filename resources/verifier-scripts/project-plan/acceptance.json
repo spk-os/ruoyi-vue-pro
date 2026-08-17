@@ -1,0 +1,46 @@
+{
+  "artifactType": "project-plan",
+  "description": "项目计划书验收标准规则（SpkVerifierService Layer 2 确定性检查）。",
+  "rules": [
+    {
+      "id": "wbs_ownership",
+      "name": "WBS 责任到人",
+      "severity": "fail",
+      "check": "every wbs item has non-empty owner AND deliverable",
+      "field": "wbs[*].owner, deliverable",
+      "assert": {"op": "every", "path": "wbs", "item": {"op": "and", "of": [{"op": "nonEmpty", "path": "owner"}, {"op": "nonEmpty", "path": "deliverable"}]}}
+    },
+    {
+      "id": "milestone_target",
+      "name": "里程碑有目标日期",
+      "severity": "fail",
+      "check": "every milestone has non-empty name AND target_date",
+      "field": "milestones[*].name, target_date",
+      "assert": {"op": "every", "path": "milestones", "item": {"op": "and", "of": [{"op": "nonEmpty", "path": "name"}, {"op": "nonEmpty", "path": "target_date"}]}}
+    },
+    {
+      "id": "risk_mitigation",
+      "name": "风险缓解校验",
+      "severity": "fail",
+      "check": "every risk with severity P0 must have non-empty mitigation",
+      "field": "risk_register[*].mitigation",
+      "assert": {"op": "every", "path": "risk_register", "item": {"op": "implies", "if": {"op": "equals", "path": "severity", "value": "P0"}, "then": {"op": "nonEmpty", "path": "mitigation"}}}
+    },
+    {
+      "id": "critical_path_present",
+      "name": "关键路径声明",
+      "severity": "conditional",
+      "check": "critical_path is non-empty array",
+      "field": "critical_path",
+      "assert": {"op": "nonEmpty", "path": "critical_path"}
+    },
+    {
+      "id": "signoff_complete",
+      "name": "签署完整",
+      "severity": "conditional",
+      "check": "signed_by.decision == 'admitted'",
+      "field": "signed_by.decision",
+      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
+    }
+  ]
+}

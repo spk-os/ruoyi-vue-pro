@@ -1,0 +1,54 @@
+{
+  "artifactType": "ops-monitoring-report",
+  "description": "运营监控报告验收标准规则（SpkVerifierService Layer 2 确定性检查）。",
+  "rules": [
+    {
+      "id": "ops_metrics_present",
+      "name": "运营指标齐备",
+      "severity": "fail",
+      "check": "ops_metrics has non-empty active_users, incident_count, nps",
+      "field": "ops_metrics",
+      "assert": {"op": "and", "of": [{"op": "nonEmpty", "path": "ops_metrics.active_users"}, {"op": "nonEmpty", "path": "ops_metrics.incident_count"}, {"op": "nonEmpty", "path": "ops_metrics.nps"}]}
+    },
+    {
+      "id": "nps_range",
+      "name": "NPS 区间",
+      "severity": "fail",
+      "check": "ops_metrics.nps in [-100,100]",
+      "field": "ops_metrics.nps",
+      "assert": {"op": "range", "path": "ops_metrics.nps", "min": -100, "max": 100}
+    },
+    {
+      "id": "baseline_date",
+      "name": "监控基线日期",
+      "severity": "fail",
+      "check": "monitoring_baseline.baseline_date is non-empty",
+      "field": "monitoring_baseline.baseline_date",
+      "assert": {"op": "nonEmpty", "path": "monitoring_baseline.baseline_date"}
+    },
+    {
+      "id": "improvement_priority_valid",
+      "name": "改进项优先级规范",
+      "severity": "conditional",
+      "check": "every improvement has priority in [P0,P1,P2]",
+      "field": "improvements[*].priority",
+      "assert": {"op": "every", "path": "improvements", "item": {"op": "in", "path": "priority", "values": ["P0", "P1", "P2"]}}
+    },
+    {
+      "id": "handover_receiver",
+      "name": "移交接收人",
+      "severity": "conditional",
+      "check": "handover.receiver is non-empty",
+      "field": "handover.receiver",
+      "assert": {"op": "nonEmpty", "path": "handover.receiver"}
+    },
+    {
+      "id": "signoff_complete",
+      "name": "签署完整",
+      "severity": "conditional",
+      "check": "signed_by.decision == 'admitted'",
+      "field": "signed_by.decision",
+      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
+    }
+  ]
+}

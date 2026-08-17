@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReqInsightReport",
+  "description": "IPD 完整发布概念阶段 ACT-FULL-CONCEPT-1 需求洞察报告产物结构（SpkVerifierService Layer 1 结构校验用）。对齐 def prompt：用户画像/痛点排序/场景清单/需求条目（含优先级与验收标准）。",
+  "type": "object",
+  "required": ["report_id", "version", "created_at", "created_by", "persona", "pain_points", "scenarios", "requirements"],
+  "properties": {
+    "report_id": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 1},
+    "created_by": {"type": "string", "minLength": 1},
+    "signed_by": {
+      "type": "object",
+      "properties": {
+        "user_id": {"type": "string"},
+        "signed_at": {"type": "string"},
+        "decision": {"type": "string", "enum": ["admitted", "rejected", "revision"]}
+      }
+    },
+    "persona": {
+      "type": "object",
+      "required": ["target_user"],
+      "properties": {
+        "target_user": {"type": "string", "minLength": 1},
+        "description": {"type": "string"}
+      }
+    },
+    "pain_points": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["point_id", "description", "severity"],
+        "properties": {
+          "point_id": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1},
+          "severity": {"type": "string", "enum": ["P0", "P1", "P2"]},
+          "evidence": {"type": "string"}
+        }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["scenario_id", "name"],
+        "properties": {
+          "scenario_id": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "steps": {"type": "string"}
+        }
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["req_id", "title", "priority", "acceptance_criteria"],
+        "properties": {
+          "req_id": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "priority": {"type": "string", "enum": ["P0", "P1", "P2"]},
+          "acceptance_criteria": {"type": "string", "minLength": 1},
+          "source_point_id": {"type": "string"}
+        }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "properties": {
+        "total_requirements": {"type": "integer", "minimum": 0},
+        "p0_count": {"type": "integer"},
+        "scenario_count": {"type": "integer"}
+      }
+    }
+  }
+}

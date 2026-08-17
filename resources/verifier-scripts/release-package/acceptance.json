@@ -1,0 +1,46 @@
+{
+  "artifactType": "release-package",
+  "description": "发布包验收标准规则（SpkVerifierService Layer 2 确定性检查）。",
+  "rules": [
+    {
+      "id": "build_integrity",
+      "name": "构建完整性",
+      "severity": "fail",
+      "check": "build has non-empty artifact_url AND checksum",
+      "field": "build.artifact_url, checksum",
+      "assert": {"op": "and", "of": [{"op": "nonEmpty", "path": "build.artifact_url"}, {"op": "nonEmpty", "path": "build.checksum"}]}
+    },
+    {
+      "id": "deployment_status_valid",
+      "name": "部署状态规范",
+      "severity": "fail",
+      "check": "every deployment has status in [success,failed,pending]",
+      "field": "deployment[*].status",
+      "assert": {"op": "every", "path": "deployment", "item": {"op": "in", "path": "status", "values": ["success", "failed", "pending"]}}
+    },
+    {
+      "id": "monitoring_alerts",
+      "name": "上线监控就绪",
+      "severity": "fail",
+      "check": "monitoring_readiness.alerts is non-empty",
+      "field": "monitoring_readiness.alerts",
+      "assert": {"op": "nonEmpty", "path": "monitoring_readiness.alerts"}
+    },
+    {
+      "id": "dashboard_present",
+      "name": "监控面板",
+      "severity": "conditional",
+      "check": "monitoring_readiness.dashboards is non-empty",
+      "field": "monitoring_readiness.dashboards",
+      "assert": {"op": "nonEmpty", "path": "monitoring_readiness.dashboards"}
+    },
+    {
+      "id": "signoff_complete",
+      "name": "签署完整",
+      "severity": "conditional",
+      "check": "signed_by.decision == 'admitted'",
+      "field": "signed_by.decision",
+      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
+    }
+  ]
+}

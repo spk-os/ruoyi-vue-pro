@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SystemTestReport",
+  "description": "IPD 完整发布验证阶段 ACT-FULL-QUAL-1 系统测试报告产物结构（SpkVerifierService Layer 1，TR 验证器）。对齐 def prompt：测试用例矩阵(接口/链路/异常)/通过率/缺陷/GA 就绪度。",
+  "type": "object",
+  "required": ["report_id", "version", "created_at", "created_by", "test_matrix", "pass_rate", "ga_readiness"],
+  "properties": {
+    "report_id": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 1},
+    "created_by": {"type": "string", "minLength": 1},
+    "signed_by": {
+      "type": "object",
+      "properties": {
+        "user_id": {"type": "string"},
+        "signed_at": {"type": "string"},
+        "decision": {"type": "string", "enum": ["admitted", "rejected", "revision"]}
+      }
+    },
+    "test_matrix": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["case_id", "category", "name", "result"],
+        "properties": {
+          "case_id": {"type": "string", "minLength": 1},
+          "category": {"type": "string", "enum": ["interface", "chain", "exception"]},
+          "name": {"type": "string", "minLength": 1},
+          "result": {"type": "string", "enum": ["pass", "fail"]}
+        }
+      }
+    },
+    "pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
+    "defects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["defect_id", "severity", "description"],
+        "properties": {
+          "defect_id": {"type": "string", "minLength": 1},
+          "severity": {"type": "string", "enum": ["P0", "P1", "P2"]},
+          "description": {"type": "string", "minLength": 1},
+          "status": {"type": "string", "enum": ["open", "fixing", "resolved", "wontfix"]}
+        }
+      }
+    },
+    "ga_readiness": {
+      "type": "object",
+      "required": ["ready"],
+      "properties": {
+        "ready": {"type": "boolean"},
+        "rationale": {"type": "string"}
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "properties": {
+        "total_cases": {"type": "integer", "minimum": 0},
+        "passed": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

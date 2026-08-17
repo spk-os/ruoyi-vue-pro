@@ -1,0 +1,54 @@
+{
+  "artifactType": "code-package",
+  "description": "代码包验收标准规则（SpkVerifierService Layer 2 确定性检查，SEC 安全验证器视角）。",
+  "rules": [
+    {
+      "id": "test_status_valid",
+      "name": "单测状态规范",
+      "severity": "fail",
+      "check": "every unit_test has status in [pass,fail]",
+      "field": "unit_tests[*].status",
+      "assert": {"op": "every", "path": "unit_tests", "item": {"op": "in", "path": "status", "values": ["pass", "fail"]}}
+    },
+    {
+      "id": "test_coverage_present",
+      "name": "单元测试存在",
+      "severity": "fail",
+      "check": "unit_tests is non-empty array（关键路径须有单测覆盖）",
+      "field": "unit_tests",
+      "assert": {"op": "minItems", "path": "unit_tests", "value": 1}
+    },
+    {
+      "id": "todo_described",
+      "name": "TODO 可追溯",
+      "severity": "conditional",
+      "check": "every todo has non-empty description",
+      "field": "todos[*].description",
+      "assert": {"op": "every", "path": "todos", "item": {"op": "nonEmpty", "path": "description"}}
+    },
+    {
+      "id": "residual_risk_mitigation",
+      "name": "遗留风险缓解",
+      "severity": "fail",
+      "check": "every residual_risk with severity P0 must have non-empty mitigation",
+      "field": "residual_risks[*].mitigation",
+      "assert": {"op": "every", "path": "residual_risks", "item": {"op": "implies", "if": {"op": "equals", "path": "severity", "value": "P0"}, "then": {"op": "nonEmpty", "path": "mitigation"}}}
+    },
+    {
+      "id": "source_file_path",
+      "name": "源文件路径规范",
+      "severity": "conditional",
+      "check": "every source_file has non-empty path AND language",
+      "field": "source_files[*].path, language",
+      "assert": {"op": "every", "path": "source_files", "item": {"op": "and", "of": [{"op": "nonEmpty", "path": "path"}, {"op": "nonEmpty", "path": "language"}]}}
+    },
+    {
+      "id": "signoff_complete",
+      "name": "签署完整",
+      "severity": "conditional",
+      "check": "signed_by.decision == 'admitted'",
+      "field": "signed_by.decision",
+      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
+    }
+  ]
+}

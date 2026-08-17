@@ -1,0 +1,54 @@
+{
+  "artifactType": "system-test-report",
+  "description": "系统测试报告验收标准规则（SpkVerifierService Layer 2 确定性检查，TR 技术评审视角）。",
+  "rules": [
+    {
+      "id": "pass_rate_range",
+      "name": "通过率区间",
+      "severity": "fail",
+      "check": "pass_rate in [0,1]",
+      "field": "pass_rate",
+      "assert": {"op": "range", "path": "pass_rate", "min": 0, "max": 1}
+    },
+    {
+      "id": "case_result_valid",
+      "name": "用例结果规范",
+      "severity": "fail",
+      "check": "every test case has result in [pass,fail]",
+      "field": "test_matrix[*].result",
+      "assert": {"op": "every", "path": "test_matrix", "item": {"op": "in", "path": "result", "values": ["pass", "fail"]}}
+    },
+    {
+      "id": "case_category_valid",
+      "name": "用例分类规范",
+      "severity": "fail",
+      "check": "every test case has category in [interface,chain,exception]",
+      "field": "test_matrix[*].category",
+      "assert": {"op": "every", "path": "test_matrix", "item": {"op": "in", "path": "category", "values": ["interface", "chain", "exception"]}}
+    },
+    {
+      "id": "defect_tracking",
+      "name": "缺陷跟踪",
+      "severity": "fail",
+      "check": "every defect with severity P0 must have non-empty status",
+      "field": "defects[*].status",
+      "assert": {"op": "every", "path": "defects", "item": {"op": "implies", "if": {"op": "equals", "path": "severity", "value": "P0"}, "then": {"op": "nonEmpty", "path": "status"}}}
+    },
+    {
+      "id": "ga_readiness_rationale",
+      "name": "GA 就绪度评估",
+      "severity": "conditional",
+      "check": "ga_readiness.rationale is non-empty",
+      "field": "ga_readiness.rationale",
+      "assert": {"op": "nonEmpty", "path": "ga_readiness.rationale"}
+    },
+    {
+      "id": "signoff_complete",
+      "name": "签署完整",
+      "severity": "conditional",
+      "check": "signed_by.decision == 'admitted'",
+      "field": "signed_by.decision",
+      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
+    }
+  ]
+}

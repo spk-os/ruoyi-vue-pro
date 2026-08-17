@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CodePackage",
+  "description": "IPD 完整发布开发阶段 ACT-FULL-DEV-1 代码包产物结构（SpkVerifierService Layer 1，SEC 验证器）。对齐 def prompt：核心代码骨架/单元测试覆盖关键路径/TODO/遗留风险。",
+  "type": "object",
+  "required": ["package_id", "version", "created_at", "created_by", "source_files", "unit_tests"],
+  "properties": {
+    "package_id": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 1},
+    "created_by": {"type": "string", "minLength": 1},
+    "signed_by": {
+      "type": "object",
+      "properties": {
+        "user_id": {"type": "string"},
+        "signed_at": {"type": "string"},
+        "decision": {"type": "string", "enum": ["admitted", "rejected", "revision"]}
+      }
+    },
+    "source_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["file_id", "path", "language"],
+        "properties": {
+          "file_id": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1},
+          "language": {"type": "string", "minLength": 1},
+          "description": {"type": "string"},
+          "line_count": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "unit_tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["test_id", "name", "status"],
+        "properties": {
+          "test_id": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "covers": {"type": "string"},
+          "status": {"type": "string", "enum": ["pass", "fail"]}
+        }
+      }
+    },
+    "todos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["todo_id", "description"],
+        "properties": {
+          "todo_id": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1},
+          "owner": {"type": "string"}
+        }
+      }
+    },
+    "residual_risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["risk_id", "description", "severity"],
+        "properties": {
+          "risk_id": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1},
+          "severity": {"type": "string", "enum": ["P0", "P1", "P2"]},
+          "mitigation": {"type": "string"}
+        }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "properties": {
+        "source_file_count": {"type": "integer", "minimum": 0},
+        "test_count": {"type": "integer", "minimum": 0},
+        "test_pass_rate": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
+  }
+}
