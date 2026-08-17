@@ -1,6 +1,12 @@
 package cn.iocoder.yudao.module.spkdelivery.service.delivery;
 
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdFlowRunDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdMajorReleaseDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdVersionDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdFlowRunMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdMajorReleaseMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdVersionMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,6 +43,15 @@ public class FlowStateWriter {
     @Resource
     private DeliveryPathResolver pathResolver;
 
+    @Resource
+    private SpkIpdFlowRunMapper flowRunMapper;
+
+    @Resource
+    private SpkIpdVersionMapper versionMapper;
+
+    @Resource
+    private SpkIpdMajorReleaseMapper majorReleaseMapper;
+
     /** 按 root 串行化写（同项目内顺序写，跨项目并发） */
     private final Map<String, Object> rootLocks = new ConcurrentHashMap<>();
 
@@ -45,8 +60,57 @@ public class FlowStateWriter {
     }
 
     /**
+     * 解析 pid 对应 FlowRun 的迭代上下文（Phase2 H/I：跨迭代追溯）。
+     * <p>用于把 flowRunId/flowType/majorRelease(majorNo)/version(versionNo) 注入 state 与 manifest 条目，
+     * 并定位迭代产物目录 {@code asset/<majorNo>/<versionNo>/}。best-effort：查不到返回 null，不阻断主流程。
+     */
+    private IterationContext resolveIterationContext(String processInstanceId) {
+        if (processInstanceId == null) {
+            return null;
+        }
+        try {
+            SpkIpdFlowRunDO run = flowRunMapper.selectByProcessInstanceId(processInstanceId);
+            if (run == null) {
+                return null;
+            }
+            String majorLabel = null;
+            String versionLabel = null;
+            if (run.getVersionId() != null) {
+                SpkIpdVersionDO v = versionMapper.selectById(run.getVersionId());
+                if (v != null) {
+                    versionLabel = v.getVersionNo();
+                    if (run.getMajorReleaseId() != null) {
+                        SpkIpdMajorReleaseDO mr = majorReleaseMapper.selectById(run.getMajorReleaseId());
+                        if (mr != null && mr.getMajorNo() != null) {
+                            majorLabel = String.valueOf(mr.getMajorNo());
+                        }
+                    }
+                    if (majorLabel == null && v.getMajorNo() != null) {
+                        majorLabel = String.valueOf(v.getMajorNo());
+                    }
+                }
+            }
+            return new IterationContext(
+                    run.getId(), run.getFlowType(),
+                    run.getMajorReleaseId(), run.getVersionId(),
+                    majorLabel, versionLabel);
+        } catch (Exception e) {
+            log.warn("[resolveIterationContext][pid={} 解析迭代上下文失败降级 null：{}]",
+                    processInstanceId, e.getMessage());
+            return null;
+        }
+    }
+
+    /** 迭代上下文值对象（内部） */
+    private record IterationContext(Long flowRunId, String flowType,
+                                    Long majorReleaseId, Long versionId,
+                                    String majorLabel, String versionLabel) {}
+
+    /**
      * 原子追加写一次 Activity 状态到 {@code <root>/.flow/state-<activityRunId>.json}，并更新 manifest 索引。
      * <p>route 标记 done / finish 终态 / 阶段推进 时调用。写失败降级，不抛错。
+     * Phase2 H：调用方未显式传迭代字段时，按 pid 解析 FlowRun 富集 flowRunId/flowType/majorRelease/version，
+     * 并按需创建迭代产物目录 {@code asset/<majorNo>/<versionNo>/}。
      *
      * @param processInstanceId 流程实例 id
      * @param businessKey       业务键（解析根目录用）
@@ -67,11 +131,34 @@ public class FlowStateWriter {
                 // 1. 确保子目录存在
                 Path flowDir = pathResolver.resolveChild(root, DeliveryPathResolver.DIR_FLOW);
                 Files.createDirectories(flowDir);
+                // Phase2 H：富集迭代上下文 + 创建迭代产物目录
+                IterationContext ctx = resolveIterationContext(processInstanceId);
+                if (ctx != null) {
+                    if (state.get("flowRunId") == null && ctx.flowRunId() != null) {
+                        state.put("flowRunId", ctx.flowRunId());
+                    }
+                    if (state.get("flowType") == null && ctx.flowType() != null) {
+                        state.put("flowType", ctx.flowType());
+                    }
+                    if (ctx.majorLabel() != null && ctx.versionLabel() != null) {
+                        if (state.get("majorRelease") == null) {
+                            state.put("majorRelease", ctx.majorLabel());
+                        }
+                        if (state.get("version") == null) {
+                            state.put("version", ctx.versionLabel());
+                        }
+                        // 创建迭代 FlowRun 子目录 + 迭代产物目录
+                        if (ctx.flowRunId() != null) {
+                            Files.createDirectories(pathResolver.resolveFlowRunDir(root, String.valueOf(ctx.flowRunId())));
+                        }
+                        Files.createDirectories(pathResolver.resolveIterationDir(root, ctx.majorLabel(), ctx.versionLabel()));
+                    }
+                }
                 // 2. 原子写 state 文件（先 .tmp 再 rename）
                 Path stateFile = pathResolver.resolveFlowStateFile(root, runId);
                 writeAtomic(stateFile, JsonUtils.toJsonString(state));
                 // 3. 更新 manifest 索引
-                updateManifest(root, processInstanceId, businessKey, state, runId);
+                updateManifest(root, processInstanceId, businessKey, state, runId, ctx);
             }
         } catch (Exception e) {
             log.warn("[appendState][pid={} runId={} 写 .flow 状态失败降级：{}]",
@@ -132,6 +219,35 @@ public class FlowStateWriter {
         }
     }
 
+    /**
+     * Phase2 H：按 pid 解析迭代上下文，把产物全文镜像到迭代目录
+     * {@code <root>/asset/<majorNo>/<versionNo>/<stage>/<artifactId>.md}；迭代上下文缺失时回退到旧
+     * {@code asset/<stage>/<artifactId>.md} 路径（保持向后兼容）。
+     */
+    public void mirrorArtifactForRun(String root, String processInstanceId,
+                                     String stage, String artifactId, String content) {
+        if (root == null || content == null) {
+            return;
+        }
+        try {
+            IterationContext ctx = resolveIterationContext(processInstanceId);
+            Path file;
+            if (ctx != null && ctx.majorLabel() != null && ctx.versionLabel() != null) {
+                file = pathResolver.resolveIterationArtifactFile(root, ctx.majorLabel(),
+                        ctx.versionLabel(), stage, artifactId);
+            } else {
+                file = pathResolver.resolveArtifactFile(root, stage, artifactId);
+            }
+            Files.createDirectories(file.getParent());
+            writeAtomic(file, content);
+        } catch (Exception e) {
+            log.warn("[mirrorArtifactForRun][root={} pid={} stage={} artifactId={} 迭代镜像失败回退降级：{}]",
+                    root, processInstanceId, stage, artifactId, e.getMessage());
+            // 回退到旧扁平路径，确保至少有一份本地副本
+            mirrorArtifact(root, stage, artifactId, content);
+        }
+    }
+
     /** docs 长文档镜像到 &lt;root&gt;/docs/&lt;stage&gt;/&lt;runId&gt;.md */
     public void mirrorDoc(String root, String stage, String runId, String content) {
         if (root == null || content == null) {
@@ -160,7 +276,7 @@ public class FlowStateWriter {
     /** 更新 manifest：追加/合并 flowRuns 条目（按 pid 去重，同 pid 更新最新阶段/状态/产物指针） */
     @SuppressWarnings("unchecked")
     private void updateManifest(String root, String pid, String businessKey,
-                                Map<String, Object> state, String runId) throws Exception {
+                                Map<String, Object> state, String runId, IterationContext ctx) throws Exception {
         Path manifest = pathResolver.resolveFlowManifest(root);
         Map<String, Object> manifestMap;
         if (Files.exists(manifest)) {
@@ -188,6 +304,27 @@ public class FlowStateWriter {
             entry.put("businessKey", businessKey);
             entry.put("states", new ArrayList<>());
             flowRuns.add(entry);
+        }
+        // Phase2 I：跨迭代追溯索引——首次出现时写入迭代维度字段
+        if (ctx != null) {
+            if (entry.get("flowRunId") == null && ctx.flowRunId() != null) {
+                entry.put("flowRunId", ctx.flowRunId());
+            }
+            if (entry.get("flowType") == null && ctx.flowType() != null) {
+                entry.put("flowType", ctx.flowType());
+            }
+            if (entry.get("majorReleaseId") == null && ctx.majorReleaseId() != null) {
+                entry.put("majorReleaseId", ctx.majorReleaseId());
+            }
+            if (entry.get("versionId") == null && ctx.versionId() != null) {
+                entry.put("versionId", ctx.versionId());
+            }
+            if (entry.get("majorRelease") == null && ctx.majorLabel() != null) {
+                entry.put("majorRelease", ctx.majorLabel());
+            }
+            if (entry.get("version") == null && ctx.versionLabel() != null) {
+                entry.put("version", ctx.versionLabel());
+            }
         }
         entry.put("currentStage", state.get("stage"));
         entry.put("currentActivity", state.get("activityId"));

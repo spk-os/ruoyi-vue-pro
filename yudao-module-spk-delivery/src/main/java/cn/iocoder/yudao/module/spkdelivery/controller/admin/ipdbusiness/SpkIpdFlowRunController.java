@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
@@ -131,6 +132,15 @@ public class SpkIpdFlowRunController {
         String reason = body == null ? null : body.get("reason");
         String key = idempotencyKey != null ? idempotencyKey : "unblock-" + flowRunId + "-" + System.nanoTime();
         return success(flowRunService.unblock(flowRunId, reason, key));
+    }
+
+    @PostMapping("/flow-runs/rollback-iteration")
+    @Operation(summary = "Phase2：跨迭代回滚——按 (projectId/majorReleaseId/versionId) 定位迭代 FlowRun 的 .flow/manifest 快照，重置 current_stage 到快照阶段并置 BLOCKED 待重执行")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-project:update')")
+    public CommonResult<Map<String, Object>> rollbackIteration(@RequestParam("projectId") Long projectId,
+                                                                @RequestParam(value = "majorReleaseId", required = false) Long majorReleaseId,
+                                                                @RequestParam("versionId") Long versionId) {
+        return success(flowRunService.rollbackToIteration(projectId, majorReleaseId, versionId));
     }
 
     @GetMapping("/flow-runs/{flowRunId}/timeline")

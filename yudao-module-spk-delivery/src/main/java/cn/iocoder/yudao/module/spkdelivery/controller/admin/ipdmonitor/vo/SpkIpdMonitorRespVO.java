@@ -36,6 +36,9 @@ public class SpkIpdMonitorRespVO {
     @Schema(description = "制品基线（项目维度，含哈希/签名状态/类型/摘要）")
     private List<Map<String, Object>> artifacts;
 
+    @Schema(description = "Phase2 J：迭代×子流程矩阵视图（行=迭代 majorNo/versionNo，列=flowType，单元格=FlowRun 状态+产物数+证据数，同源 SpkStageResolver）")
+    private List<Map<String, Object>> iterationMatrix;
+
     @Data
     @Schema(description = "集成健康")
     public static class IntegrationHealth {

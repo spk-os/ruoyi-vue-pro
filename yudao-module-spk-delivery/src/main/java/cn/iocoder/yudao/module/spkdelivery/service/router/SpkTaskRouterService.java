@@ -219,7 +219,8 @@ public class SpkTaskRouterService {
             // E：产物全文镜像到 <root>/asset/<stage>/<artifactId>.md（DB artifact 之外的可还原本地副本，失败降级）
             try {
                 String root = deliveryPathResolver.resolveProjectRootByBusinessKey(processInstanceId, businessKey);
-                flowStateWriter.mirrorArtifact(root, def.getStage(), artifact.getArtifactId(), payload.document);
+                flowStateWriter.mirrorArtifactForRun(root, processInstanceId, def.getStage(),
+                        artifact.getArtifactId(), payload.document);
             } catch (Exception me) {
                 log.warn("[route][activityRunId={} 镜像产物失败降级：{}]", activityRunId, truncate(me.getMessage(), 200));
             }

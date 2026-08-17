@@ -154,5 +154,8 @@ public interface ErrorCodeConstants {
 
     // ========== IPD 交付目录与流程状态（1-050-116-097） ==========
     ErrorCode IPD_DELIVERY_ROOT_INVALID = new ErrorCode(1_050_116_097, "交付根目录非法：禁止 .. 与路径分隔符，且须位于 /work/SPK-OS/Delivery/ 下");
+    ErrorCode IPD_ITERATION_NOT_FOUND = new ErrorCode(1_050_116_098, "迭代 FlowRun 不存在：未找到该项目下指定迭代的流程运行");
+    ErrorCode IPD_ITERATION_ROLLBACK_NO_SNAPSHOT = new ErrorCode(1_050_116_099, "迭代回滚失败：该迭代 .flow/manifest 无快照可恢复");
+    ErrorCode IPD_ITERATION_NOT_ROLLBACKABLE = new ErrorCode(1_050_116_100, "迭代当前状态不可回滚（仅 FAILED/BLOCKED/CANCELLED 可回滚重置到 manifest 快照阶段）");
 
 }

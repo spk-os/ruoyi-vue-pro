@@ -72,6 +72,11 @@ public class SpkIpdFlowRunService {
     private HistoryService historyService;
     @Resource
     private SpkStageResolver stageResolver;
+    // Phase2 I：跨迭代产物追溯与回滚——读 manifest 快照重置 current_stage
+    @Resource
+    private cn.iocoder.yudao.module.spkdelivery.service.delivery.DeliveryPathResolver deliveryPathResolver;
+    @Resource
+    private cn.iocoder.yudao.module.spkdelivery.service.delivery.FlowStateWriter flowStateWriter;
     // D4：引擎实例档案 / 失败作业真实回写（修 G4/G5，此前全模块零写入致运行统计页永远空）
     @Resource
     private SpkIpdEngineInstanceMapper engineInstanceMapper;
@@ -262,6 +267,27 @@ public class SpkIpdFlowRunService {
             run.setStartedAt(LocalDateTime.now());
             run.setCurrentStage("concept");
             flowRunMapper.updateById(run);
+            // Phase2 E/H：治理 FlowRun 启动时初始化交付目录骨架（.flow/ asset/ src/ docs/ + project.yaml + manifest.json）。
+            // 优先用 Project DO.delivery_root（plan §F：LaunchWizard 选根目录落库），否则按 businessKey 渲染 Profile 默认根。
+            // 失败降级记 warn 不阻断流程发起（DB 是关键路径，FS 是增强）；路径安全违抛 IPD_DELIVERY_ROOT_INVALID（坑#路径注入铁律不降级）。
+            String deliveryRoot = null;
+            try {
+                cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdProjectDO project =
+                        run.getProjectId() == null ? null : projectBusinessService.getProject(run.getProjectId());
+                deliveryRoot = deliveryPathResolver.resolveProjectRoot(project, run.getBusinessKey());
+                if (deliveryRoot != null) {
+                    String projectName = project != null && project.getName() != null
+                            ? project.getName() : "IPD-Project-" + run.getProjectId();
+                    flowStateWriter.provisionProject(run.getBusinessKey(), deliveryRoot,
+                            projectName, flowKey, "product");
+                }
+            } catch (IllegalArgumentException ie) {
+                throw cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception(
+                        cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.IPD_DELIVERY_ROOT_INVALID);
+            } catch (Exception e) {
+                log.warn("[start][flowRunId={} 交付目录初始化失败降级 root={}：{}]",
+                        flowRunId, deliveryRoot, e.getMessage());
+            }
             // D4：写引擎实例档案（修 G4——此前全模块零写入致运行统计页永远空）
             writeEngineInstance(run, processInstanceId, flowKey, pub);
             commandService.markSuccess(cmd.commandId(),
@@ -480,6 +506,88 @@ public class SpkIpdFlowRunService {
         assertFlowRunAccess(run);
         enrichCurrent(run);
         return run;
+    }
+
+    /**
+     * Phase2 I：跨迭代回滚——按 (projectId, majorReleaseId, versionId) 定位该迭代 FlowRun 的
+     * .flow/manifest 快照，恢复 current_stage/current_activity 到 manifest 记录的最新阶段，并置 BLOCKED
+     * 待人工重执行（区别于 retry 的新 attempt 模型：回滚不新建行，原地重置到迭代快照阶段，保留旧证据/产物）。
+     * <p>设计文档 §I：manifest 维护跨迭代索引（pid/flowRunId/flowType/迭代号/状态/产物指针/evidence 指针），
+     * 可还原任一历史迭代全流程状态。失败抛业务异常，不静默。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> rollbackToIteration(Long projectId, Long majorReleaseId, Long versionId) {
+        if (projectId == null || versionId == null) {
+            throw exception(IPD_ITERATION_NOT_FOUND);
+        }
+        // 定位该迭代最新一条 FlowRun（按 id 倒序）
+        List<SpkIpdFlowRunDO> runs = flowRunMapper.selectList(
+                new cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX<SpkIpdFlowRunDO>()
+                        .eq(SpkIpdFlowRunDO::getProjectId, projectId)
+                        .eq(SpkIpdFlowRunDO::getVersionId, versionId)
+                        .eq(majorReleaseId != null, SpkIpdFlowRunDO::getMajorReleaseId, majorReleaseId)
+                        .orderByDesc(SpkIpdFlowRunDO::getId));
+        SpkIpdFlowRunDO run = (runs == null || runs.isEmpty()) ? null : runs.get(0);
+        if (run == null) {
+            throw exception(IPD_ITERATION_NOT_FOUND);
+        }
+        // 仅 FAILED/BLOCKED/CANCELLED/SUPERSEDED 可回滚（RUNNING 不可原地重置，DRAFT 无快照）
+        String st = run.getStatus();
+        if (!STATUS_FAILED.equals(st) && !STATUS_BLOCKED.equals(st)
+                && !STATUS_CANCELLED.equals(st) && !STATUS_SUPERSEDED.equals(st)) {
+            throw exception(IPD_ITERATION_NOT_ROLLBACKABLE);
+        }
+        // 读 manifest 快照定位该 pid 的最新阶段
+        String root = deliveryPathResolver.resolveProjectRootByBusinessKey(
+                run.getProcessInstanceId(), run.getBusinessKey());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("flowRunId", run.getId());
+        result.put("runNo", run.getRunNo());
+        result.put("beforeStage", run.getCurrentStage());
+        result.put("beforeStatus", st);
+        String restoreStage = run.getCurrentStage();
+        String restoreActivity = run.getCurrentActivity();
+        if (root != null) {
+            Map<String, Object> manifest = flowStateWriter.readManifest(root);
+            Object flowRunsObj = manifest.get("flowRuns");
+            if (flowRunsObj instanceof List<?> list) {
+                for (Object o : list) {
+                    if (!(o instanceof Map<?, ?> fr)) {
+                        continue;
+                    }
+                    if (run.getProcessInstanceId() != null
+                            && run.getProcessInstanceId().equals(fr.get("pid"))) {
+                        Object cs = fr.get("currentStage");
+                        Object ca = fr.get("currentActivity");
+                        if (cs != null) {
+                            restoreStage = cs.toString();
+                        }
+                        if (ca != null) {
+                            restoreActivity = ca.toString();
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        if (restoreStage == null) {
+            // 既无 manifest 快照也无 DO 静态阶段，无法恢复
+            throw exception(IPD_ITERATION_ROLLBACK_NO_SNAPSHOT);
+        }
+        // 原地重置：current_stage/activity 回到 manifest 快照，置 BLOCKED 待重执行，清 endedAt
+        run.setCurrentStage(restoreStage);
+        run.setCurrentActivity(restoreActivity);
+        run.setStatus(STATUS_BLOCKED);
+        run.setBlockReason("rollback-to-iteration:" + (run.getVersionId() == null ? "?" : run.getVersionId()));
+        run.setEndedAt(null);
+        flowRunMapper.updateById(run);
+        result.put("afterStage", restoreStage);
+        result.put("afterActivity", restoreActivity);
+        result.put("afterStatus", STATUS_BLOCKED);
+        result.put("deliveryRoot", root);
+        log.info("[rollbackToIteration][flowRunId={} {}→{} reset stage {}]",
+                run.getId(), st, STATUS_BLOCKED, restoreStage);
+        return result;
     }
 
     /**

@@ -203,6 +203,23 @@ public class DeliveryPathResolver {
         return Paths.get(root, DIR_ASSET, majorRelease, version);
     }
 
+    /** 迭代产物文件：&lt;root&gt;/asset/&lt;majorRelease&gt;/&lt;version&gt;/&lt;stage&gt;/&lt;artifactId&gt;.md （Phase2 H） */
+    public Path resolveIterationArtifactFile(String root, String majorRelease, String version,
+                                             String stage, String artifactId) {
+        assertSegment(majorRelease, "majorRelease");
+        assertSegment(version, "version");
+        assertSegment(stage, "stage");
+        assertSegment(artifactId, "artifactId");
+        return Paths.get(root, DIR_ASSET, majorRelease, version, stage, artifactId + ".md");
+    }
+
+    /** 迭代 FlowRun 状态文件：&lt;root&gt;/.flow/&lt;flowRunId&gt;/state-&lt;activityRunId&gt;.json（Phase2 H，每次 run 独立子目录） */
+    public Path resolveFlowRunStateFile(String root, String flowRunId, String activityRunId) {
+        assertSegment(flowRunId, "flowRunId");
+        assertSegment(activityRunId, "activityRunId");
+        return Paths.get(root, DIR_FLOW, flowRunId, "state-" + activityRunId + ".json");
+    }
+
     /**
      * 校验单段路径不含分隔符/..（防注入）。允许字母数字 _ - . /（点只在非首尾）。
      */

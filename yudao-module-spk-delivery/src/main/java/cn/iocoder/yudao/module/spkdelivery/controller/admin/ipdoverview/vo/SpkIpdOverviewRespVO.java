@@ -57,6 +57,9 @@ public class SpkIpdOverviewRespVO {
     @Schema(description = "活跃项目路线图（最多 6 个 ACTIVE 项目，含大版本/版本骨架）")
     private List<Map<String, Object>> roadmap;
 
+    @Schema(description = "Phase2 J：迭代×子流程矩阵视图（行=迭代 majorNo/versionNo，列=flowType，单元格=FlowRun 状态+产物数，同源 SpkStageResolver）")
+    private List<Map<String, Object>> iterationMatrix;
+
     @Data
     @Schema(description = "待办项")
     public static class AttentionItem {

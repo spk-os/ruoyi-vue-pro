@@ -97,7 +97,66 @@ public class SpkIpdOverviewServiceImpl implements SpkIpdOverviewService {
         resp.setAttentionItems(buildAttention(flows, versions, issues));
         resp.setRecentFlows(buildRecentFlows(flows, projects));
         resp.setRoadmap(buildRoadmap(projects, majors, versions));
+        // Phase2 J：迭代×子流程矩阵视图（同源 SpkStageResolver，行=迭代，列=flowType）
+        resp.setIterationMatrix(buildIterationMatrix(flows, versions));
         return resp;
+    }
+
+    /**
+     * Phase2 J：迭代×子流程矩阵。行=迭代（majorNo/versionNo，ISSUE_RESOLUTION 无版本归 "ISSUE" 行），
+     * 列=flowType，单元格=FlowRun 状态+currentStage（SpkStageResolver 实时算）+health。
+     * 与 monitor.buildIterationMatrix 同构（overview 无 artifact/evidence mapper，单元格不计产物数）。
+     */
+    private List<Map<String, Object>> buildIterationMatrix(List<SpkIpdFlowRunDO> flows,
+                                                            List<SpkIpdVersionDO> versions) {
+        java.util.Map<Long, SpkIpdVersionDO> vMap = new java.util.HashMap<>();
+        if (versions != null) {
+            for (SpkIpdVersionDO v : versions) {
+                vMap.put(v.getId(), v);
+            }
+        }
+        java.util.Map<String, Map<String, Object>> rowMap = new java.util.LinkedHashMap<>();
+        for (SpkIpdFlowRunDO f : flows) {
+            String key;
+            String majorNo = null;
+            String versionNo = null;
+            if (f.getVersionId() != null) {
+                SpkIpdVersionDO v = vMap.get(f.getVersionId());
+                if (v != null) {
+                    majorNo = v.getMajorNo() == null ? "?" : String.valueOf(v.getMajorNo());
+                    versionNo = v.getVersionNo() == null ? "?" : v.getVersionNo();
+                } else {
+                    majorNo = "?";
+                    versionNo = "v" + f.getVersionId();
+                }
+                key = majorNo + "|" + versionNo;
+            } else {
+                key = "ISSUE|" + (f.getIssueCaseId() == null ? "?" : f.getIssueCaseId());
+            }
+            Map<String, Object> row = rowMap.get(key);
+            if (row == null) {
+                row = new LinkedHashMap<>();
+                row.put("iterationKey", key);
+                row.put("majorNo", majorNo);
+                row.put("versionNo", versionNo);
+                row.put("versionId", f.getVersionId());
+                row.put("issueCaseId", f.getIssueCaseId());
+                row.put("projectId", f.getProjectId());
+                row.put("cells", new LinkedHashMap<String, Map<String, Object>>());
+                rowMap.put(key, row);
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> cells = (Map<String, Map<String, Object>>) row.get("cells");
+            Map<String, Object> cell = new LinkedHashMap<>();
+            cell.put("flowRunId", f.getId());
+            cell.put("runNo", f.getRunNo());
+            cell.put("status", f.getStatus());
+            cell.put("currentStage", stageResolver.resolveCurrentStage(
+                    f.getProcessInstanceId(), f.getCurrentStage(), f.getStatus()));
+            cell.put("health", f.getHealth());
+            cells.put(f.getFlowType(), cell);
+        }
+        return new ArrayList<>(rowMap.values());
     }
 
     /** 按字段分组计数，空值归入 defaultKey。 */

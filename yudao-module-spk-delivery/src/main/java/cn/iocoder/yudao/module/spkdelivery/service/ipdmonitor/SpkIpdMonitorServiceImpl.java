@@ -146,7 +146,86 @@ public class SpkIpdMonitorServiceImpl implements SpkIpdMonitorService {
         resp.setDecisions(buildDecisions(projectId, pidToRunNo));
         resp.setGates(buildGates(pids, pidToRunNo));
         resp.setArtifacts(buildArtifacts(pids, pidToRunNo));
+        // Phase2 J：迭代×子流程矩阵视图（同源 SpkStageResolver，行=迭代，列=flowType）
+        resp.setIterationMatrix(buildIterationMatrix(flows, projectId));
         return resp;
+    }
+
+    /**
+     * Phase2 J：迭代×子流程矩阵。行=迭代（majorNo/versionNo，ISSUE_RESOLUTION 无版本归 "ISSUE" 行），
+     * 列=flowType，单元格=FlowRun 状态+currentStage（SpkStageResolver 实时算）+产物/证据计数。
+     */
+    private List<Map<String, Object>> buildIterationMatrix(List<SpkIpdFlowRunDO> flows, Long projectId) {
+        // 版本索引：versionId → VersionDO（取 majorNo/versionNo 标签）
+        List<SpkIpdVersionDO> versions;
+        try {
+            versions = versionMapper.selectList(projectId != null
+                    ? new LambdaQueryWrapperX<SpkIpdVersionDO>().eq(SpkIpdVersionDO::getProjectId, projectId)
+                    : null);
+        } catch (Exception e) {
+            versions = new ArrayList<>();
+        }
+        java.util.Map<Long, SpkIpdVersionDO> vMap = new java.util.HashMap<>();
+        if (versions != null) {
+            for (SpkIpdVersionDO v : versions) {
+                vMap.put(v.getId(), v);
+            }
+        }
+        // 按迭代键聚合：有 versionId 用 "<majorNo>|<versionNo>"，ISSUE 无版本用 "ISSUE|<issueCaseId>"
+        java.util.Map<String, Map<String, Object>> rowMap = new java.util.LinkedHashMap<>();
+        for (SpkIpdFlowRunDO f : flows) {
+            String key;
+            String majorNo = null;
+            String versionNo = null;
+            if (f.getVersionId() != null) {
+                SpkIpdVersionDO v = vMap.get(f.getVersionId());
+                if (v != null) {
+                    majorNo = v.getMajorNo() == null ? "?" : String.valueOf(v.getMajorNo());
+                    versionNo = v.getVersionNo() == null ? "?" : v.getVersionNo();
+                } else {
+                    majorNo = "?";
+                    versionNo = "v" + f.getVersionId();
+                }
+                key = majorNo + "|" + versionNo;
+            } else {
+                key = "ISSUE|" + (f.getIssueCaseId() == null ? "?" : f.getIssueCaseId());
+            }
+            Map<String, Object> row = rowMap.get(key);
+            if (row == null) {
+                row = new LinkedHashMap<>();
+                row.put("iterationKey", key);
+                row.put("majorNo", majorNo);
+                row.put("versionNo", versionNo);
+                row.put("versionId", f.getVersionId());
+                row.put("issueCaseId", f.getIssueCaseId());
+                row.put("projectId", f.getProjectId());
+                row.put("cells", new LinkedHashMap<String, Map<String, Object>>());
+                rowMap.put(key, row);
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> cells = (Map<String, Map<String, Object>>) row.get("cells");
+            Map<String, Object> cell = new LinkedHashMap<>();
+            cell.put("flowRunId", f.getId());
+            cell.put("runNo", f.getRunNo());
+            cell.put("status", f.getStatus());
+            cell.put("currentStage", stageResolver.resolveCurrentStage(
+                    f.getProcessInstanceId(), f.getCurrentStage(), f.getStatus()));
+            cell.put("health", f.getHealth());
+            int ac = 0, ec = 0;
+            if (f.getProcessInstanceId() != null) {
+                try {
+                    List<SpkArtifactManifestDO> arts = artifactMapper.selectListByProcessInstanceId(f.getProcessInstanceId());
+                    ac = arts == null ? 0 : arts.size();
+                    List<SpkEvidenceRecordDO> evs = evidenceMapper.selectListByProcessInstanceId(f.getProcessInstanceId());
+                    ec = evs == null ? 0 : evs.size();
+                } catch (Exception ignore) {
+                }
+            }
+            cell.put("artifactCount", ac);
+            cell.put("evidenceCount", ec);
+            cells.put(f.getFlowType(), cell);
+        }
+        return new ArrayList<>(rowMap.values());
     }
 
     /** 决策审查：decision_record 按 projectId 直查（DO 带 projectId），并带出所属流程号 */
