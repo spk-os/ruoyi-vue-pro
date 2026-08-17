@@ -4,6 +4,7 @@ import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkIpdProcessProfilePageReqVO;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkIpdProcessProfileSaveReqVO;
+import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkFlowConfigSnapshotRespVO;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkIpdSnapshotSchemaRespVO;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkIpdTrimRuleSaveReqVO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdEngineInstanceDO;
@@ -13,6 +14,7 @@ import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdProc
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdProcessProfileVersionDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdTrimRuleDO;
 import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdProcessProfileService;
+import cn.iocoder.yudao.module.spkdelivery.service.flowconfig.SpkFlowConfigService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -44,6 +46,8 @@ public class SpkIpdGovernanceController {
 
     @Resource
     private SpkIpdProcessProfileService profileService;
+    @Resource
+    private SpkFlowConfigService flowConfigService;
 
     // ==================== Profile 模板 ====================
 
@@ -174,5 +178,25 @@ public class SpkIpdGovernanceController {
     @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-governance:query')")
     public CommonResult<SpkIpdSnapshotSchemaRespVO> getSnapshotSchema(@RequestParam("flowType") String flowType) {
         return success(profileService.buildSnapshotSchema(flowType));
+    }
+
+    // ==================== 流程配置聚合页（§B 读端聚合 + 可编辑） ====================
+
+    @GetMapping("/flow-config/snapshot")
+    @Operation(summary = "流程配置聚合快照（Profile + activity_def 按 stage 分组 + skill 目录 + 目录模板）")
+    @Parameter(name = "flowType", description = "FULL_RELEASE/INCREMENT_RELEASE/ISSUE_RESOLUTION；空取 FULL_RELEASE")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-governance:query')")
+    public CommonResult<SpkFlowConfigSnapshotRespVO> getFlowConfigSnapshot(
+            @RequestParam(value = "flowType", required = false) String flowType) {
+        return success(flowConfigService.getSnapshot(flowType));
+    }
+
+    @PutMapping("/flow-config/activity-def/{id}")
+    @Operation(summary = "行内保存 activity_def 的 skills / envRequirements（流程配置页 tab3/tab4 编辑）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-governance:update')")
+    public CommonResult<Boolean> updateActivityDefBindings(@PathVariable("id") Long id,
+                                                           @RequestBody Map<String, String> body) {
+        flowConfigService.updateActivityDefBindings(id, body.get("skills"), body.get("envRequirements"));
+        return success(true);
     }
 }

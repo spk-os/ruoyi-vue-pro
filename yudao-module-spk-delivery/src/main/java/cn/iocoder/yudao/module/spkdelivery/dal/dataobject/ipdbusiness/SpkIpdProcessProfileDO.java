@@ -47,4 +47,12 @@ public class SpkIpdProcessProfileDO extends BaseDO {
     private String publishedBy;
     private LocalDateTime publishedAt;
     private Integer lockVersion;
+    /** 交付目录结构模板 JSON（默认 .flow/asset/src/docs 树），流程配置页可改 */
+    private String deliveryDirTemplate;
+    /** 默认项目根路径模板，{businessKey} 占位，项目启动选根目录的默认值 */
+    private String defaultProjectRootPattern;
+    /** 节点环境默认（native-ai / omnigent-sandbox），activity_def.envRequirements 为空时继承 */
+    private String envProfile;
+    /** 按 stage 默认 skill 映射 JSON，如 {"concept":"spk-ipd-concept",...} */
+    private String defaultSkillBindings;
 }

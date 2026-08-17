@@ -59,4 +59,11 @@ public class SpkAgentDispatchReq {
     private String stage;
     private String outputArtifactType;
 
+    // ===== 节点 skill 绑定（Phase1 G：prompt 注入 skill 指令最小闭环） =====
+
+    /** 绑定的 skill 名（如 spk-ipd-concept），来自 activity_def.skills 或 Profile.defaultSkillBindings[stage] */
+    private String skillName;
+    /** skill 文件路径（如 /root/.claude/skills/spk-ipd-concept/SKILL.md），adapter 可读其内容前置进 prompt */
+    private String skillPath;
+
 }

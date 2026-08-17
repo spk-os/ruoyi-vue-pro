@@ -86,6 +86,8 @@ public class NativeAiAdapter implements FrameworkAdapter {
         String nodeKey = req.getNodeKey() == null ? "" : req.getNodeKey();
         boolean isVerify = nodeKey.startsWith("verify:");
         String prompt = req.getPrompt();
+        // G：skill 绑定前置指令块（Phase1 最小闭环——把 skill 名 + SKILL.md 全文前置进 prompt，让 LLM 遵循该 skill 方法论）
+        prompt = injectSkillInstruction(prompt, req.getSkillName(), req.getSkillPath());
         if (!isVerify && prompt != null) {
             prompt = prompt + "\n\n【输出格式约束（必须严格遵循）】\n"
                     + "请按以下三段分隔符格式输出，每个分隔符独占一行：\n"
@@ -110,6 +112,38 @@ public class NativeAiAdapter implements FrameworkAdapter {
         result.setTaskId(conversationId + "#" + sendMsgId);
         log.info("[dispatchTask][instanceId={} nodeKey={} roleId={} taskId={} done]", req.getInstanceId(), req.getNodeKey(), req.getRoleId(), result.getTaskId());
         return result;
+    }
+
+    /**
+     * G：把绑定 skill 的指令块前置进 prompt（Phase1 最小闭环）。
+     * <p>若 skillPath 指向的 SKILL.md 存在则读其全文（截断至 8KB 防 prompt 膨胀）前置，让 LLM 真遵循该 skill
+     * 方法论；文件不存在则只注入 skill 名 + 路径占位指令。读取失败降级为只注入 skill 名，不阻断派发。
+     */
+    private String injectSkillInstruction(String prompt, String skillName, String skillPath) {
+        if (skillName == null || skillName.isBlank()) {
+            return prompt;
+        }
+        StringBuilder block = new StringBuilder();
+        block.append("【Skill 绑定】本任务须按 skill：").append(skillName).append(" 的方法论执行。\n");
+        if (skillPath != null && !skillPath.isBlank()) {
+            try {
+                java.nio.file.Path p = java.nio.file.Paths.get(skillPath);
+                if (java.nio.file.Files.exists(p)) {
+                    String body = java.nio.file.Files.readString(p, java.nio.charset.StandardCharsets.UTF_8);
+                    if (body.length() > 8192) {
+                        body = body.substring(0, 8192) + "\n...（SKILL.md 已截断，全文见 " + skillPath + "）";
+                    }
+                    block.append("--- SKILL.md 全文 ---\n").append(body).append("\n--- SKILL.md 结束 ---\n");
+                } else {
+                    block.append("（SKILL.md 未找到：").append(skillPath).append("，按 skill 名所述方法论执行）\n");
+                }
+            } catch (Exception e) {
+                log.warn("[injectSkillInstruction][skill={} 读 SKILL.md 失败降级：{}]", skillName, e.getMessage());
+                block.append("（SKILL.md 读取失败，按 skill 名所述方法论执行）\n");
+            }
+        }
+        block.append("【Skill 绑定结束】\n\n");
+        return block.toString() + (prompt == null ? "" : prompt);
     }
 
     /**

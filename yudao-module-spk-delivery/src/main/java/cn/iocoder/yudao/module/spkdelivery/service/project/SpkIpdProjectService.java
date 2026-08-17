@@ -6,6 +6,8 @@ import cn.iocoder.yudao.module.bpm.api.task.dto.BpmProcessInstanceCreateReqDTO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.taskcontract.SpkTaskContractDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.taskcontract.SpkTaskContractMapper;
 import cn.iocoder.yudao.module.spkdelivery.service.cockpit.SpkIpdCockpitService;
+import cn.iocoder.yudao.module.spkdelivery.service.delivery.DeliveryPathResolver;
+import cn.iocoder.yudao.module.spkdelivery.service.delivery.FlowStateWriter;
 import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkGiteaIntegrationService;
 import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkPlaneIntegrationService;
 import jakarta.annotation.Resource;
@@ -61,6 +63,10 @@ public class SpkIpdProjectService {
     private SpkGiteaIntegrationService giteaService;
     @Resource
     private HistoryService historyService;
+    @Resource
+    private DeliveryPathResolver deliveryPathResolver;
+    @Resource
+    private FlowStateWriter flowStateWriter;
 
     /**
      * 发起 IPD 主流程（同步）。
@@ -82,6 +88,18 @@ public class SpkIpdProjectService {
      * @return {businessKey, processInstanceId, mode}
      */
     public Map<String, Object> start(String businessKey, String projectName, String payload, String mode) {
+        return start(businessKey, projectName, payload, mode, null);
+    }
+
+    /**
+     * 发起 IPD 主流程（同步），支持指定交付根目录。
+     *
+     * @param deliveryRoot 交付根目录（用户在 LaunchWizard 选择/修改）；空则按 Profile.defaultProjectRootPattern
+     *                     渲染 {businessKey}。非空时过 {@link DeliveryPathResolver#sanitizeRoot} 安全校验，
+     *                     违规则抛 {@code IPD_DELIVERY_ROOT_INVALID}（坑#路径注入：禁 .. 与越出 Delivery 根）。
+     */
+    public Map<String, Object> start(String businessKey, String projectName, String payload, String mode,
+                                     String deliveryRoot) {
         if (businessKey == null || businessKey.isBlank()) {
             businessKey = "ipd-" + System.currentTimeMillis();
         }
@@ -108,12 +126,31 @@ public class SpkIpdProjectService {
         // 同步发起：type2 后 ~0.06s 到首 receiveTask 即返 processInstanceId
         String processInstanceId = processInstanceApi.createProcessInstance(userId, createReq);
 
+        // E：项目启动创建交付目录骨架（.flow/ asset/ src/ docs/ + project.yaml + manifest.json）
+        // 失败降级记 warn 不阻断流程发起——目录是产物落盘前提，但流程仍可跑（DB 是关键路径，FS 是增强）。
+        // deliveryRoot 非空时过安全校验（禁 .. 与越出 Delivery 根，坑#路径注入），违规则抛 IPD_DELIVERY_ROOT_INVALID。
+        String root = null;
+        try {
+            root = (deliveryRoot != null && !deliveryRoot.isBlank())
+                    ? deliveryPathResolver.sanitizeRoot(deliveryRoot)
+                    : deliveryPathResolver.resolveProjectRoot(null, businessKey);
+            flowStateWriter.provisionProject(businessKey, root, projectName, IPD_FLOW_KEY, normMode);
+        } catch (IllegalArgumentException ie) {
+            // 路径安全校验失败：拒绝发起（坑#路径注入铁律，不降级）
+            throw cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception(
+                    cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.IPD_DELIVERY_ROOT_INVALID);
+        } catch (Exception e) {
+            log.warn("[start][businessKey={} 交付目录初始化失败降级 root={}：{}]",
+                    businessKey, root, e.getMessage());
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("businessKey", businessKey);
         result.put("processInstanceId", processInstanceId);
         result.put("mode", normMode);
-        log.info("[start][businessKey={} projectName={} mode={} userId={} processInstanceId={}]",
-                businessKey, projectName, normMode, userId, processInstanceId);
+        result.put("deliveryRoot", root);
+        log.info("[start][businessKey={} projectName={} mode={} userId={} processInstanceId={} deliveryRoot={}]",
+                businessKey, projectName, normMode, userId, processInstanceId, root);
         return result;
     }
 

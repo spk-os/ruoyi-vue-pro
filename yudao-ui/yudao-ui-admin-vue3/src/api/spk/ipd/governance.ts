@@ -41,3 +41,11 @@ export const getEngineInstance = (flowRunId: number) =>
 /** snapshotJson 结构契约：按 flowType 返回阶段/门/DCP/TR/活动 */
 export const getSnapshotSchema = (flowType: string) =>
   request.get({ url: '/spk/ipd/admin/workflows/snapshot-schema', params: { flowType } })
+
+// ==================== 流程配置聚合页（§B 读端聚合 + 可编辑） ====================
+/** 流程配置聚合快照：Profile + activity_def 按 stage 分组 + skill 目录 + 目录模板 */
+export const getFlowConfigSnapshot = (flowType = 'FULL_RELEASE') =>
+  request.get({ url: '/spk/ipd/admin/workflows/flow-config/snapshot', params: { flowType } })
+/** 行内保存 activity_def 的 skills / envRequirements */
+export const updateActivityDefBindings = (id: number, data: { skills?: string; envRequirements?: string }) =>
+  request.put({ url: `/spk/ipd/admin/workflows/flow-config/activity-def/${id}`, data })

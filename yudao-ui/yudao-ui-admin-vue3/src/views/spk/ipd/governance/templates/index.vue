@@ -1,12 +1,12 @@
 <!--
-  SPK-OS IPD 流程治理 - BPMN 模板库（对齐原型 templates.html）
-  展示 3 种 flowType 模板卡片 + 节点链路预览（阶段→门→DCP→TR）。
+  SPK-OS IPD 流程管理（原 BPMN 模板库，菜单 6984 改名）
+  展示 3 种 flowType 流程模板卡片 + 节点链路预览（阶段→门→DCP→TR）。
   "使用模板" → 跳转治理规则配置页新建对应 flowType 的 Profile。
   D1：三种 flowType 各对应一套真实 BPM 流程（spkIpdFlowFull/Increment/Issue）。
 -->
 <template>
   <div class="spk-ipd-gov-templates">
-    <el-alert type="info" :closable="false" show-icon title="BPMN 模板库"
+    <el-alert type="info" :closable="false" show-icon title="流程管理"
       description="三种 flowType 各对应一套真实 BPM 流程：FULL_RELEASE 全量六阶段 / INCREMENT_RELEASE 增量轻量 / ISSUE_RESOLUTION 问题处置四段。"
       class="mb-12px" />
 

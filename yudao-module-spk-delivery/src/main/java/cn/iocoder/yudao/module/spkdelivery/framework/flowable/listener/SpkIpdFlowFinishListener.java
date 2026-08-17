@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.spkdelivery.framework.flowable.listener;
 
 import cn.iocoder.yudao.module.bpm.api.event.BpmProcessInstanceStatusEvent;
 import cn.iocoder.yudao.module.bpm.enums.task.BpmProcessInstanceStatusEnum;
+import cn.iocoder.yudao.module.spkdelivery.service.delivery.FlowStateWriter;
 import cn.iocoder.yudao.module.spkdelivery.service.feedback.SpkFeedbackService;
 import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdBusinessConstants;
 import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdFlowRunService;
@@ -48,6 +49,8 @@ public class SpkIpdFlowFinishListener implements ApplicationListener<BpmProcessI
     @Resource
     private SpkFeedbackService feedbackService;
     @Resource
+    private FlowStateWriter flowStateWriter;
+    @Resource
     @Lazy // FlowRunService 间接依赖 BPM 引擎，延迟加载避免与监听器初始化循环
     private SpkIpdFlowRunService flowRunService;
 
@@ -69,6 +72,19 @@ public class SpkIpdFlowFinishListener implements ApplicationListener<BpmProcessI
             flowRunService.markCompletedByInstance(instanceId);
         } catch (Exception e) {
             log.error("[onEvent][回写 FlowRun COMPLETED 失败 instanceId={}]", instanceId, e);
+        }
+        // E：终态追加写 .flow/（stage=lifecycle, verdict=COMPLETED，可还原全流程收尾，失败降级）
+        try {
+            java.util.Map<String, Object> state = new java.util.LinkedHashMap<>();
+            state.put("stage", "lifecycle");
+            state.put("activityRunId", "finish");
+            state.put("status", "COMPLETED");
+            state.put("verdict", "COMPLETED");
+            state.put("operator", "bpm-finish");
+            state.put("timestamp", System.currentTimeMillis());
+            flowStateWriter.appendState(instanceId, event.getBusinessKey(), state);
+        } catch (Exception e) {
+            log.warn("[onEvent][写 .flow 终态失败降级 instanceId={}：{}]", instanceId, e.getMessage());
         }
         try {
             // R8 退市归档

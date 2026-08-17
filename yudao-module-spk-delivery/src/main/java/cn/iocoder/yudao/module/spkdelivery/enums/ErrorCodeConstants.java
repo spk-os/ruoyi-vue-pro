@@ -152,4 +152,7 @@ public interface ErrorCodeConstants {
     ErrorCode IPD_PROFILE_FLOW_TYPE_MISMATCH = new ErrorCode(1_050_116_095, "Profile flowType 与请求不符");
     ErrorCode IPD_PROFILE_VERSION_NOT_PUBLISHED = new ErrorCode(1_050_116_096, "该版本未发布，不可回滚/引用");
 
+    // ========== IPD 交付目录与流程状态（1-050-116-097） ==========
+    ErrorCode IPD_DELIVERY_ROOT_INVALID = new ErrorCode(1_050_116_097, "交付根目录非法：禁止 .. 与路径分隔符，且须位于 /work/SPK-OS/Delivery/ 下");
+
 }

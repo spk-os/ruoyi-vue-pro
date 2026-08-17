@@ -75,6 +75,10 @@ public class SpkIpdActivityDefDO extends BaseDO {
      */
     private String skills;
     /**
+     * 节点环境要求 JSON（runtime/image/tools/network/timeout 覆盖；空则继承 Profile.envProfile）
+     */
+    private String envRequirements;
+    /**
      * 工具白名单 JSON
      */
     private String tools;

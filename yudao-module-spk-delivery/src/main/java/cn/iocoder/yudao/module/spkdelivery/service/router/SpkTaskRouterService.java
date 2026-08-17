@@ -20,6 +20,8 @@ import cn.iocoder.yudao.module.spkdelivery.service.agent.SpkAgentDispatchResult;
 import cn.iocoder.yudao.module.spkdelivery.service.agentdef.SpkAgentDefService;
 import cn.iocoder.yudao.module.spkdelivery.service.artifact.SpkArtifactService;
 import cn.iocoder.yudao.module.spkdelivery.service.context.SpkContextBuilderService;
+import cn.iocoder.yudao.module.spkdelivery.service.delivery.DeliveryPathResolver;
+import cn.iocoder.yudao.module.spkdelivery.service.delivery.FlowStateWriter;
 import cn.iocoder.yudao.module.spkdelivery.service.evidence.SpkEvidenceService;
 import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkGiteaIntegrationService;
 import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkPlaneIntegrationService;
@@ -93,6 +95,10 @@ public class SpkTaskRouterService {
     private SpkAgentDefService agentDefService;
     @Resource
     private SpkIpdMetrics metrics;
+    @Resource
+    private FlowStateWriter flowStateWriter;
+    @Resource
+    private DeliveryPathResolver deliveryPathResolver;
 
     /**
      * 路由 + 执行一次 Activity（铁律：一 Activity 一 Lead，三件套齐全才记 done）。
@@ -187,6 +193,12 @@ public class SpkTaskRouterService {
                     .setOmnigentAgentId(effectiveLead.getOmnigentAgentId())
                     .setStage(def.getStage())
                     .setOutputArtifactType(def.getOutputArtifactType());
+            // G：节点 skill 绑定注入（Phase1 最小闭环——adapter 前置 skill 指令块进 prompt）
+            String skillName = resolveSkill(def);
+            if (skillName != null) {
+                req.setSkillName(skillName);
+                req.setSkillPath("/root/.claude/skills/" + skillName + "/SKILL.md");
+            }
             FrameworkAdapter adapter = selectAdapter(def, effectiveLead);
             SpkAgentDispatchResult dispatch = adapter.dispatchTask(req);
             result.setProvider(adapter.getName());
@@ -204,6 +216,13 @@ public class SpkTaskRouterService {
                     def.getOutputArtifactType(), payload.document,
                     truncate(def.getName() + " 产物", 200));
             result.setArtifactId(artifact.getArtifactId());
+            // E：产物全文镜像到 <root>/asset/<stage>/<artifactId>.md（DB artifact 之外的可还原本地副本，失败降级）
+            try {
+                String root = deliveryPathResolver.resolveProjectRootByBusinessKey(processInstanceId, businessKey);
+                flowStateWriter.mirrorArtifact(root, def.getStage(), artifact.getArtifactId(), payload.document);
+            } catch (Exception me) {
+                log.warn("[route][activityRunId={} 镜像产物失败降级：{}]", activityRunId, truncate(me.getMessage(), 200));
+            }
             // 9. 长文档提交 Gitea，失败不阻断 Activity done（agentResult 存 giteaUrl:null + error）
             //    test 模式：commit 到 main（既有路径）。
             //    product 模式：建 concept 分支 + commit 到分支 + 开 PR + Plane 录入需求（见 doProductDelivery），
@@ -267,6 +286,24 @@ public class SpkTaskRouterService {
             result.setStatus(SpkTaskContractStatusEnum.DONE.getLabel());
             metrics.incrementActivityRun("done");
             metrics.incrementAgentTask("done");
+            // E：状态追加写 .flow/（可还原全流程，失败降级不阻断）
+            try {
+                Map<String, Object> state = new LinkedHashMap<>();
+                state.put("stage", def.getStage());
+                state.put("activityId", activityId);
+                state.put("activityRunId", activityRunId);
+                state.put("contractId", contractId);
+                state.put("artifactId", artifact.getArtifactId());
+                state.put("evidenceRunId", result.getRunReceiptId());
+                state.put("verdict", result.getVerificationConclusion());
+                state.put("status", result.getStatus());
+                state.put("operator", lead.getCode());
+                state.put("timestamp", System.currentTimeMillis());
+                flowStateWriter.appendState(processInstanceId, businessKey, state);
+            } catch (Exception se) {
+                log.warn("[route][activityRunId={} 写 .flow 状态失败降级：{}]",
+                        activityRunId, truncate(se.getMessage(), 200));
+            }
             // 10. 总证据
             evidenceService.append(activityRunId, processInstanceId,
                     SpkEvidenceTypeEnum.RUN.getLabel(), receipt.getRunId(),
@@ -727,5 +764,31 @@ public class SpkTaskRouterService {
         String document;
         String summary;
         String conclusion;
+    }
+
+    /**
+     * stage → 默认 skill 回退映射（对齐设计文档 §7 / DeliveryPathResolver.DEFAULT_SKILL_BINDINGS）。
+     * def.skills 为空时按 stage 取，保证每个节点都有 skill 可执行。
+     */
+    private static final java.util.Map<String, String> STAGE_SKILL_FALLBACK = java.util.Map.of(
+            "concept", "spk-ipd-concept",
+            "plan", "spk-ipd-plan",
+            "develop", "spk-ipd-develop",
+            "qualify", "spk-ipd-verify",
+            "launch", "spk-ipd-launch",
+            "lifecycle", "spk-ipd-tr-gate");
+
+    /**
+     * 解析节点绑定 skill：优先 activity_def.skills（JSON 数组首元素，流程配置页可改），
+     * 空则按 stage 回退常量映射。返回 skill 名（如 spk-ipd-concept）或 null。
+     */
+    private String resolveSkill(SpkIpdActivityDefDO def) {
+        if (def.getSkills() != null && !def.getSkills().isBlank()) {
+            List<String> skills = parseArray(def.getSkills());
+            if (!skills.isEmpty()) {
+                return skills.get(0);
+            }
+        }
+        return def.getStage() != null ? STAGE_SKILL_FALLBACK.get(def.getStage()) : null;
     }
 }

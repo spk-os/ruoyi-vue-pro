@@ -48,6 +48,12 @@ public class SpkIpdProjectDO extends BaseDO {
     private LocalDateTime actualEndAt;
     /** 当前主版本快捷引用，不作为唯一事实源 */
     private Long currentMajorReleaseId;
+    /**
+     * 交付根目录绝对路径（如 /work/SPK-OS/Delivery/project/ipd-2026-0042）。
+     * <p>启动时按 Profile.defaultProjectRootPattern 渲染 {businessKey} 或用户指定写入；
+     * 其下物理创建 .flow/ asset/ src/ docs/ 四子目录，.flow/ 存全流程可还原状态。空则按默认根渲染。
+     */
+    private String deliveryRoot;
     /** 乐观锁版本 */
     private Integer lockVersion;
 }

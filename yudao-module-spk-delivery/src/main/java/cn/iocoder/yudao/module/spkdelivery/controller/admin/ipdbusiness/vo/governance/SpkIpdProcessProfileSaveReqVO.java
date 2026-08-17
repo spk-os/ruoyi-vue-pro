@@ -33,4 +33,16 @@ public class SpkIpdProcessProfileSaveReqVO {
 
     @Schema(description = "状态 DRAFT/PUBLISHED/DEPRECATED", example = "DRAFT")
     private String status;
+
+    @Schema(description = "交付目录结构模板 JSON（.flow/asset/src/docs 树）")
+    private String deliveryDirTemplate;
+
+    @Schema(description = "默认项目根路径模板，{businessKey} 占位")
+    private String defaultProjectRootPattern;
+
+    @Schema(description = "节点环境默认 native-ai/omnigent-sandbox")
+    private String envProfile;
+
+    @Schema(description = "按 stage 默认 skill 映射 JSON")
+    private String defaultSkillBindings;
 }

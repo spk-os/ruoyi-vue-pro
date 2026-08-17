@@ -64,6 +64,10 @@ public class SpkIpdProcessProfileService {
                 // D1：按 flowType 自动绑定 BPM 流程定义 key（修 G1/G3），不可手改
                 .processDefinitionKey(SpkIpdBusinessConstants.flowKeyOf(req.getFlowType()))
                 .status(req.getStatus() == null ? "DRAFT" : req.getStatus())
+                .deliveryDirTemplate(req.getDeliveryDirTemplate())
+                .defaultProjectRootPattern(req.getDefaultProjectRootPattern())
+                .envProfile(req.getEnvProfile())
+                .defaultSkillBindings(req.getDefaultSkillBindings())
                 .currentVersion(0).lockVersion(0).build();
         profileMapper.insert(p);
         audit("PROFILE_CREATE", p.getId(), null, p);
@@ -80,6 +84,10 @@ public class SpkIpdProcessProfileService {
         p.setName(req.getName());
         p.setDescription(req.getDescription());
         if (req.getStatus() != null) p.setStatus(req.getStatus());
+        if (req.getDeliveryDirTemplate() != null) p.setDeliveryDirTemplate(req.getDeliveryDirTemplate());
+        if (req.getDefaultProjectRootPattern() != null) p.setDefaultProjectRootPattern(req.getDefaultProjectRootPattern());
+        if (req.getEnvProfile() != null) p.setEnvProfile(req.getEnvProfile());
+        if (req.getDefaultSkillBindings() != null) p.setDefaultSkillBindings(req.getDefaultSkillBindings());
         profileMapper.updateById(p);
         audit("PROFILE_UPDATE", p.getId(), before, p);
     }
