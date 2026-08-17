@@ -11,12 +11,12 @@
 
     <div class="section-title">Lead Agents（{{ leads.length }}）</div>
     <el-table :data="leads" size="small" border>
-      <el-table-column prop="code" label="code" min-width="180" />
-      <el-table-column prop="name" label="名称" min-width="140" />
+      <el-table-column prop="name" label="名称" min-width="160" />
+      <el-table-column prop="code" label="编码" min-width="160" />
       <el-table-column prop="model" label="model" width="120" />
       <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
-          <el-tag :type="row.status === 'busy' ? 'warning' : 'info'">{{ row.status }}</el-tag>
+          <el-tag :type="row.status === 'busy' ? 'warning' : 'info'">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="runningContracts" label="running 合同" width="140">
@@ -28,10 +28,14 @@
 
     <div class="section-title">Independent Verifiers（{{ verifiers.length }}）</div>
     <el-table :data="verifiers" size="small" border>
-      <el-table-column prop="code" label="code" min-width="180" />
-      <el-table-column prop="name" label="名称" min-width="140" />
+      <el-table-column prop="name" label="名称" min-width="160" />
+      <el-table-column prop="code" label="编码" min-width="160" />
       <el-table-column prop="model" label="model" width="120" />
-      <el-table-column prop="status" label="状态" width="100" />
+      <el-table-column prop="status" label="状态" width="100">
+        <template #default="{ row }">
+          <el-tag :type="row.status === 'busy' ? 'warning' : 'info'">{{ statusLabel(row.status) }}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="runningContracts" label="running 合同" width="140">
         <template #default="{ row }">
           <el-tag :type="loadType(row.runningContracts)">{{ row.runningContracts }}</el-tag>
@@ -52,6 +56,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getAgentLoad, getMetricsSnapshot } from '@/api/spk/ipd/cockpit'
+import { statusMap, labelText } from '@/views/spk/ipd/home/components/status'
+
+const statusLabel = (s?: string) => labelText(statusMap, s)
 
 const loading = ref(false)
 const data = ref<any>(null)

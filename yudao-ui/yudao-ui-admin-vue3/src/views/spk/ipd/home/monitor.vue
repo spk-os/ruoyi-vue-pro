@@ -48,7 +48,7 @@
         <div class="spk-flowrow" @click="toggle(fr.id)">
           <div class="spk-flowrow__id">
             <div class="spk-flowrow__idno">{{ fr.runNo || fr.id }}</div>
-            <div class="spk-flowrow__sub">{{ fr.flowType }} · {{ fr.currentStage || '—' }} · {{ fr.health || '—' }}</div>
+            <div class="spk-flowrow__sub">{{ flowTypeLabel(fr.flowType) }} · {{ stageLabel(fr.currentStage) }} · {{ healthLabel(fr.health) }}</div>
           </div>
           <div class="spk-flowrow__stage">
             <SpkStagePipeline :states="pipelineStates(fr)" />
@@ -72,8 +72,8 @@
           <div v-show="openId === fr.id" class="spk-detail">
             <!-- 阻塞/决策摘要 -->
             <div class="spk-detail__sum">
-              <div class="spk-detail__row"><span class="spk-detail__label">当前阶段</span><span>{{ fr.currentStage || '—' }}</span></div>
-              <div class="spk-detail__row"><span class="spk-detail__label">健康度</span><span>{{ fr.health || '—' }}</span></div>
+              <div class="spk-detail__row"><span class="spk-detail__label">当前阶段</span><span>{{ stageLabel(fr.currentStage) }}</span></div>
+              <div class="spk-detail__row"><span class="spk-detail__label">健康度</span><span>{{ healthLabel(fr.health) }}</span></div>
               <div class="spk-detail__row"><span class="spk-detail__label">启动时间</span><span>{{ fmt(fr.startedAt) }}</span></div>
               <div class="spk-detail__row"><span class="spk-detail__label">证据/产物</span><span>{{ fr.evidenceCount ?? 0 }} / {{ fr.artifactCount ?? 0 }}</span></div>
               <div v-if="fr.blockReason" class="spk-detail__row spk-detail__row--bad">
@@ -102,7 +102,7 @@ import SpkStatCard from './components/SpkStatCard.vue'
 import SpkBadge from './components/SpkBadge.vue'
 import SpkStagePipeline from './components/SpkStagePipeline.vue'
 import SpkEvidenceBar from './components/SpkEvidenceBar.vue'
-import { statusMap } from './components/status'
+import { statusMap, flowTypeMap, stageMap, healthMap, labelText } from './components/status'
 
 defineOptions({ name: 'SpkIpdHomeMonitor' })
 
@@ -139,6 +139,9 @@ const flowsFiltered = computed(() => {
 })
 
 const STAGE_ORDER = ['CONCEPT', 'PLAN', 'DEVELOP', 'QUALIFY', 'LAUNCH', 'LIFECYCLE']
+const flowTypeLabel = (s?: string) => labelText(flowTypeMap, s)
+const stageLabel = (s?: string) => labelText(stageMap, s)
+const healthLabel = (s?: string) => labelText(healthMap, s)
 const pipelineStates = (fr: any): string[] => {
   const idx = STAGE_ORDER.indexOf((fr.currentStageKey || fr.currentStage || '').toUpperCase())
   const cur = idx >= 0 ? idx : 0

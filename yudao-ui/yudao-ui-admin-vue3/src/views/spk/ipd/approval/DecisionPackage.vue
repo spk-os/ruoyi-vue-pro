@@ -13,11 +13,11 @@
         <el-descriptions-item label="项目">{{ pkg.header?.projectName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="版本">{{ pkg.header?.versionLabel || '-' }}</el-descriptions-item>
         <el-descriptions-item label="类型">{{ pkg.header?.versionType || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="流程类型">{{ pkg.header?.flowType || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="流程类型">{{ flowTypeLabel(pkg.header?.flowType) }}</el-descriptions-item>
         <el-descriptions-item label="阶段">{{ pkg.header?.stage || '-' }}</el-descriptions-item>
         <el-descriptions-item label="当前门禁">{{ pkg.header?.currentGate || '-' }}</el-descriptions-item>
         <el-descriptions-item label="健康">
-          <el-tag :type="healthTagType(pkg.header?.health)" size="small">{{ pkg.header?.health || '-' }}</el-tag>
+          <el-tag :type="healthTagType(pkg.header?.health)" size="small">{{ healthLabel(pkg.header?.health) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="等待时长">{{ formatWait(pkg.header?.waitDurationMs) }}</el-descriptions-item>
         <el-descriptions-item label="审批人">{{ pkg.header?.approverNickname || pkg.header?.approverUserId || '-' }}</el-descriptions-item>
@@ -67,7 +67,7 @@
           <el-table-column prop="type" label="类型" width="100" />
           <el-table-column label="状态" width="100">
             <template #default="{ row }">
-              <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+              <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="签名" width="70">
@@ -167,6 +167,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as ApprovalApi from '@/api/spk/ipd/approval'
 import type { SpkIpdDecisionPackageRespVO } from '@/api/spk/ipd/approval'
+import { flowTypeMap, healthMap, statusMap, labelText } from '@/views/spk/ipd/home/components/status'
 
 defineOptions({ name: 'SpkIpdDecisionPackage' })
 
@@ -204,6 +205,9 @@ const formatWait = (ms?: number) => {
   const m = Math.floor((ms % 3600000) / 60000)
   return h > 0 ? `${h}h${m}m` : `${m}m`
 }
+const flowTypeLabel = (s?: string) => labelText(flowTypeMap, s)
+const healthLabel = (s?: string) => labelText(healthMap, s)
+const statusLabel = (s?: string) => labelText(statusMap, s)
 
 const decide = (decision: string) => {
   const action = pkg.value?.candidateActions?.find((a) => a.decision === decision)

@@ -44,7 +44,7 @@
           <el-table-column label="流程类型" prop="flowType" width="170" />
           <el-table-column label="状态" prop="status" width="110">
             <template #default="{ row }">
-              <el-tag :type="statusTagType(row.status)">{{ row.status }}</el-tag>
+              <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="当前版本" prop="currentVersion" width="90" />
@@ -97,7 +97,7 @@
               <el-table-column label="ID" prop="id" width="70" />
               <el-table-column label="版本号" prop="version" width="80" />
               <el-table-column label="状态" prop="status" width="110">
-                <template #default="{ row }"><el-tag :type="statusTagType(row.status)">{{ row.status }}</el-tag></template>
+                <template #default="{ row }"><el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
               </el-table-column>
               <el-table-column label="兼容哈希" prop="compatibilityHash" width="160" show-overflow-tooltip />
               <el-table-column label="发布人" prop="publishedBy" width="90" />
@@ -226,6 +226,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as Gov from '@/api/spk/ipd/governance'
+import { statusMap, labelText } from '@/views/spk/ipd/home/components/status'
 
 defineOptions({ name: 'SpkIpdGovernance' })
 
@@ -357,6 +358,7 @@ const loadAudit = async () => {
 // ---------- 工具 ----------
 const statusTagType = (s: string) => ({ PUBLISHED: 'success', DRAFT: 'info', SUPERSEDED: 'warning', DEPRECATED: 'danger' } as any)[s] || ''
 const actionTagType = (a: string) => ({ SKIP: 'danger', OPTIONAL: 'warning', SIMPLIFY: 'info' } as any)[a] || ''
+const statusLabel = (s: string) => labelText(statusMap, s)
 
 onMounted(() => { loadProfiles(); loadFailedJobs(); loadAudit() })
 </script>

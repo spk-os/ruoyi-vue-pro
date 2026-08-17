@@ -36,6 +36,13 @@ public interface SpkAgentDefMapper extends BaseMapperX<SpkAgentDefDO> {
         return selectOne(new LambdaQueryWrapperX<SpkAgentDefDO>().eq(SpkAgentDefDO::getCode, code));
     }
 
+    /**
+     * 批量按 code 查智能体定义（BFF join 中文名用：leadAgentCode → name）。
+     */
+    default List<SpkAgentDefDO> selectListByCodes(List<String> codes) {
+        return selectList(new LambdaQueryWrapperX<SpkAgentDefDO>().in(SpkAgentDefDO::getCode, codes));
+    }
+
     default List<SpkAgentDefDO> selectListByHidden(Integer hidden) {
         return selectList(new LambdaQueryWrapperX<SpkAgentDefDO>()
                 .eq(SpkAgentDefDO::getHidden, hidden)

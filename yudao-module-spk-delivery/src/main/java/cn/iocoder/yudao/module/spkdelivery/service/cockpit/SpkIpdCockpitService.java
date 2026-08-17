@@ -75,6 +75,8 @@ public class SpkIpdCockpitService {
         List<SpkArtifactManifestDO> artifacts = artifactMapper.selectListByProcessInstanceId(processInstanceId);
         // activityId → 中文名（spk_ipd_activity_def.name），卡片显示实际内容而非 ACT-xx 编号
         Map<String, String> nameByActivityId = loadActivityNames(contracts);
+        // leadAgentCode → 中文名（spk_agent_def.name），卡片显示智能体名而非 lead-xxx 编号
+        Map<String, String> nameByAgentCode = loadAgentNames(contracts);
         // 按 activityRunId 索引产物数与验证结论
         Map<String, Integer> artifactCount = new LinkedHashMap<>();
         Map<String, String> conclusion = new LinkedHashMap<>();
@@ -102,7 +104,8 @@ public class SpkIpdCockpitService {
             byStage.computeIfAbsent(stage, k -> new ArrayList<>()).add(activityCard(c,
                     artifactCount.getOrDefault(c.getActivityRunId(), 0),
                     conclusion.get(c.getActivityRunId()),
-                    nameByActivityId.getOrDefault(c.getActivityId(), c.getActivityId())));
+                    nameByActivityId.getOrDefault(c.getActivityId(), c.getActivityId()),
+                    nameByAgentCode.getOrDefault(c.getLeadAgentCode(), c.getLeadAgentCode())));
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("processInstanceId", processInstanceId);
@@ -125,6 +128,10 @@ public class SpkIpdCockpitService {
             SpkIpdActivityDefDO def = activityDefMapper.selectByActivityIdAndVersion(
                     contract.getActivityId(), contract.getActivityVersion());
             result.put("activityName", def != null ? def.getName() : contract.getActivityId());
+            // leadAgentCode → 中文名（spk_agent_def.name），单点查；失败兜底回落 code 原文
+            SpkAgentDefDO agent = contract.getLeadAgentCode() == null ? null
+                    : agentDefMapper.selectByCode(contract.getLeadAgentCode());
+            result.put("leadAgentName", agent != null ? agent.getName() : contract.getLeadAgentCode());
             result.put("contextManifestUri", contract.getContextManifestUri());
         }
         // ArtifactManifest —— 附 Gitea 文档链接
@@ -167,7 +174,7 @@ public class SpkIpdCockpitService {
         return result;
     }
 
-    private Map<String, Object> activityCard(SpkTaskContractDO c, int artifacts, String verdict, String activityName) {
+    private Map<String, Object> activityCard(SpkTaskContractDO c, int artifacts, String verdict, String activityName, String leadAgentName) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("activityRunId", c.getActivityRunId());
         m.put("activityId", c.getActivityId());
@@ -175,6 +182,7 @@ public class SpkIpdCockpitService {
         m.put("nodeKey", c.getNodeKey());
         m.put("stage", c.getPhase());
         m.put("leadAgentCode", c.getLeadAgentCode());
+        m.put("leadAgentName", leadAgentName);
         m.put("status", c.getStatus());
         m.put("artifactCount", artifacts);
         m.put("verificationConclusion", verdict);
@@ -199,6 +207,29 @@ public class SpkIpdCockpitService {
         }
         for (SpkIpdActivityDefDO d : activityDefMapper.selectListByActivityIds(ids)) {
             map.putIfAbsent(d.getActivityId(), d.getName());
+        }
+        return map;
+    }
+
+    /**
+     * 批量取 leadAgentCode → 中文名映射（spk_agent_def.name，Cockpit 只需展示名）。
+     */
+    private Map<String, String> loadAgentNames(List<SpkTaskContractDO> contracts) {
+        Map<String, String> map = new HashMap<>();
+        if (contracts == null || contracts.isEmpty()) {
+            return map;
+        }
+        List<String> codes = new ArrayList<>();
+        for (SpkTaskContractDO c : contracts) {
+            if (c.getLeadAgentCode() != null && !codes.contains(c.getLeadAgentCode())) {
+                codes.add(c.getLeadAgentCode());
+            }
+        }
+        if (codes.isEmpty()) {
+            return map;
+        }
+        for (SpkAgentDefDO d : agentDefMapper.selectListByCodes(codes)) {
+            map.putIfAbsent(d.getCode(), d.getName());
         }
         return map;
     }

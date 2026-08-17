@@ -37,7 +37,7 @@
           <el-table-column label="当前阶段" prop="currentStage" width="100" />
           <el-table-column label="状态" prop="status" width="100">
             <template #default="{ row }">
-              <el-tag size="small" :type="flowTagType(row.status)">{{ row.status }}</el-tag>
+              <el-tag size="small" :type="flowTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="健康" prop="health" width="80" />
@@ -85,10 +85,10 @@
         <el-card v-for="p in data.roadmap" :key="p.projectId" shadow="hover" class="cursor-pointer" @click="openProject(p.projectId)">
           <div class="flex justify-between items-center">
             <b class="truncate">{{ p.projectName }}</b>
-            <el-tag size="small" :type="healthTagType(p.health)">{{ p.health || '—' }}</el-tag>
+            <el-tag size="small" :type="healthTagType(p.health)">{{ healthLabel(p.health) }}</el-tag>
           </div>
           <div v-for="m in p.majors" :key="m.majorReleaseId" class="mt-8px">
-            <div class="text-xs text-gray-400">V{{ m.majorNo }} · {{ m.name }} <el-tag size="small" effect="plain">{{ m.status }}</el-tag></div>
+            <div class="text-xs text-gray-400">V{{ m.majorNo }} · {{ m.name }} <el-tag size="small" effect="plain">{{ statusLabel(m.status) }}</el-tag></div>
             <div class="flex flex-wrap gap-4px mt-4px">
               <el-tag v-for="v in m.versions" :key="v.versionId" size="small" :type="versionTagType(v.status)" @click.stop="openProject(p.projectId)">
                 {{ v.versionNo }}
@@ -107,6 +107,7 @@ import { dateFormatter } from '@/utils/formatTime'
 import * as IpdBusinessApi from '@/api/spk/ipd/business'
 import StatCard from './StatCard.vue'
 import DistRow from './DistRow.vue'
+import { statusMap, healthMap, labelText } from '@/views/spk/ipd/home/components/status'
 
 defineOptions({ name: 'SpkIpdOverview' })
 
@@ -135,6 +136,8 @@ const attType = (s?: string) => (s === 'P0' || s === 'CRITICAL' ? 'danger' : s =
 const flowTagType = (s?: string) => ({ RUNNING: 'success', BLOCKED: 'danger', CANCELLED: 'info', COMPLETED: 'success', FAILED: 'danger' } as any)[s || ''] || ''
 const healthTagType = (s?: string) => ({ GOOD: 'success', WARN: 'warning', CRITICAL: 'danger' } as any)[s || ''] || 'info'
 const versionTagType = (s?: string) => ({ RELEASED: 'success', RUNNING: 'primary', VERIFYING: 'warning', READY: 'primary', CANCELLED: 'info' } as any)[s || ''] || ''
+const statusLabel = (s?: string) => labelText(statusMap, s)
+const healthLabel = (s?: string) => labelText(healthMap, s)
 const aiLabel = (k: string) => k.replace(/_/g, ' ').replace(/total|spk ipd/gi, '').trim() || k
 
 const jumpFlow = (row: any) => row?.id && push({ name: 'SpkIpdCockpit' })

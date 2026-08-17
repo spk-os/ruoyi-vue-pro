@@ -180,7 +180,7 @@ import SpkStatCard from './components/SpkStatCard.vue'
 import SpkBadge from './components/SpkBadge.vue'
 import SpkActionItem from './components/SpkActionItem.vue'
 import SpkFreshness from './components/SpkFreshness.vue'
-import { healthMap, statusMap } from './components/status'
+import { healthMap, statusMap, flowTypeMap, labelText } from './components/status'
 
 defineOptions({ name: 'SpkIpdHomeOverview' })
 
@@ -192,6 +192,8 @@ const data = ref<IpdBusinessApi.SpkIpdOverviewVO>({})
 const integrations = ref<IpdBusinessApi.SpkIpdMonitorIntegration[]>([])
 
 const totalOf = (m?: Record<string, number>) => (m ? Object.values(m).reduce((a, b) => a + b, 0) : 0)
+const flowTypeLabel = (s?: string) => labelText(flowTypeMap, s)
+const statusLabel = (s?: string) => labelText(statusMap, s)
 
 // —— KPI ——
 const kpis = computed(() => {
@@ -270,7 +272,7 @@ const convRate = computed(() => {
 const events = computed(() => {
   const evs: { time: string; title: string; meta?: string }[] = []
   for (const f of data.value.recentFlows || []) {
-    evs.push({ time: f.startedAt ? formatDate(f.startedAt, 'MM-DD HH:mm') : '', title: `${f.runNo || f.flowRunId || ''} ${f.flowType || ''} ${f.status || ''}`, meta: f.projectName })
+    evs.push({ time: f.startedAt ? formatDate(f.startedAt, 'MM-DD HH:mm') : '', title: `${f.runNo || f.flowRunId || ''} ${flowTypeLabel(f.flowType)} ${statusLabel(f.status)}`, meta: f.projectName })
   }
   for (const a of (data.value.attentionItems || []).slice(0, 3)) {
     evs.push({ time: '', title: a.title, meta: a.detail })

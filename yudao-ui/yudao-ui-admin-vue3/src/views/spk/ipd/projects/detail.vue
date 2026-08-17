@@ -73,7 +73,7 @@
         <el-table-column label="标题" min-width="240" prop="title" show-overflow-tooltip />
         <el-table-column label="状态" prop="status" width="120">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain">{{ row.status || '—' }}</el-tag>
+            <el-tag size="small" effect="plain">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="最近同步" prop="lastSyncedAt" width="160" :formatter="dateFormatter" />
@@ -94,10 +94,10 @@
           <div class="flex items-center gap-8px">
             <el-tag size="small" effect="plain">{{ a.stageLabel }}</el-tag>
             <b>{{ a.activityName }}</b>
-            <el-tag size="small" :type="actTagType(a.status)">{{ a.status }}</el-tag>
+            <el-tag size="small" :type="actTagType(a.status)">{{ actStatusLabel(a.status) }}</el-tag>
           </div>
           <div class="text-xs text-gray-500 mt-2px">
-            流程 {{ a.flowRunNo }} · 智能体 {{ a.leadAgentCode || '—' }} · 产物 {{ a.artifactCount }}
+            流程 {{ a.flowRunNo }} · 智能体 {{ a.leadAgentName || a.leadAgentCode || '—' }} · 产物 {{ a.artifactCount }}
             <span v-if="a.finishedAt">· 完成 {{ formatTime(a.finishedAt) }}</span>
           </div>
         </el-timeline-item>
@@ -124,7 +124,7 @@
         </el-table-column>
         <el-table-column label="标题" min-width="180" prop="title" show-overflow-tooltip />
         <el-table-column label="状态" prop="status" width="110">
-          <template #default="{ row }"><el-tag :type="issueTagType(row.status)" size="small">{{ row.status }}</el-tag></template>
+          <template #default="{ row }"><el-tag :type="issueTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag></template>
         </el-table-column>
         <el-table-column align="center" fixed="right" label="操作" width="240">
           <template #default="{ row }">
@@ -145,13 +145,13 @@
       <div v-for="m in majorReleases" :key="m.id" class="mb-16px">
         <div class="flex justify-between items-center px-6px py-4px font-semibold bg-gray-50 rounded">
           <span>V{{ m.majorNo }} · {{ m.name }}</span>
-          <el-tag size="small" :type="majorTagType(m.status)">{{ m.status }}</el-tag>
+          <el-tag size="small" :type="majorTagType(m.status)">{{ statusLabel(m.status) }}</el-tag>
         </div>
         <el-table :data="versionsOf(m.id)" size="small" class="mt-4px">
           <el-table-column label="版本号" prop="versionNo" width="120" />
           <el-table-column label="类型" prop="versionType" width="90" />
           <el-table-column label="状态" prop="status" width="100">
-            <template #default="{ row }"><el-tag size="small" :type="versionTagType(row.status)">{{ row.status }}</el-tag></template>
+            <template #default="{ row }"><el-tag size="small" :type="versionTagType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
           </el-table-column>
           <el-table-column label="就绪" prop="deliveryReadiness" width="100" />
           <el-table-column label="计划完成" prop="plannedEndAt" width="150" :formatter="dateFormatter" />
@@ -179,8 +179,8 @@
       <el-timeline v-else>
         <el-timeline-item v-for="a in stageDrawerActivities" :key="a.activityRunId" :timestamp="formatTime(a.queuedAt)" :type="actTagType(a.status)">
           <b>{{ a.activityName }}</b>
-          <el-tag class="ml-4px" size="small" :type="actTagType(a.status)">{{ a.status }}</el-tag>
-          <div class="text-xs text-gray-500">智能体 {{ a.leadAgentCode || '—' }} · 产物 {{ a.artifactCount }}</div>
+          <el-tag class="ml-4px" size="small" :type="actTagType(a.status)">{{ actStatusLabel(a.status) }}</el-tag>
+          <div class="text-xs text-gray-500">智能体 {{ a.leadAgentName || a.leadAgentCode || '—' }} · 产物 {{ a.artifactCount }}</div>
         </el-timeline-item>
       </el-timeline>
     </el-drawer>
@@ -200,6 +200,7 @@ import * as IpdBusinessApi from '@/api/spk/ipd/business'
 import { getProjectWorkspace, getStageTimestamps, getRequirementsTree, getRecentActivities } from '@/api/spk/ipd/business'
 import { getSimpleUserList, type UserVO } from '@/api/system/user'
 import { dateFormatter } from '@/utils/formatTime'
+import { statusMap, healthMap, labelText } from '@/views/spk/ipd/home/components/status'
 import Swimlane from '@/views/spk/ipd/cockpit/Swimlane.vue'
 import ProjectForm from './ProjectForm.vue'
 import MajorReleaseForm from './MajorReleaseForm.vue'
@@ -218,14 +219,16 @@ const projectId = computed(() => Number(route.query.projectId) || 0)
 
 const STATUS_OPTIONS = [{ label: '草稿', value: 'DRAFT' }, { label: '活跃', value: 'ACTIVE' }, { label: '暂停', value: 'PAUSED' }, { label: '归档', value: 'ARCHIVED' }]
 const HEALTH_OPTIONS = [{ label: '未知', value: 'UNKNOWN' }, { label: '良好', value: 'GOOD' }, { label: '告警', value: 'WARN' }, { label: '严重', value: 'CRITICAL' }]
-const statusLabel = (s?: string) => STATUS_OPTIONS.find((o) => o.value === s)?.label || s || '-'
+const statusLabel = (s?: string) => labelText(statusMap, s, STATUS_OPTIONS.find((o) => o.value === s)?.label)
 const statusTagType = (s?: string) => ({ ACTIVE: 'success', PAUSED: 'warning', ARCHIVED: 'info', DRAFT: 'info' } as any)[s || ''] || ''
-const healthLabel = (s?: string) => HEALTH_OPTIONS.find((o) => o.value === s)?.label || s || '-'
+const healthLabel = (s?: string) => labelText(healthMap, s, HEALTH_OPTIONS.find((o) => o.value === s)?.label)
 const healthTagType = (s?: string) => ({ GOOD: 'success', WARN: 'warning', CRITICAL: 'danger' } as any)[s || ''] || 'info'
 const majorTagType = (s?: string) => ({ ACTIVE: 'success', MAINTENANCE: 'warning', CLOSED: 'info' } as any)[s || ''] || ''
 const versionTagType = (s?: string) => ({ RUNNING: 'success', VERIFYING: 'warning', RELEASED: 'success', CANCELLED: 'info', READY: 'primary' } as any)[s || ''] || ''
 const issueTagType = (s?: string) => ({ OPEN: 'danger', TRIAGED: 'warning', IN_PROGRESS: 'warning', RESOLVED: 'info', CLOSED: 'info', REOPENED: 'danger' } as any)[s || ''] || ''
 const actTagType = (s?: string) => ({ done: 'success', running: 'primary', failed: 'danger', blocked: 'danger', timeout: 'warning', queued: 'info', cancelled: 'info', in_progress: 'warning' } as any)[s || ''] || 'info'
+// 活动任务态中文（spk_task_contract.status 小写枚举），统一走集中标签模块
+const actStatusLabel = (s?: string) => labelText(statusMap, s)
 
 const formatTime = (v?: string | number) => {
   if (!v) return ''

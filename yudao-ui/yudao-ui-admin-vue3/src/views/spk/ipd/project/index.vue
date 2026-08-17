@@ -56,7 +56,7 @@
             <div v-for="p in phases" :key="p.phase" class="phase-cell">
               <div class="phase-head">
                 <span>{{ phaseLabel(p.phase) }}</span>
-                <el-tag size="small" :type="phaseTagType(p.status)">{{ p.status }}</el-tag>
+                <el-tag size="small" :type="phaseTagType(p.status)">{{ statusLabel(p.status) }}</el-tag>
               </div>
               <el-progress
                 :percentage="p.total ? Math.round((p.done / p.total) * 100) : 0"
@@ -158,6 +158,7 @@ import {
   getOmnigentSession,
   interveneTask
 } from '@/api/spk/ipd/project'
+import { statusMap, labelText } from '@/views/spk/ipd/home/components/status'
 
 defineOptions({ name: 'SpkIpdProject' })
 
@@ -201,6 +202,7 @@ const phaseTagType = (s?: string): any => {
   if (s === 'running') return 'warning'
   return 'info'
 }
+const statusLabel = (s?: string) => labelText(statusMap, s)
 
 // 发起 IPD（同步）：type2 触发器改造后 createProcessInstance ~0.06s 到首 receiveTask 即返 processInstanceId，
 // 不再需要异步发起 + businessKey 轮询（旧 startRecords 内存态易因服务重启丢失→前端 not_found 卡死）。

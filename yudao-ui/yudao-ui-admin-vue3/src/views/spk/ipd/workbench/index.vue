@@ -87,7 +87,7 @@
                 <div class="flex items-center justify-between text-11px text-gray-500">
                   <span>{{ bi.ownerName || '未分派' }}</span>
                   <el-tag :type="statusType(bi.status)" size="small" effect="plain">
-                    {{ bi.status }}
+                    {{ statusLabel(bi.status) }}
                   </el-tag>
                 </div>
                 <div v-if="bi.dueAt" class="text-11px text-gray-400">截止 {{ bi.dueAt }}</div>
@@ -170,6 +170,7 @@ import type {
   CommandParseResp,
   CommandExecuteResp
 } from '@/api/spk/ipd/workbench'
+import { statusMap, labelText } from '@/views/spk/ipd/home/components/status'
 
 defineOptions({ name: 'SpkIpdWorkbench' })
 
@@ -352,6 +353,7 @@ const statusType = (s?: string) => {
   if (u === 'queued') return 'info'
   return 'success'
 }
+const statusLabel = (s?: string) => labelText(statusMap, s)
 const intentType = (i?: string) => (i === 'UNKNOWN' ? 'info' : 'warning')
 const resultType = (s?: string) => {
   if (s === 'SUCCESS' || s === 'IDEMPOTENT') return 'success'

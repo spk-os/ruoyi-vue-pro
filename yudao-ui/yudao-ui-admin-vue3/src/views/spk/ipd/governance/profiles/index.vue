@@ -23,9 +23,9 @@
             :class="{ active: selectedId === p.id }" shadow="hover" @click="selectProfile(p)">
             <div class="profile-card-header">
               <span class="profile-name">{{ p.name }}</span>
-              <el-tag size="small" :type="statusType(p.status)">{{ p.status }}</el-tag>
+              <el-tag size="small" :type="statusType(p.status)">{{ statusLabel(p.status) }}</el-tag>
             </div>
-            <div class="profile-meta">{{ p.profileCode }} · {{ p.flowType }}</div>
+            <div class="profile-meta">{{ p.profileCode }} · {{ flowTypeLabel(p.flowType) }}</div>
             <div class="profile-meta">v{{ p.currentVersion }} · key={{ p.processDefinitionKey }}</div>
           </el-card>
           <el-empty v-if="!profiles.length" description="暂无 Profile，点击新建" />
@@ -134,6 +134,7 @@ import {
   pageProfiles, createProfile, listVersions, publishVersion, rollbackVersion,
   listTrimRules, saveTrimRule, deleteTrimRule
 } from '@/api/spk/ipd/governance'
+import { statusMap, flowTypeMap, labelText } from '@/views/spk/ipd/home/components/status'
 
 defineOptions({ name: 'SpkIpdGovernanceProfiles' })
 
@@ -154,6 +155,8 @@ const ruleForm = reactive<any>({ id: null, profileVersionId: null, stage: '', ac
 
 const statusType = (s: string) => ({ PUBLISHED: 'success', DRAFT: 'info', DEPRECATED: 'warning' } as any)[s] || 'info'
 const actionType = (a: string) => ({ SKIP: 'danger', OPTIONAL: 'warning', SIMPLIFY: 'primary' } as any)[a] || 'info'
+const statusLabel = (s: string) => labelText(statusMap, s)
+const flowTypeLabel = (s?: string) => labelText(flowTypeMap, s)
 
 const loadProfiles = async () => {
   const res = await pageProfiles({ pageNo: 1, pageSize: 50, keyword: keyword.value })

@@ -38,7 +38,7 @@
                 @click="emit('show-detail', c.activityRunId)"
               >
                 <div class="card-title">{{ c.name || c.activityId }}</div>
-                <div class="card-sub">Lead：{{ c.leadAgentCode || '-' }}</div>
+                <div class="card-sub">Lead：{{ c.leadAgentName || c.leadAgentCode || '-' }}</div>
                 <div class="card-tags">
                   <el-tag size="small" :type="statusTagType(c.status)">{{ statusLabel(c.status) }}</el-tag>
                   <el-tag v-if="c.verificationConclusion" size="small" :type="verdictType(c.verificationConclusion)">
@@ -72,6 +72,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getSwimlane } from '@/api/spk/ipd/cockpit'
 import { getLatestProject, interveneTask } from '@/api/spk/ipd/project'
+import { stageMap, statusMap, labelText } from '@/views/spk/ipd/home/components/status'
 
 const props = defineProps<{ externalPid?: string }>()
 
@@ -97,14 +98,11 @@ const autoRefresh = ref(false)
 let timer: any = null
 
 const STAGE_ORDER = ['concept', 'plan', 'develop', 'qualify', 'launch', 'lifecycle', 'support', 'unknown']
-const STAGE_LABEL: Record<string, string> = {
-  concept: '概念', plan: '计划', develop: '开发', qualify: '验证',
-  launch: '发布', lifecycle: '生命周期', support: '支撑', unknown: '未归类'
-}
+const stageLabel = (s?: string) => labelText(stageMap, s)
 
 const orderedStages = computed(() =>
   STAGE_ORDER.filter((s) => stages.value[s]?.length).map((s) => ({
-    name: STAGE_LABEL[s] || s,
+    name: stageLabel(s),
     cards: stages.value[s] || []
   }))
 )
@@ -129,13 +127,7 @@ const load = async () => {
   }
 }
 
-const statusLabel = (s?: string) => {
-  const m: Record<string, string> = {
-    queued: '已入队', running: '执行中', done: '完成', failed: '失败',
-    timeout: '超时', cancelled: '已取消'
-  }
-  return m[s || ''] || s || '-'
-}
+const statusLabel = (s?: string) => labelText(statusMap, s)
 const statusClass = (s?: string) => `st-${s || 'unknown'}`
 const statusTagType = (s?: string): any => {
   const m: Record<string, any> = {

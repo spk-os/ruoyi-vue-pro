@@ -85,7 +85,7 @@
               </template>
             </el-table-column>
             <el-table-column label="状态" prop="status" width="100">
-              <template #default="{ row }"><el-tag size="small">{{ row.status || '—' }}</el-tag></template>
+              <template #default="{ row }"><el-tag size="small">{{ statusLabel(row.status) }}</el-tag></template>
             </el-table-column>
             <el-table-column label="大小" prop="bytes" width="90" align="right">
               <template #default="{ row }">{{ row.bytes ? Math.round(row.bytes / 1024) + 'KB' : '—' }}</template>
@@ -102,7 +102,7 @@
             <el-table-column label="类型" prop="flowType" width="140" />
             <el-table-column label="阶段" prop="currentStage" width="90" />
             <el-table-column label="状态" prop="status" width="100">
-              <template #default="{ row }"><el-tag size="small" :type="flowTag(row.status)">{{ row.status }}</el-tag></template>
+              <template #default="{ row }"><el-tag size="small" :type="flowTag(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
             </el-table-column>
             <el-table-column label="健康" prop="health" width="80" />
             <el-table-column label="产物" prop="artifactCount" width="60" align="center" />
@@ -140,6 +140,7 @@
 import { dateFormatter } from '@/utils/formatTime'
 import * as IpdBusinessApi from '@/api/spk/ipd/business'
 import StatCard from '../overview/StatCard.vue'
+import { statusMap, labelText } from '@/views/spk/ipd/home/components/status'
 
 defineOptions({ name: 'SpkIpdMonitor' })
 
@@ -164,6 +165,7 @@ const summaryCards = computed(() => {
 })
 
 const flowTag = (s?: string) => ({ RUNNING: 'success', BLOCKED: 'danger', CANCELLED: 'info', COMPLETED: 'success', FAILED: 'danger' } as any)[s || ''] || ''
+const statusLabel = (s?: string) => labelText(statusMap, s)
 // C-14：监控行点击必须携带对象 ID（flowRunId + processInstanceId），不得丢上下文。
 const openCockpit = (row: any) =>
   push({ name: 'SpkIpdCockpit', query: { flowRunId: row?.id, processInstanceId: row?.processInstanceId } })

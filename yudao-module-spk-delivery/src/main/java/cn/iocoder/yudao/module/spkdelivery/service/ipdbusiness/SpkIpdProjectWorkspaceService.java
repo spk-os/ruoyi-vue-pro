@@ -4,6 +4,7 @@ import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.artifact.SpkArtifactManifestDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.gate.SpkGateRecordDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdactivity.SpkIpdActivityDefDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agentdef.SpkAgentDefDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdDecisionRecordDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdFlowRunDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdMajorReleaseDO;
@@ -15,6 +16,7 @@ import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.taskcontract.SpkTaskCo
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.artifact.SpkArtifactManifestMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.gate.SpkGateRecordMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdactivity.SpkIpdActivityDefMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agentdef.SpkAgentDefMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdDecisionRecordMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdFlowRunMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdMajorReleaseMapper;
@@ -67,6 +69,8 @@ public class SpkIpdProjectWorkspaceService {
     private SpkArtifactManifestMapper artifactMapper;
     @Resource
     private SpkIpdActivityDefMapper activityDefMapper;
+    @Resource
+    private SpkAgentDefMapper agentDefMapper;
     @Resource
     private SpkIpdCockpitService cockpitService;
     @Resource
@@ -430,6 +434,8 @@ public class SpkIpdProjectWorkspaceService {
         }
         // activityId → 中文名批量
         Map<String, String> nameById = loadActivityNames(contracts);
+        // leadAgentCode → 中文名批量（spk_agent_def.name）
+        Map<String, String> nameByCode = loadAgentNames(contracts);
         // activityRunId → 产物数预聚合
         Map<String, Integer> artifactCount = new HashMap<>();
         List<SpkArtifactManifestDO> arts = artifactMapper.selectList(
@@ -451,6 +457,7 @@ public class SpkIpdProjectWorkspaceService {
             m.put("nodeKey", c.getNodeKey());
             m.put("status", c.getStatus());
             m.put("leadAgentCode", c.getLeadAgentCode());
+            m.put("leadAgentName", nameByCode.getOrDefault(c.getLeadAgentCode(), c.getLeadAgentCode()));
             m.put("queuedAt", c.getQueuedAt());
             m.put("finishedAt", c.getFinishedAt());
             m.put("flowRunNo", pidToRunNo.get(c.getProcessInstanceId()));
@@ -476,6 +483,29 @@ public class SpkIpdProjectWorkspaceService {
         }
         for (SpkIpdActivityDefDO d : activityDefMapper.selectListByActivityIds(ids)) {
             map.putIfAbsent(d.getActivityId(), d.getName());
+        }
+        return map;
+    }
+
+    /**
+     * 批量取 leadAgentCode → 中文名映射（spk_agent_def.name，展示名替代 lead-xxx 编号）。
+     */
+    private Map<String, String> loadAgentNames(List<SpkTaskContractDO> contracts) {
+        Map<String, String> map = new HashMap<>();
+        if (contracts == null || contracts.isEmpty()) {
+            return map;
+        }
+        List<String> codes = new ArrayList<>();
+        for (SpkTaskContractDO c : contracts) {
+            if (c.getLeadAgentCode() != null && !codes.contains(c.getLeadAgentCode())) {
+                codes.add(c.getLeadAgentCode());
+            }
+        }
+        if (codes.isEmpty()) {
+            return map;
+        }
+        for (SpkAgentDefDO d : agentDefMapper.selectListByCodes(codes)) {
+            map.putIfAbsent(d.getCode(), d.getName());
         }
         return map;
     }

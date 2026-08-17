@@ -40,18 +40,18 @@
       </el-table-column>
       <el-table-column label="当前阶段/门禁" min-width="130">
         <template #default="{ row }">
-          <span v-if="row.currentStage">{{ row.currentStage }}</span>
+          <span v-if="row.currentStage">{{ stageLabel(row.currentStage) }}</span>
           <span v-else class="text-gray-400">—</span>
         </template>
       </el-table-column>
       <el-table-column label="健康" width="100">
         <template #default="{ row }">
-          <el-tag :type="healthType(row.health)" size="small">{{ row.health || '—' }}</el-tag>
+          <el-tag :type="healthType(row.health)" size="small">{{ healthLabel(row.health) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="状态" width="110">
         <template #default="{ row }">
-          <el-tag :type="statusType(row.status)" size="small" effect="plain">{{ row.status }}</el-tag>
+          <el-tag :type="statusType(row.status)" size="small" effect="plain">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="等待时长" width="120">
@@ -91,6 +91,7 @@ import {
   unblockFlowRun
 } from '@/api/spk/ipd/business'
 import type { SpkIpdFlowRunVO } from '@/api/spk/ipd/business'
+import { statusMap, healthMap, stageMap, labelText } from '@/views/spk/ipd/home/components/status'
 
 defineOptions({ name: 'FlowRunList' })
 
@@ -153,6 +154,9 @@ const typeLabel = (t?: string) => {
   }
   return m[t || ''] || t || '—'
 }
+const statusLabel = (s?: string) => labelText(statusMap, s)
+const healthLabel = (s?: string) => labelText(healthMap, s)
+const stageLabel = (s?: string) => labelText(stageMap, s)
 
 const healthType = (h?: string) => {
   if (!h) return 'info'

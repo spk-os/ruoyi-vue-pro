@@ -25,7 +25,7 @@
             :class="{ active: selectedVersionId === v.id }" @click="selectVersion(v)">
             <div class="version-item-name">
               <span>v{{ v.version }}</span>
-              <el-tag size="small" :type="statusType(v.status)">{{ v.status }}</el-tag>
+              <el-tag size="small" :type="statusType(v.status)">{{ statusLabel(v.status) }}</el-tag>
             </div>
             <div class="version-item-meta">{{ formatTime(v.publishedAt) || '未发布' }}</div>
             <div class="version-item-meta">key: {{ v.processDefinitionKey || '—' }}</div>
@@ -50,7 +50,7 @@
           <el-descriptions :column="1" border size="small">
             <el-descriptions-item label="版本号">v{{ selectedVersion.version }}</el-descriptions-item>
             <el-descriptions-item label="状态">
-              <el-tag size="small" :type="statusType(selectedVersion.status)">{{ selectedVersion.status }}</el-tag>
+              <el-tag size="small" :type="statusType(selectedVersion.status)">{{ statusLabel(selectedVersion.status) }}</el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="绑定 BPM key">{{ selectedVersion.processDefinitionKey || '—' }}</el-descriptions-item>
             <el-descriptions-item label="兼容性哈希">{{ selectedVersion.compatibilityHash || '—' }}</el-descriptions-item>
@@ -74,6 +74,7 @@ import { ElMessage } from 'element-plus'
 import {
   pageProfiles, listVersions, publishVersion, rollbackVersion
 } from '@/api/spk/ipd/governance'
+import { statusMap, labelText } from '@/views/spk/ipd/home/components/status'
 
 defineOptions({ name: 'SpkIpdGovernanceVersions' })
 
@@ -90,6 +91,7 @@ const snapshotView = computed(() => {
 
 const statusType = (s: string) => ({ PUBLISHED: 'success', DRAFT: 'info', SUPERSEDED: 'warning', DEPRECATED: 'danger' } as any)[s] || 'info'
 const formatTime = (t: string) => t ? t.replace('T', ' ').substring(0, 19) : ''
+const statusLabel = (s: string) => labelText(statusMap, s)
 
 const loadProfiles = async () => {
   const res = await pageProfiles({ pageNo: 1, pageSize: 50 })

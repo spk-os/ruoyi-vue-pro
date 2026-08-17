@@ -30,10 +30,10 @@
       <!-- 节点 hero：一眼看懂这是什么节点、什么状态 -->
       <div class="node-hero">
         <div class="hero-left">
-          <div class="hero-activity">{{ data.activityName || data.contract?.activityId || data.activityRunId }}</div>
+          <div class="hero-activity">{{ data.activityName || data.leadAgentName || data.activityRunId }}</div>
           <div class="hero-sub">
             {{ stageLabel(data.contract?.phase) }}阶段
-            <span class="hero-lead">Lead：{{ data.contract?.leadAgentCode || '—' }}</span>
+            <span class="hero-lead">Lead：{{ data.leadAgentName || data.contract?.leadAgentCode || '—' }}</span>
           </div>
         </div>
         <div class="hero-right">
@@ -150,7 +150,7 @@
             <span class="artifact-type">{{ artifactTypeLabel(art.artifactType) }}</span>
             <span class="artifact-summary">{{ art.summary }}</span>
             <el-tag size="small" :type="art.status === 'signed' ? 'success' : art.status === 'quarantined' ? 'danger' : 'info'">
-              {{ art.status }}
+              {{ artifactStatusLabel(art.status) }}
             </el-tag>
             <el-link
               v-if="art.giteaUrl"
@@ -340,6 +340,10 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { getActivityDetail } from '@/api/spk/ipd/cockpit'
 import { getRequirements } from '@/api/spk/ipd/project'
+import {
+  stageMap, statusMap, artifactTypeMap, artifactStatusMap, evidenceTypeMap,
+  executionLocationMap, labelText
+} from '@/views/spk/ipd/home/components/status'
 
 const props = defineProps<{ activityRunId?: string; embedded?: boolean }>()
 
@@ -394,43 +398,15 @@ const verdictType = (v?: string): any => {
   if (v === 'FAIL') return 'danger'
   return 'warning'
 }
-const statusLabel = (s?: string) => {
-  const m: Record<string, string> = {
-    queued: '已入队', running: '执行中', done: '完成', failed: '失败',
-    timeout: '超时', cancelled: '已取消'
-  }
-  return m[s || ''] || s || '-'
-}
-const STAGE_LABEL: Record<string, string> = {
-  concept: '概念', plan: '计划', develop: '开发', qualify: '验证',
-  launch: '发布', lifecycle: '生命周期', support: '支撑', unknown: '未归类'
-}
-const stageLabel = (p?: string) => STAGE_LABEL[p || ''] || p || '—'
+const statusLabel = (s?: string) => labelText(statusMap, s)
+const stageLabel = (p?: string) => labelText(stageMap, p)
 const fmt = (t?: string) => (t ? String(t).replace('T', ' ').slice(0, 19) : '—')
 const shortHash = (h?: string) => (h ? h.slice(0, 12) + '…' : '—')
 
-// 产物类型中文映射（未知类型回落原文）
-const ARTIFACT_TYPE_LABEL: Record<string, string> = {
-  'req-insight-report': '需求洞察报告',
-  'concept-options-set': '概念选项集',
-  'feasibility-report': '可行性分析报告',
-  'business-case': '商业案例',
-  'concept-decision-brief': '概念决策简报',
-  'prs-baseline': '需求基线',
-  'arch-baseline': '架构基线',
-  'test-strategy': '测试策略'
-}
-const artifactTypeLabel = (t?: string) => ARTIFACT_TYPE_LABEL[t || ''] || t || '—'
-
-// 证据类型中文映射
-const EVIDENCE_TYPE_LABEL: Record<string, string> = {
-  context_manifest: '上下文清单',
-  artifact_signed: '产物签署',
-  run_receipt: '执行回执',
-  verification: '验证回执',
-  gate_decision: '门禁决策'
-}
-const evidenceTypeLabel = (t?: string) => EVIDENCE_TYPE_LABEL[t || ''] || t || '—'
+// 产物/证据/执行位置中文标签：统一走集中标签模块（status.ts），避免多处定义漂移
+const artifactTypeLabel = (t?: string) => labelText(artifactTypeMap, t)
+const artifactStatusLabel = (s?: string) => labelText(artifactStatusMap, s)
+const evidenceTypeLabel = (t?: string) => labelText(evidenceTypeMap, t)
 
 // 解析验证要点 JSON（失败降级空数组，不炸组件）
 const parsePoints = (json?: string): { point?: string; verdict?: string }[] => {
@@ -466,15 +442,7 @@ const goToRef = (r: string) => {
     load()
   }
 }
-const executionModeLabel = (m?: string) => {
-  const map: Record<string, string> = {
-    task_system: '任务系统派发',
-    lead_internal: 'Lead 内部执行',
-    omnigent: 'Omnigent 执行',
-    native_ai: '本地 AI 执行'
-  }
-  return map[m || ''] || m || '—'
-}
+const executionModeLabel = (m?: string) => labelText(executionLocationMap, m)
 const retryLabel = (p?: string) => {
   if (!p || p === '{}' || p === 'null') return '默认策略'
   try {

@@ -36,10 +36,10 @@
         <el-descriptions v-else :column="2" border size="small" title="已发布 Profile">
           <el-descriptions-item label="编码">{{ snapshot.profile.profileCode }}</el-descriptions-item>
           <el-descriptions-item label="名称">{{ snapshot.profile.name }}</el-descriptions-item>
-          <el-descriptions-item label="流程类型">{{ snapshot.profile.flowType }}</el-descriptions-item>
+          <el-descriptions-item label="流程类型">{{ flowTypeLabel(snapshot.profile.flowType) }}（{{ snapshot.profile.flowType }}）</el-descriptions-item>
           <el-descriptions-item label="BPM Key">{{ snapshot.profile.processDefinitionKey }}</el-descriptions-item>
           <el-descriptions-item label="状态">
-            <el-tag :type="statusTagType(snapshot.profile.status)">{{ snapshot.profile.status }}</el-tag>
+            <el-tag :type="statusTagType(snapshot.profile.status)">{{ profileStatusLabel(snapshot.profile.status) }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="当前版本">v{{ snapshot.profile.currentVersion }}</el-descriptions-item>
           <el-descriptions-item label="描述" :span="2">{{ snapshot.profile.description || '—' }}</el-descriptions-item>
@@ -77,13 +77,17 @@
         <el-collapse v-model="activeStages">
           <el-collapse-item v-for="(defs, stage) in snapshot.activityDefsByStage" :key="stage" :name="stage">
             <template #title>
-              <span class="stage-title">{{ stage }}</span>
+              <span class="stage-title">{{ stageLabel(String(stage)) }}</span>
               <el-tag size="small" class="ml-8px">{{ defs.length }} 项</el-tag>
             </template>
             <el-table :data="defs" border stripe size="small">
               <el-table-column label="Activity ID" prop="activityId" width="150" />
               <el-table-column label="名称" prop="name" min-width="140" />
-              <el-table-column label="输出产物类型" prop="outputArtifactType" width="150" show-overflow-tooltip />
+              <el-table-column label="输出产物类型" width="180">
+                <template #default="{ row }">
+                  <span :title="row.outputArtifactType">{{ artifactTypeLabel(row.outputArtifactType) }}</span>
+                </template>
+              </el-table-column>
               <el-table-column label="独立验证" prop="useIndependentVerifier" width="90">
                 <template #default="{ row }">
                   <el-tag :type="row.useIndependentVerifier ? 'success' : 'info'" size="small">
@@ -91,8 +95,14 @@
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="验证器类型" prop="verifierType" width="110" />
-              <el-table-column label="执行位置" prop="executionLocation" width="170" show-overflow-tooltip />
+              <el-table-column label="验证器类型" width="110">
+                <template #default="{ row }">{{ verifierTypeLabel(row.verifierType) }}</template>
+              </el-table-column>
+              <el-table-column label="执行位置" width="170" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span :title="row.executionLocation">{{ executionLocationLabel(row.executionLocation) }}</span>
+                </template>
+              </el-table-column>
             </el-table>
           </el-collapse-item>
         </el-collapse>
@@ -107,7 +117,7 @@
         <el-collapse v-model="activeSkillStages">
           <el-collapse-item v-for="(defs, stage) in snapshot.activityDefsByStage" :key="stage" :name="stage">
             <template #title>
-              <span class="stage-title">{{ stage }}</span>
+              <span class="stage-title">{{ stageLabel(String(stage)) }}</span>
               <el-tag size="small" class="ml-8px">{{ defs.length }} 项</el-tag>
             </template>
             <el-table :data="defs" border stripe size="small">
@@ -123,7 +133,7 @@
               </el-table-column>
               <el-table-column label="环境要求" min-width="240">
                 <template #default="{ row }">
-                  <el-input v-model="row.envRequirements" placeholder='{"runtime":"native-ai","timeout":"120s"}'
+                  <el-input v-model="row.envRequirements" placeholder='例如：{"runtime":"native-ai","timeout":"120s"}'
                     size="small" @blur="onSaveBindings(row)" />
                 </template>
               </el-table-column>
@@ -139,8 +149,19 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getFlowConfigSnapshot, updateActivityDefBindings } from '@/api/spk/ipd/governance'
+import {
+  stageMap, flowTypeMap, artifactTypeMap, verifierTypeMap,
+  executionLocationMap, statusMap, labelText
+} from '@/views/spk/ipd/home/components/status'
 
 defineOptions({ name: 'SpkIpdGovernanceFlowConfig' })
+
+const stageLabel = (s?: string) => labelText(stageMap, s)
+const flowTypeLabel = (s?: string) => labelText(flowTypeMap, s)
+const artifactTypeLabel = (s?: string) => labelText(artifactTypeMap, s)
+const verifierTypeLabel = (s?: string) => labelText(verifierTypeMap, s)
+const executionLocationLabel = (s?: string) => labelText(executionLocationMap, s)
+const profileStatusLabel = (s?: string) => labelText(statusMap, s)
 
 const flowType = ref('FULL_RELEASE')
 const activeTab = ref('profile')

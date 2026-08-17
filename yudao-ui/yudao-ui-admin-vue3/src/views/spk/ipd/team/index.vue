@@ -41,7 +41,7 @@
               <template #default="{ row }">{{ row.capacityPct }}%</template>
             </el-table-column>
             <el-table-column label="状态" width="90">
-              <template #default="{ row }"><el-tag size="small" :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status }}</el-tag></template>
+              <template #default="{ row }"><el-tag size="small" :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ statusLabel(row.status) }}</el-tag></template>
             </el-table-column>
             <el-table-column label="操作" width="90">
               <template #default="{ row }">
@@ -73,7 +73,7 @@
               <template #default="{ row }">{{ row.capacityPct }}%</template>
             </el-table-column>
             <el-table-column label="状态" width="90">
-              <template #default="{ row }"><el-tag size="small" :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status }}</el-tag></template>
+              <template #default="{ row }"><el-tag size="small" :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ statusLabel(row.status) }}</el-tag></template>
             </el-table-column>
             <el-table-column label="操作" width="90">
               <template #default="{ row }">
@@ -180,6 +180,7 @@
 <script lang="ts" setup>
 import * as IpdBusinessApi from '@/api/spk/ipd/business'
 import StatCard from '../overview/StatCard.vue'
+import { statusMap, labelText } from '@/views/spk/ipd/home/components/status'
 
 defineOptions({ name: 'SpkIpdTeam' })
 
@@ -201,6 +202,7 @@ const summaryCards = computed(() => {
     { label: '参与者', value: s.actors || 0, icon: 'ep:avatar', type: '' }
   ]
 })
+const statusLabel = (s?: string) => labelText(statusMap, s)
 
 const load = async () => {
   loading.value = true

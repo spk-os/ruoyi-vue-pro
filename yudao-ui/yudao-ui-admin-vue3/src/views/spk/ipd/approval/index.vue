@@ -30,7 +30,7 @@
       <el-table-column label="门禁" prop="currentGate" width="100" />
       <el-table-column label="健康" width="90">
         <template #default="{ row }">
-          <el-tag :type="healthTag(row.health)" size="small">{{ row.health || '-' }}</el-tag>
+          <el-tag :type="healthTag(row.health)" size="small">{{ healthLabel(row.health) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="审批人" prop="assigneeNickname" width="100" />
@@ -60,6 +60,7 @@ import { dateFormatter } from '@/utils/formatTime'
 import * as ApprovalApi from '@/api/spk/ipd/approval'
 import type { SpkIpdApprovalTaskRespVO } from '@/api/spk/ipd/approval'
 import DecisionPackage from './DecisionPackage.vue'
+import { healthMap, labelText } from '@/views/spk/ipd/home/components/status'
 
 defineOptions({ name: 'SpkIpdApproval' })
 
@@ -107,6 +108,7 @@ const onDecided = () => {
 }
 
 const healthTag = (h?: string) => (h === 'GOOD' ? 'success' : h === 'WARN' ? 'warning' : h === 'CRITICAL' ? 'danger' : 'info')
+const healthLabel = (s?: string) => labelText(healthMap, s)
 const formatWait = (ms?: number) => {
   if (!ms || ms <= 0) return '-'
   const h = Math.floor(ms / 3600000)
