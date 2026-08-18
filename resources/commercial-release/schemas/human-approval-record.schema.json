@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "spk://commercial-release/human-approval-record.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "decisionId", "activityId", "authorizedActor", "decision", "scope", "signedAt", "signature"],
+  "properties": {
+    "schemaVersion": {"const": "1.0"}, "decisionId": {"type": "string"}, "activityId": {"type": "string"},
+    "authorizedActor": {"type": "object", "required": ["actorId", "role"]},
+    "decision": {"enum": ["APPROVED", "REJECTED", "CONDITIONAL", "DEFERRED"]},
+    "scope": {"type": "string", "minLength": 1}, "signedAt": {"type": "string"},
+    "signature": {"type": "string", "minLength": 1}
+  }
+}

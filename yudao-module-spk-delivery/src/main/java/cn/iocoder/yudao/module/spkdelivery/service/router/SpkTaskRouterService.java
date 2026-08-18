@@ -102,16 +102,14 @@ public class SpkTaskRouterService {
     @Value("${spk-delivery.execution.adapter-override:}")
     private String adapterOverride;
     /**
-     * skill 根目录（env/skillName/SKILL.md 三段式解析的根）。默认指向仓内 resources/skills。
+     * skill 根目录与默认 env 现经 {@link SpkSkillConfigService} 读 DB 单行配置表（D2：前端「节点 skill 与环境」页可改）。
+     * <p>
+     * 历史：原 {@code @Value} 硬注入 skillsRoot/defaultSkillEnv，路径/env 改动需改 yaml + 重启。
+     * 现改为 DB 优先 + yaml 兜底（兜底逻辑在 SpkSkillConfigServiceImpl），route 时实时读，改完即时生效。
      * 见 spk-dev-cortex-ipd §G「节点 skill 绑定注入」——skills 按环境(default/test/commercial-release/prototype-release)分区。
      */
-    @Value("${spk-delivery.skill.root:/work/SPK-OS/soft/basic/ruoyi/resources/skills}")
-    private String skillsRoot;
-    /**
-     * 默认 skill 环境（def.envRequirements 无 skillEnv 键且流程变量 spk_skill_env 未设时回退到此）。
-     */
-    @Value("${spk-delivery.skill.default-env:default}")
-    private String defaultSkillEnv;
+    @Resource
+    private cn.iocoder.yudao.module.spkdelivery.service.flowconfig.SpkSkillConfigService skillConfigService;
     @Resource
     private SpkAgentDefService agentDefService;
     @Resource
@@ -214,13 +212,15 @@ public class SpkTaskRouterService {
                     .setOmnigentAgentId(effectiveLead.getOmnigentAgentId())
                     .setStage(def.getStage())
                     .setOutputArtifactType(def.getOutputArtifactType());
-            // G：节点 skill 绑定注入（skill 名来自 def.skills/stage 回退；路径按 env 三段式解析）
+            // G：节点 skill 绑定注入（skill 名来自 def.skills/stage 回退；commercial-release
+            //   使用编号阶段编排器承接宏活动，再由编排器路由到 50 个细粒度 Activity Skill）。
             //   skillPath = {skillsRoot}/{env}/{skillName}/SKILL.md，env 解析链：
             //   def.envRequirements.skillEnv（per-activity 覆盖）→ 流程变量 spk_skill_env（启动选择）→ 配置默认。
             //   文件缺失自动回退 default 环境再回退跳过，保证不阻断派发（真实 LLM 路径 injectSkillInstruction 读全文）。
             String skillName = resolveSkill(def);
             if (skillName != null) {
                 String skillEnv = resolveSkillEnv(def, processInstanceId);
+                skillName = resolveSkillNameForEnv(skillName, skillEnv, def.getStage());
                 String skillPath = resolveSkillPath(skillName, skillEnv, def.getStage());
                 req.setSkillName(skillName);
                 if (skillPath != null) {
@@ -823,6 +823,19 @@ public class SpkTaskRouterService {
             "lifecycle", "spk-ipd-tr-gate");
 
     /**
+     * commercial-release 的宏活动必须先进入编号阶段编排器。阶段编排器再依据
+     * Activity ID、前置产物和 Gate 状态路由到 50 个细粒度 Activity Skill。
+     * default 环境继续使用原绑定，避免商业交付 Skill 重构影响现有测试/演示流程。
+     */
+    private static final java.util.Map<String, String> COMMERCIAL_RELEASE_STAGE_SKILLS = java.util.Map.of(
+            "concept", "spk-ipd-01-concept",
+            "plan", "spk-ipd-02-plan",
+            "develop", "spk-ipd-03-develop",
+            "qualify", "spk-ipd-04-verify",
+            "launch", "spk-ipd-05-launch",
+            "lifecycle", "spk-ipd-06-lifecycle");
+
+    /**
      * 解析节点绑定 skill：优先 activity_def.skills（JSON 数组首元素，流程配置页可改），
      * 空则按 stage 回退常量映射。返回 skill 名（如 spk-ipd-concept）或 null。
      */
@@ -834,6 +847,24 @@ public class SpkTaskRouterService {
             }
         }
         return def.getStage() != null ? STAGE_SKILL_FALLBACK.get(def.getStage()) : null;
+    }
+
+    /**
+     * 环境化 Skill 名称解析：若 commercial-release 已提供显式细粒度 Skill，则尊重配置；
+     * 否则把数据库中的旧/宏 Skill 名称升级到编号阶段编排器。其他环境原样返回。
+     */
+    private String resolveSkillNameForEnv(String configuredSkill, String env, String stage) {
+        String defaultSkillEnv = skillConfigService.getConfig().getDefaultEnv();
+        String skillsRoot = skillConfigService.getConfig().getSkillsRoot();
+        String normEnv = (env == null || env.isBlank()) ? defaultSkillEnv : env.trim();
+        if (!"commercial-release".equals(normEnv)) {
+            return configuredSkill;
+        }
+        String configuredPath = skillsRoot + "/" + normEnv + "/" + configuredSkill + "/SKILL.md";
+        if (new java.io.File(configuredPath).isFile()) {
+            return configuredSkill;
+        }
+        return COMMERCIAL_RELEASE_STAGE_SKILLS.getOrDefault(stage, configuredSkill);
     }
 
     /**
@@ -880,8 +911,8 @@ public class SpkTaskRouterService {
                         processInstanceId, truncate(e.getMessage(), 200));
             }
         }
-        // 3. 配置默认
-        return defaultSkillEnv;
+        // 3. 配置默认（DB 单行配置，前端「节点 skill 与环境」页可改，yaml 兜底）
+        return skillConfigService.getConfig().getDefaultEnv();
     }
 
     /**
@@ -896,6 +927,8 @@ public class SpkTaskRouterService {
      * E2E fast-mode 桩 skillPath 字段为空可被断言发现配置缺漏）。def.skills 记录的设计意图 skill 名仍保留。
      */
     private String resolveSkillPath(String skillName, String env, String stage) {
+        String defaultSkillEnv = skillConfigService.getConfig().getDefaultEnv();
+        String skillsRoot = skillConfigService.getConfig().getSkillsRoot();
         String normEnv = (env == null || env.isBlank()) ? defaultSkillEnv : env.trim();
         // 1. 指定环境
         String primary = skillsRoot + "/" + normEnv + "/" + skillName + "/SKILL.md";

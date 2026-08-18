@@ -199,4 +199,12 @@ public class SpkIpdGovernanceController {
         flowConfigService.updateActivityDefBindings(id, body.get("skills"), body.get("envRequirements"));
         return success(true);
     }
+
+    @PutMapping("/flow-config/skill-config")
+    @Operation(summary = "改 skill 环境配置（skillsRoot / defaultEnv，Tab4 顶部配置块）")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-governance:update')")
+    public CommonResult<Boolean> updateSkillConfig(@RequestBody Map<String, String> body) {
+        flowConfigService.updateSkillConfig(body.get("skillsRoot"), body.get("defaultEnv"));
+        return success(true);
+    }
 }

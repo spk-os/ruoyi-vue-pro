@@ -1,0 +1,1875 @@
+{
+  "schemaVersion": "2.0",
+  "sourceVersion": "v2.0 (2026-08-17)",
+  "generatedAt": "2026-08-18",
+  "namingRule": "spk-ipd-{stageNo}-{stage}-{activityNo}-{action}",
+  "stageCounts": {
+    "concept": 8,
+    "plan": 6,
+    "develop": 11,
+    "verify": 9,
+    "launch": 6,
+    "lifecycle": 10
+  },
+  "stageSkills": {
+    "concept": "spk-ipd-01-concept",
+    "plan": "spk-ipd-02-plan",
+    "develop": "spk-ipd-03-develop",
+    "verify": "spk-ipd-04-verify",
+    "launch": "spk-ipd-05-launch",
+    "lifecycle": "spk-ipd-06-lifecycle"
+  },
+  "activities": [
+    {
+      "id": "ACT-03-02-01",
+      "stage": "concept",
+      "stageNo": "01",
+      "activityNo": "01",
+      "name": "机会信号聚合",
+      "skill": "spk-ipd-01-concept-01-signal-aggregation",
+      "skillVersion": "2.0.0",
+      "artifact": "OpportunitySignalSet",
+      "template": "templates/concept/ACT-03-02-01-OpportunitySignalSet.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Market Owner 签署 admitted",
+      "independentVerifier": false,
+      "verifierPolicy": "—",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-01-概念阶段.md",
+      "sourceLines": {
+        "start": 12,
+        "end": 270
+      },
+      "sourceSha256": "2d695e3e46c7057bf8c53dcfdfa4497f9eb743e8f058a8b3e1de285056834285",
+      "sourceDesign": "spk-ipd-01-concept-01-signal-aggregation/references/source-design.md",
+      "executionSpec": "spk-ipd-01-concept-01-signal-aggregation/references/execution-spec.md",
+      "examples": "spk-ipd-01-concept-01-signal-aggregation/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-02-02",
+      "stage": "concept",
+      "stageNo": "01",
+      "activityNo": "02",
+      "name": "客户需求深度分析",
+      "skill": "spk-ipd-01-concept-02-voc-analysis",
+      "skillVersion": "2.0.0",
+      "artifact": "CustomerNeedBrief",
+      "template": "templates/concept/ACT-03-02-02-CustomerNeedBrief.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Research Lead / Product Manager 签署",
+      "independentVerifier": false,
+      "verifierPolicy": "—",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-01-概念阶段.md",
+      "sourceLines": {
+        "start": 272,
+        "end": 504
+      },
+      "sourceSha256": "5b36dc71888f178587aa4369cff7fe709703e32c0d0af13b27168769313a860b",
+      "sourceDesign": "spk-ipd-01-concept-02-voc-analysis/references/source-design.md",
+      "executionSpec": "spk-ipd-01-concept-02-voc-analysis/references/execution-spec.md",
+      "examples": "spk-ipd-01-concept-02-voc-analysis/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-02-03",
+      "stage": "concept",
+      "stageNo": "01",
+      "activityNo": "03",
+      "name": "竞争格局分析",
+      "skill": "spk-ipd-01-concept-03-competitive-analysis",
+      "skillVersion": "2.0.0",
+      "artifact": "CompetitiveLandscape",
+      "template": "templates/concept/ACT-03-02-03-CompetitiveLandscape.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Strategy Owner 签署",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（反方审查）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-01-概念阶段.md",
+      "sourceLines": {
+        "start": 506,
+        "end": 922
+      },
+      "sourceSha256": "4a7821003f94af8487c782ce0cb3158ca2d6c44442ac6c4e25fccfb9c85b3134",
+      "sourceDesign": "spk-ipd-01-concept-03-competitive-analysis/references/source-design.md",
+      "executionSpec": "spk-ipd-01-concept-03-competitive-analysis/references/execution-spec.md",
+      "examples": "spk-ipd-01-concept-03-competitive-analysis/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-02-04",
+      "stage": "concept",
+      "stageNo": "01",
+      "activityNo": "04",
+      "name": "概念与价值主张生成",
+      "skill": "spk-ipd-01-concept-04-value-proposition",
+      "skillVersion": "2.0.0",
+      "artifact": "ConceptOptionSet",
+      "template": "templates/concept/ACT-03-02-04-ConceptOptionSet.template.md",
+      "humanGate": true,
+      "humanResponsibility": "PDT Lead 签署",
+      "independentVerifier": false,
+      "verifierPolicy": "—",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-01-概念阶段.md",
+      "sourceLines": {
+        "start": 924,
+        "end": 1092
+      },
+      "sourceSha256": "fc5dcebad6a957d9d3b47c78899134c6aa2a80c0e9a2120302b2b1014a34e38a",
+      "sourceDesign": "spk-ipd-01-concept-04-value-proposition/references/source-design.md",
+      "executionSpec": "spk-ipd-01-concept-04-value-proposition/references/execution-spec.md",
+      "examples": "spk-ipd-01-concept-04-value-proposition/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-02-05",
+      "stage": "concept",
+      "stageNo": "01",
+      "activityNo": "05",
+      "name": "初步财务评估",
+      "skill": "spk-ipd-01-concept-05-financial-modeling",
+      "skillVersion": "2.0.0",
+      "artifact": "InitialBusinessCase",
+      "template": "templates/concept/ACT-03-02-05-InitialBusinessCase.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Finance Owner 签署",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（复算）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-01-概念阶段.md",
+      "sourceLines": {
+        "start": 1094,
+        "end": 1252
+      },
+      "sourceSha256": "84b4e9daa67a04d63a9868aec7b98abf80c6a1587d707c2f25c3e68cd79a3762",
+      "sourceDesign": "spk-ipd-01-concept-05-financial-modeling/references/source-design.md",
+      "executionSpec": "spk-ipd-01-concept-05-financial-modeling/references/execution-spec.md",
+      "examples": "spk-ipd-01-concept-05-financial-modeling/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-02-06",
+      "stage": "concept",
+      "stageNo": "01",
+      "activityNo": "06",
+      "name": "技术风险与 CBB 识别",
+      "skill": "spk-ipd-01-concept-06-tech-risk",
+      "skillVersion": "2.0.0",
+      "artifact": "TechnicalRiskAndCBBMap",
+      "template": "templates/concept/ACT-03-02-06-TechnicalRiskAndCBBMap.template.md",
+      "humanGate": true,
+      "humanResponsibility": "SE 与 TDT 签署",
+      "independentVerifier": false,
+      "verifierPolicy": "—",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-01-概念阶段.md",
+      "sourceLines": {
+        "start": 1254,
+        "end": 1395
+      },
+      "sourceSha256": "bb83c7cff3c029b46a8d0ec41f179f7c53a335ee56be362634e657146a9e8050",
+      "sourceDesign": "spk-ipd-01-concept-06-tech-risk/references/source-design.md",
+      "executionSpec": "spk-ipd-01-concept-06-tech-risk/references/execution-spec.md",
+      "examples": "spk-ipd-01-concept-06-tech-risk/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-02-07",
+      "stage": "concept",
+      "stageNo": "01",
+      "activityNo": "07",
+      "name": "TR1/CDCP 决策包组装",
+      "skill": "spk-ipd-01-concept-07-evidence-pack",
+      "skillVersion": "2.0.0",
+      "artifact": "TR1_CDCP_EvidencePack",
+      "template": "templates/concept/ACT-03-02-07-TR1_CDCP_EvidencePack.template.md",
+      "humanGate": true,
+      "humanResponsibility": "PDT Lead / Configuration Manager 签署",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCP-Verifier）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-01-概念阶段.md",
+      "sourceLines": {
+        "start": 1397,
+        "end": 1559
+      },
+      "sourceSha256": "1d2283f4d2a5d5918a3095c5eca00b7ae8686d6001336a8e3b1330fbde66aeda",
+      "sourceDesign": "spk-ipd-01-concept-07-evidence-pack/references/source-design.md",
+      "executionSpec": "spk-ipd-01-concept-07-evidence-pack/references/execution-spec.md",
+      "examples": "spk-ipd-01-concept-07-evidence-pack/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-02-08",
+      "stage": "concept",
+      "stageNo": "01",
+      "activityNo": "08",
+      "name": "TR1 评审支持",
+      "skill": "spk-ipd-01-concept-08-tr1-review-support",
+      "skillVersion": "2.0.0",
+      "artifact": "TR1DecisionRecord",
+      "template": "templates/concept/ACT-03-02-08-TR1DecisionRecord.template.md",
+      "humanGate": true,
+      "humanResponsibility": "具名评委 / IPMT Chair 签署",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（TR-Verifier）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-01-概念阶段.md",
+      "sourceLines": {
+        "start": 1561,
+        "end": 1759
+      },
+      "sourceSha256": "0f0e7ea6430436b22bba5e841c593760dfbe52e7d22d33ed7c024fdd0ab08aed",
+      "sourceDesign": "spk-ipd-01-concept-08-tr1-review-support/references/source-design.md",
+      "executionSpec": "spk-ipd-01-concept-08-tr1-review-support/references/execution-spec.md",
+      "examples": "spk-ipd-01-concept-08-tr1-review-support/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-03-01",
+      "stage": "plan",
+      "stageNo": "02",
+      "activityNo": "01",
+      "name": "产品需求规格化",
+      "skill": "spk-ipd-02-plan-01-requirements-spec",
+      "skillVersion": "2.0.0",
+      "artifact": "PRSBaselineCandidate",
+      "template": "templates/plan/ACT-03-03-01-PRSBaselineCandidate.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Product Manager / SE 签署需求语义和优先级",
+      "independentVerifier": false,
+      "verifierPolicy": "—",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-02-计划阶段.md",
+      "sourceLines": {
+        "start": 15,
+        "end": 335
+      },
+      "sourceSha256": "d80c2489bc971859c572a75aae19b60c9552c6b688721db601e66cc11a544deb",
+      "sourceDesign": "spk-ipd-02-plan-01-requirements-spec/references/source-design.md",
+      "executionSpec": "spk-ipd-02-plan-01-requirements-spec/references/execution-spec.md",
+      "examples": "spk-ipd-02-plan-01-requirements-spec/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-03-02",
+      "stage": "plan",
+      "stageNo": "02",
+      "activityNo": "02",
+      "name": "架构描述生成",
+      "skill": "spk-ipd-02-plan-02-architecture-design",
+      "skillVersion": "2.0.0",
+      "artifact": "ArchitectureDescriptionCandidate",
+      "template": "templates/plan/ACT-03-03-02-ArchitectureDescriptionCandidate.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Chief Architect 签署架构基线和 ADR",
+      "independentVerifier": false,
+      "verifierPolicy": "—",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-02-计划阶段.md",
+      "sourceLines": {
+        "start": 337,
+        "end": 642
+      },
+      "sourceSha256": "5f3696e12c0c49ceff7a6c6e2d205d136c2a142b306545525e6c09e50b7e9d51",
+      "sourceDesign": "spk-ipd-02-plan-02-architecture-design/references/source-design.md",
+      "executionSpec": "spk-ipd-02-plan-02-architecture-design/references/execution-spec.md",
+      "examples": "spk-ipd-02-plan-02-architecture-design/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-03-03",
+      "stage": "plan",
+      "stageNo": "02",
+      "activityNo": "03",
+      "name": "项目计划编制",
+      "skill": "spk-ipd-02-plan-03-project-planning",
+      "skillVersion": "2.0.0",
+      "artifact": "IntegratedProjectPlan",
+      "template": "templates/plan/ACT-03-03-03-IntegratedProjectPlan.template.md",
+      "humanGate": true,
+      "humanResponsibility": "PM + Resource Owners 签署计划基线和资源承诺",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 复算验证）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-02-计划阶段.md",
+      "sourceLines": {
+        "start": 644,
+        "end": 967
+      },
+      "sourceSha256": "0f677abf08cfa0191f9e59e724abca9a7691d38b3a808652fc9ceb10d1524b3f",
+      "sourceDesign": "spk-ipd-02-plan-03-project-planning/references/source-design.md",
+      "executionSpec": "spk-ipd-02-plan-03-project-planning/references/execution-spec.md",
+      "examples": "spk-ipd-02-plan-03-project-planning/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-03-04",
+      "stage": "plan",
+      "stageNo": "02",
+      "activityNo": "04",
+      "name": "CBB 复用决策",
+      "skill": "spk-ipd-02-plan-04-cbb-decision",
+      "skillVersion": "2.0.0",
+      "artifact": "CBBReuseDecision",
+      "template": "templates/plan/ACT-03-03-04-CBBReuseDecision.template.md",
+      "humanGate": true,
+      "humanResponsibility": "SE / TDT / Legal / Security 签署复用决策",
+      "independentVerifier": false,
+      "verifierPolicy": "—",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-02-计划阶段.md",
+      "sourceLines": {
+        "start": 969,
+        "end": 1186
+      },
+      "sourceSha256": "1a865b0b4ff128801427e55cdc5591f185cd1481fc60091ce44ce3253a073507",
+      "sourceDesign": "spk-ipd-02-plan-04-cbb-decision/references/source-design.md",
+      "executionSpec": "spk-ipd-02-plan-04-cbb-decision/references/execution-spec.md",
+      "examples": "spk-ipd-02-plan-04-cbb-decision/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-03-05",
+      "stage": "plan",
+      "stageNo": "02",
+      "activityNo": "05",
+      "name": "测试策略规划",
+      "skill": "spk-ipd-02-plan-05-test-strategy",
+      "skillVersion": "2.0.0",
+      "artifact": "VerificationStrategy",
+      "template": "templates/plan/ACT-03-03-05-VerificationStrategy.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Test Architect / QA Lead 签署测试策略和豁免",
+      "independentVerifier": false,
+      "verifierPolicy": "—",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-02-计划阶段.md",
+      "sourceLines": {
+        "start": 1188,
+        "end": 1404
+      },
+      "sourceSha256": "72949b64f28e2bed3d23e2fbfb5352c6c103b12da1d89fd3391657fb4069ef72",
+      "sourceDesign": "spk-ipd-02-plan-05-test-strategy/references/source-design.md",
+      "executionSpec": "spk-ipd-02-plan-05-test-strategy/references/execution-spec.md",
+      "examples": "spk-ipd-02-plan-05-test-strategy/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-03-06",
+      "stage": "plan",
+      "stageNo": "02",
+      "activityNo": "06",
+      "name": "TR2/PDCP 决策包组装",
+      "skill": "spk-ipd-02-plan-06-evidence-pack",
+      "skillVersion": "2.0.0",
+      "artifact": "TR2_PDCP_EvidencePack",
+      "template": "templates/plan/ACT-03-03-06-TR2_PDCP_EvidencePack.template.md",
+      "humanGate": true,
+      "humanResponsibility": "PDT Lead 提交；TR2 评审团队技术结论；IPMT 投资决策（**AI 禁写 DCP 状态**）",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCP-Verifier + TR-Verifier）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-02-计划阶段.md",
+      "sourceLines": {
+        "start": 1406,
+        "end": 1751
+      },
+      "sourceSha256": "f3b960bb17ec72e0f6cf621bca74ac109fca4a2e20c5bbe2f13ca88788d3b5b9",
+      "sourceDesign": "spk-ipd-02-plan-06-evidence-pack/references/source-design.md",
+      "executionSpec": "spk-ipd-02-plan-06-evidence-pack/references/execution-spec.md",
+      "examples": "spk-ipd-02-plan-06-evidence-pack/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-04-01",
+      "stage": "develop",
+      "stageNo": "03",
+      "activityNo": "01",
+      "name": "基线确认",
+      "skill": "spk-ipd-03-develop-01-baseline-confirm",
+      "skillVersion": "2.0.0",
+      "artifact": "DevelopmentBaselineManifest",
+      "template": "templates/develop/ACT-03-04-01-DevelopmentBaselineManifest.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Configuration Manager / PDT Lead 确认开发基线",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 验签 + 独立复核）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-03-开发阶段.md",
+      "sourceLines": {
+        "start": 17,
+        "end": 267
+      },
+      "sourceSha256": "16c842843950dea7f90ad695ec3d38da2beec09260e737099fa6c0eca1771086",
+      "sourceDesign": "spk-ipd-03-develop-01-baseline-confirm/references/source-design.md",
+      "executionSpec": "spk-ipd-03-develop-01-baseline-confirm/references/execution-spec.md",
+      "examples": "spk-ipd-03-develop-01-baseline-confirm/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-04-02",
+      "stage": "develop",
+      "stageNo": "03",
+      "activityNo": "02",
+      "name": "开发包切片",
+      "skill": "spk-ipd-03-develop-02-packet-slicing",
+      "skillVersion": "2.0.0",
+      "artifact": "DevelopmentPackageSet",
+      "template": "templates/develop/ACT-03-04-02-DevelopmentPackageSet.template.md",
+      "humanGate": true,
+      "humanResponsibility": "PDT / 架构师 / 测试负责人联合审批切片方案",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 图约束检查）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-03-开发阶段.md",
+      "sourceLines": {
+        "start": 269,
+        "end": 523
+      },
+      "sourceSha256": "9b61c23c5cd5466066faf632359e5b34dd5cc0d3656c5e09dfed6252d2a456f3",
+      "sourceDesign": "spk-ipd-03-develop-02-packet-slicing/references/source-design.md",
+      "executionSpec": "spk-ipd-03-develop-02-packet-slicing/references/execution-spec.md",
+      "examples": "spk-ipd-03-develop-02-packet-slicing/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-04-03",
+      "stage": "develop",
+      "stageNo": "03",
+      "activityNo": "03",
+      "name": "Context 构建",
+      "skill": "spk-ipd-03-develop-03-context-build",
+      "skillVersion": "2.0.0",
+      "artifact": "ContextBundle",
+      "template": "templates/develop/ACT-03-04-03-ContextBundle.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Developer / Reviewer 确认上下文相关性",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS ACL/版本/token 预算校验）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-03-开发阶段.md",
+      "sourceLines": {
+        "start": 525,
+        "end": 728
+      },
+      "sourceSha256": "0055bc134be3383d9f1e9422ec8eb853397c880148217c99ce7fc3f60fb2d394",
+      "sourceDesign": "spk-ipd-03-develop-03-context-build/references/source-design.md",
+      "executionSpec": "spk-ipd-03-develop-03-context-build/references/execution-spec.md",
+      "examples": "spk-ipd-03-develop-03-context-build/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-04-04",
+      "stage": "develop",
+      "stageNo": "03",
+      "activityNo": "04",
+      "name": "实现草案",
+      "skill": "spk-ipd-03-develop-04-implementation",
+      "skillVersion": "2.0.0",
+      "artifact": "ImplementationDraft",
+      "template": "templates/develop/ACT-03-04-04-ImplementationDraft.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Developer 承担作者责任，审查并修改 Agent 产出",
+      "independentVerifier": false,
+      "verifierPolicy": "—",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-03-开发阶段.md",
+      "sourceLines": {
+        "start": 730,
+        "end": 904
+      },
+      "sourceSha256": "9549d319b1afe93f649aa819ac5249c2733c420554e432e53fa95afd1497e0e1",
+      "sourceDesign": "spk-ipd-03-develop-04-implementation/references/source-design.md",
+      "executionSpec": "spk-ipd-03-develop-04-implementation/references/execution-spec.md",
+      "examples": "spk-ipd-03-develop-04-implementation/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-04-05",
+      "stage": "develop",
+      "stageNo": "03",
+      "activityNo": "05",
+      "name": "单元/组件验证",
+      "skill": "spk-ipd-03-develop-05-unit-test",
+      "skillVersion": "2.0.0",
+      "artifact": "UnitComponentEvidence",
+      "template": "templates/develop/ACT-03-04-05-UnitComponentEvidence.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Developer/Test Owner 决定修复或豁免申请",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（确定性 runner 产生不可篡改的结果）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-03-开发阶段.md",
+      "sourceLines": {
+        "start": 906,
+        "end": 1030
+      },
+      "sourceSha256": "6a0ab34c7785b1e9a322cde3019307bf8bb05f2e1e43e8b5825995a03445ec47",
+      "sourceDesign": "spk-ipd-03-develop-05-unit-test/references/source-design.md",
+      "executionSpec": "spk-ipd-03-develop-05-unit-test/references/execution-spec.md",
+      "examples": "spk-ipd-03-develop-05-unit-test/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-04-06",
+      "stage": "develop",
+      "stageNo": "03",
+      "activityNo": "06",
+      "name": "同行审查",
+      "skill": "spk-ipd-03-develop-06-peer-review",
+      "skillVersion": "2.0.0",
+      "artifact": "PeerReviewRecord",
+      "template": "templates/develop/ACT-03-04-06-PeerReviewRecord.template.md",
+      "humanGate": true,
+      "humanResponsibility": "非作者 Reviewer 批准/拒绝",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 验证 reviewer 独立性）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-03-开发阶段.md",
+      "sourceLines": {
+        "start": 1032,
+        "end": 1169
+      },
+      "sourceSha256": "9ef205433293d0f30a27fb129b146a811d883609c3982784d3451b531117ab7b",
+      "sourceDesign": "spk-ipd-03-develop-06-peer-review/references/source-design.md",
+      "executionSpec": "spk-ipd-03-develop-06-peer-review/references/execution-spec.md",
+      "examples": "spk-ipd-03-develop-06-peer-review/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-04-07",
+      "stage": "develop",
+      "stageNo": "03",
+      "activityNo": "07",
+      "name": "持续集成",
+      "skill": "spk-ipd-03-develop-07-ci",
+      "skillVersion": "2.0.0",
+      "artifact": "CIRunEvidence",
+      "template": "templates/develop/ACT-03-04-07-CIRunEvidence.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Repo Owner 管理阈值与例外",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（确定性流水线产生不可篡改的结果）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-03-开发阶段.md",
+      "sourceLines": {
+        "start": 1171,
+        "end": 1294
+      },
+      "sourceSha256": "0678a3266b182bb94abf779ea5f9596b04e7058df6171f96cf4bb15a061c79b4",
+      "sourceDesign": "spk-ipd-03-develop-07-ci/references/source-design.md",
+      "executionSpec": "spk-ipd-03-develop-07-ci/references/execution-spec.md",
+      "examples": "spk-ipd-03-develop-07-ci/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-04-08",
+      "stage": "develop",
+      "stageNo": "03",
+      "activityNo": "08",
+      "name": "变更控制",
+      "skill": "spk-ipd-03-develop-08-change-control",
+      "skillVersion": "2.0.0",
+      "artifact": "ChangeDecisionRecord",
+      "template": "templates/develop/ACT-03-04-08-ChangeDecisionRecord.template.md",
+      "humanGate": true,
+      "humanResponsibility": "CCB 具名成员批准/拒绝（**AI 禁写 CCB 状态**）",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 遍历追溯和依赖图）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-03-开发阶段.md",
+      "sourceLines": {
+        "start": 1296,
+        "end": 1448
+      },
+      "sourceSha256": "fb8e24b8dfb416fd3408b40da1f180a8a4b2200896a8d5ccf77d91312c214e55",
+      "sourceDesign": "spk-ipd-03-develop-08-change-control/references/source-design.md",
+      "executionSpec": "spk-ipd-03-develop-08-change-control/references/execution-spec.md",
+      "examples": "spk-ipd-03-develop-08-change-control/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-04-09",
+      "stage": "develop",
+      "stageNo": "03",
+      "activityNo": "09",
+      "name": "证据汇编",
+      "skill": "spk-ipd-03-develop-09-evidence-pack",
+      "skillVersion": "2.0.0",
+      "artifact": "DevelopmentEvidencePack",
+      "template": "templates/develop/ACT-03-04-09-DevelopmentEvidencePack.template.md",
+      "humanGate": true,
+      "humanResponsibility": "PQA / Configuration Manager 认证完整性",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 验 digest/schema/trace + PQA 认证完整性）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-03-开发阶段.md",
+      "sourceLines": {
+        "start": 1450,
+        "end": 1567
+      },
+      "sourceSha256": "770cf31415b210a6822c5c77a657fa21e67b8569b6994fe58d2c241fadbc644c",
+      "sourceDesign": "spk-ipd-03-develop-09-evidence-pack/references/source-design.md",
+      "executionSpec": "spk-ipd-03-develop-09-evidence-pack/references/execution-spec.md",
+      "examples": "spk-ipd-03-develop-09-evidence-pack/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-04-10",
+      "stage": "develop",
+      "stageNo": "03",
+      "activityNo": "10",
+      "name": "TR3/TR4 评审",
+      "skill": "spk-ipd-03-develop-10-tr-review",
+      "skillVersion": "2.0.0",
+      "artifact": "TR3_TR4_DecisionRecord",
+      "template": "templates/develop/ACT-03-04-10-TR3_TR4_DecisionRecord.template.md",
+      "humanGate": true,
+      "humanResponsibility": "具名评委投票/签署（**AI 无投票权**）",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验权限/法定人数/材料版本 + Independent Review Agent）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-03-开发阶段.md",
+      "sourceLines": {
+        "start": 1569,
+        "end": 1728
+      },
+      "sourceSha256": "5062da1c0f7ce28e4d6c1abbdbf7995f1bbe463d83b7867f8ae2e40396fffe53",
+      "sourceDesign": "spk-ipd-03-develop-10-tr-review/references/source-design.md",
+      "executionSpec": "spk-ipd-03-develop-10-tr-review/references/execution-spec.md",
+      "examples": "spk-ipd-03-develop-10-tr-review/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-04-11",
+      "stage": "develop",
+      "stageNo": "03",
+      "activityNo": "11",
+      "name": "经验回流",
+      "skill": "spk-ipd-03-develop-11-learning",
+      "skillVersion": "2.0.0",
+      "artifact": "DevelopmentLearningSet",
+      "template": "templates/develop/ACT-03-04-11-DevelopmentLearningSet.template.md",
+      "humanGate": true,
+      "humanResponsibility": "PDT Retro Owner 接受/拒绝改进项",
+      "independentVerifier": false,
+      "verifierPolicy": "—",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-03-开发阶段.md",
+      "sourceLines": {
+        "start": 1730,
+        "end": 1928
+      },
+      "sourceSha256": "3daaf83f50b06c14a0dc888f91bac150f1ecb1a09ec232fa0be8ccb4af977ad7",
+      "sourceDesign": "spk-ipd-03-develop-11-learning/references/source-design.md",
+      "executionSpec": "spk-ipd-03-develop-11-learning/references/execution-spec.md",
+      "examples": "spk-ipd-03-develop-11-learning/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-05-01",
+      "stage": "verify",
+      "stageNo": "04",
+      "activityNo": "01",
+      "name": "冻结验证基线",
+      "skill": "spk-ipd-04-verify-01-baseline-freeze",
+      "skillVersion": "2.0.0",
+      "artifact": "VerificationBaselineManifest",
+      "template": "templates/verify/ACT-03-05-01-VerificationBaselineManifest.template.md",
+      "humanGate": true,
+      "humanResponsibility": "QA Lead + Configuration Manager 联合锁定验证基线",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 验签 + 独立复核）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-04-验证阶段.md",
+      "sourceLines": {
+        "start": 17,
+        "end": 277
+      },
+      "sourceSha256": "18b5c975359e03bc0e67dca5178097934211359d5dfde7f85e6445889e086d48",
+      "sourceDesign": "spk-ipd-04-verify-01-baseline-freeze/references/source-design.md",
+      "executionSpec": "spk-ipd-04-verify-01-baseline-freeze/references/execution-spec.md",
+      "examples": "spk-ipd-04-verify-01-baseline-freeze/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-05-02",
+      "stage": "verify",
+      "stageNo": "04",
+      "activityNo": "02",
+      "name": "建立 RVM/RTM",
+      "skill": "spk-ipd-04-verify-02-rvm-rtm",
+      "skillVersion": "2.0.0",
+      "artifact": "RVM_RTM_Baseline",
+      "template": "templates/verify/ACT-03-05-02-RVM_RTM_Baseline.template.md",
+      "humanGate": true,
+      "humanResponsibility": "SE 审批验证方法和 Oracle owner；Test Architect 审批测试策略",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验双向覆盖 + SE 审批 Oracle）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-04-验证阶段.md",
+      "sourceLines": {
+        "start": 279,
+        "end": 502
+      },
+      "sourceSha256": "10acef666204feb3563dc52178ca76855ff8841bd964061bdf90999b15efce3f",
+      "sourceDesign": "spk-ipd-04-verify-02-rvm-rtm/references/source-design.md",
+      "executionSpec": "spk-ipd-04-verify-02-rvm-rtm/references/execution-spec.md",
+      "examples": "spk-ipd-04-verify-02-rvm-rtm/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-05-03",
+      "stage": "verify",
+      "stageNo": "04",
+      "activityNo": "03",
+      "name": "设计多层测试",
+      "skill": "spk-ipd-04-verify-03-test-design",
+      "skillVersion": "2.0.0",
+      "artifact": "MultiLayerTestDesign",
+      "template": "templates/verify/ACT-03-05-03-MultiLayerTestDesign.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Test Architect 审批策略与 Oracle；SE 确认关键路径覆盖",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 计算覆盖 + Evidence Critic Agent 独立审查）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-04-验证阶段.md",
+      "sourceLines": {
+        "start": 504,
+        "end": 754
+      },
+      "sourceSha256": "4814cd37462d936a566946f998dc89289d234f99a994323dfc54312d2bab5d57",
+      "sourceDesign": "spk-ipd-04-verify-03-test-design/references/source-design.md",
+      "executionSpec": "spk-ipd-04-verify-03-test-design/references/execution-spec.md",
+      "examples": "spk-ipd-04-verify-03-test-design/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-05-04",
+      "stage": "verify",
+      "stageNo": "04",
+      "activityNo": "04",
+      "name": "准备环境与数据",
+      "skill": "spk-ipd-04-verify-04-env-prep",
+      "skillVersion": "2.0.0",
+      "artifact": "ReplayableTestEnvironment",
+      "template": "templates/verify/ACT-03-05-04-ReplayableTestEnvironment.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Ops 执行环境部署；Data Owner 授权数据使用",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验 IaC/镜像/seed/ACL/脱敏规则）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-04-验证阶段.md",
+      "sourceLines": {
+        "start": 756,
+        "end": 937
+      },
+      "sourceSha256": "ef056811bc971efbb993bb943ad5d536d69f3ca4fd0b997be6419899a50415ad",
+      "sourceDesign": "spk-ipd-04-verify-04-env-prep/references/source-design.md",
+      "executionSpec": "spk-ipd-04-verify-04-env-prep/references/execution-spec.md",
+      "examples": "spk-ipd-04-verify-04-env-prep/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-05-05",
+      "stage": "verify",
+      "stageNo": "04",
+      "activityNo": "05",
+      "name": "执行与采证",
+      "skill": "spk-ipd-04-verify-05-execute",
+      "skillVersion": "2.0.0",
+      "artifact": "TestExecutionEvidence",
+      "template": "templates/verify/ACT-03-05-05-TestExecutionEvidence.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Test Lead 判定测试结果有效性",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（确定性 Executor 产生不可篡改的结果）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-04-验证阶段.md",
+      "sourceLines": {
+        "start": 939,
+        "end": 1118
+      },
+      "sourceSha256": "27d342f97481c0c591cdb4aa10389d3cf870b18a51aa8e2f35474eb7235c66de",
+      "sourceDesign": "spk-ipd-04-verify-05-execute/references/source-design.md",
+      "executionSpec": "spk-ipd-04-verify-05-execute/references/execution-spec.md",
+      "examples": "spk-ipd-04-verify-05-execute/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-05-06",
+      "stage": "verify",
+      "stageNo": "04",
+      "activityNo": "06",
+      "name": "缺陷分诊闭环",
+      "skill": "spk-ipd-04-verify-06-defect-triage",
+      "skillVersion": "2.0.0",
+      "artifact": "DefectClosureRecord",
+      "template": "templates/verify/ACT-03-05-06-DefectClosureRecord.template.md",
+      "humanGate": true,
+      "humanResponsibility": "PDT/QA 独占严重度、优先级与关闭",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 做相似度/趋势/状态约束）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-04-验证阶段.md",
+      "sourceLines": {
+        "start": 1120,
+        "end": 1259
+      },
+      "sourceSha256": "cdd2b3d8f8ef09be6d00b0d34b61f7f33f23a4f91652347bab315b64ac6edefa",
+      "sourceDesign": "spk-ipd-04-verify-06-defect-triage/references/source-design.md",
+      "executionSpec": "spk-ipd-04-verify-06-defect-triage/references/execution-spec.md",
+      "examples": "spk-ipd-04-verify-06-defect-triage/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-05-07",
+      "stage": "verify",
+      "stageNo": "04",
+      "activityNo": "07",
+      "name": "用户场景验证",
+      "skill": "spk-ipd-04-verify-07-user-validation",
+      "skillVersion": "2.0.0",
+      "artifact": "UserValidationReport",
+      "template": "templates/verify/ACT-03-05-07-UserValidationReport.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Product/VOC Owner 判断代表性和接受度",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验样本/同意/场景覆盖/区间）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-04-验证阶段.md",
+      "sourceLines": {
+        "start": 1261,
+        "end": 1439
+      },
+      "sourceSha256": "b68066beb1ea3f5cab677b90e3352eaea602962f78dc5abae5493abc96add130",
+      "sourceDesign": "spk-ipd-04-verify-07-user-validation/references/source-design.md",
+      "executionSpec": "spk-ipd-04-verify-07-user-validation/references/execution-spec.md",
+      "examples": "spk-ipd-04-verify-07-user-validation/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-05-08",
+      "stage": "verify",
+      "stageNo": "04",
+      "activityNo": "08",
+      "name": "计算残余风险",
+      "skill": "spk-ipd-04-verify-08-residual-risk",
+      "skillVersion": "2.0.0",
+      "artifact": "ResidualRiskReport",
+      "template": "templates/verify/ACT-03-05-08-ResidualRiskReport.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Risk Owner 评估接受/缓解/豁免",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 计算 Wilson 区间/flaky/暴露）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-04-验证阶段.md",
+      "sourceLines": {
+        "start": 1441,
+        "end": 1620
+      },
+      "sourceSha256": "fffbba0f783f106938cda1baf6e19d19267177d16b732b9eba44557fbd26ed34",
+      "sourceDesign": "spk-ipd-04-verify-08-residual-risk/references/source-design.md",
+      "executionSpec": "spk-ipd-04-verify-08-residual-risk/references/execution-spec.md",
+      "examples": "spk-ipd-04-verify-08-residual-risk/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-05-09",
+      "stage": "verify",
+      "stageNo": "04",
+      "activityNo": "09",
+      "name": "TR5 资格评审",
+      "skill": "spk-ipd-04-verify-09-tr5-review",
+      "skillVersion": "2.0.0",
+      "artifact": "TR5QualificationDecision",
+      "template": "templates/verify/ACT-03-05-09-TR5QualificationDecision.template.md",
+      "humanGate": true,
+      "humanResponsibility": "具名评委签署 go/conditional/no-go（**AI 无投票/签署权**）",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验材料/权限/法定人数/签名 + Evidence Critic Agent）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-04-验证阶段.md",
+      "sourceLines": {
+        "start": 1622,
+        "end": 1891
+      },
+      "sourceSha256": "fec3ee0cca13696879d30908166c8199ecf7f601895b5f62dd3f424af7cda2d6",
+      "sourceDesign": "spk-ipd-04-verify-09-tr5-review/references/source-design.md",
+      "executionSpec": "spk-ipd-04-verify-09-tr5-review/references/execution-spec.md",
+      "examples": "spk-ipd-04-verify-09-tr5-review/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-06-01",
+      "stage": "launch",
+      "stageNo": "05",
+      "activityNo": "01",
+      "name": "Release Manifest 构建与验证",
+      "skill": "spk-ipd-05-launch-01-manifest",
+      "skillVersion": "2.0.0",
+      "artifact": "ReleaseManifest",
+      "template": "templates/launch/ACT-03-06-01-ReleaseManifest.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Release Manager 最终审批 Manifest 并签署",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 验签 + 独立复核）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-05-发布阶段.md",
+      "sourceLines": {
+        "start": 20,
+        "end": 369
+      },
+      "sourceSha256": "44b207edd5691c8e673dfcb6af800d81dbb3262ab895042a26d2348e33acb3b7",
+      "sourceDesign": "spk-ipd-05-launch-01-manifest/references/source-design.md",
+      "executionSpec": "spk-ipd-05-launch-01-manifest/references/execution-spec.md",
+      "examples": "spk-ipd-05-launch-01-manifest/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-06-02",
+      "stage": "launch",
+      "stageNo": "05",
+      "activityNo": "02",
+      "name": "配置与数据迁移验证",
+      "skill": "spk-ipd-05-launch-02-migration",
+      "skillVersion": "2.0.0",
+      "artifact": "MigrationVerificationPack",
+      "template": "templates/launch/ACT-03-06-02-MigrationVerificationPack.template.md",
+      "humanGate": true,
+      "humanResponsibility": "DBA/Platform 审核迁移方案、执行回滚演练；Data Owner 授权数据使用",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 数据一致性校验 + DBA/Data Owner 双签）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-05-发布阶段.md",
+      "sourceLines": {
+        "start": 371,
+        "end": 629
+      },
+      "sourceSha256": "7efd695b7128391585d0c035ee3e7baca228b0220edb69eca69ff712d3510ed7",
+      "sourceDesign": "spk-ipd-05-launch-02-migration/references/source-design.md",
+      "executionSpec": "spk-ipd-05-launch-02-migration/references/execution-spec.md",
+      "examples": "spk-ipd-05-launch-02-migration/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-06-03",
+      "stage": "launch",
+      "stageNo": "05",
+      "activityNo": "03",
+      "name": "运营就绪验证",
+      "skill": "spk-ipd-05-launch-03-readiness",
+      "skillVersion": "2.0.0",
+      "artifact": "OperationalReadinessRecord",
+      "template": "templates/launch/ACT-03-06-03-OperationalReadinessRecord.template.md",
+      "humanGate": true,
+      "humanResponsibility": "SRE Lead 确认运营就绪、签署 Runbook；LMT Lead 确认接收能力",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验 SLO/告警/Runbook/轮值/权限 + SRE Lead 签署）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-05-发布阶段.md",
+      "sourceLines": {
+        "start": 631,
+        "end": 871
+      },
+      "sourceSha256": "559affb223c9557b7040132b86abcc74a03affb87a56127464bb752ed9028594",
+      "sourceDesign": "spk-ipd-05-launch-03-readiness/references/source-design.md",
+      "executionSpec": "spk-ipd-05-launch-03-readiness/references/execution-spec.md",
+      "examples": "spk-ipd-05-launch-03-readiness/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-06-04",
+      "stage": "launch",
+      "stageNo": "05",
+      "activityNo": "04",
+      "name": "渐进发布策略执行",
+      "skill": "spk-ipd-05-launch-04-rollout",
+      "skillVersion": "2.0.0",
+      "artifact": "ProgressiveRolloutRecord",
+      "template": "templates/launch/ACT-03-06-04-ProgressiveRolloutRecord.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Release Commander 保留人工中止/恢复权；高风险扩流需人工确认",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 护栏指标计算和阈值判定 + Release Commander 人工确认）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-05-发布阶段.md",
+      "sourceLines": {
+        "start": 873,
+        "end": 1122
+      },
+      "sourceSha256": "5eea4568a55154e26f35c48cbbc700cad9246a49025b43463d15ed931dd03d8a",
+      "sourceDesign": "spk-ipd-05-launch-04-rollout/references/source-design.md",
+      "executionSpec": "spk-ipd-05-launch-04-rollout/references/execution-spec.md",
+      "examples": "spk-ipd-05-launch-04-rollout/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-06-05",
+      "stage": "launch",
+      "stageNo": "05",
+      "activityNo": "05",
+      "name": "TR6 证据包组装与评审",
+      "skill": "spk-ipd-05-launch-05-tr6",
+      "skillVersion": "2.0.0",
+      "artifact": "TR6DecisionPack",
+      "template": "templates/launch/ACT-03-06-05-TR6DecisionPack.template.md",
+      "humanGate": true,
+      "humanResponsibility": "具名 TR6 评委签署（**AI 无投票/签署权**）",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验 manifest/迁移/就绪/rollout 证据及权限 + 具名 TR6 评委签署）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-05-发布阶段.md",
+      "sourceLines": {
+        "start": 1124,
+        "end": 1342
+      },
+      "sourceSha256": "522d657fc5d29b64f48218e7e9d0a56fc415687affa26b9498379e7f01dfdea3",
+      "sourceDesign": "spk-ipd-05-launch-05-tr6/references/source-design.md",
+      "executionSpec": "spk-ipd-05-launch-05-tr6/references/execution-spec.md",
+      "examples": "spk-ipd-05-launch-05-tr6/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-06-06",
+      "stage": "launch",
+      "stageNo": "05",
+      "activityNo": "06",
+      "name": "GA 决策、移交与稳定观察",
+      "skill": "spk-ipd-05-launch-06-ga-handoff",
+      "skillVersion": "2.0.0",
+      "artifact": "GA_Handoff_StabilityRecord",
+      "template": "templates/launch/ACT-03-06-06-GA_Handoff_StabilityRecord.template.md",
+      "humanGate": true,
+      "humanResponsibility": "GA Authority 签署 GA 决定；PDT Lead 和 LMT Lead 双方签署移交协议；LMT Lead 确认稳定期结束",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验 GA 权限/移交字段/SLO/观察窗口 + GA Authority + PDT/LMT 双方签署）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-05-发布阶段.md",
+      "sourceLines": {
+        "start": 1344,
+        "end": 1673
+      },
+      "sourceSha256": "78a15dbed9246e1e14c8f9ecfd1a6216fd0ebd8bfc7870ccd704406f0dd34439",
+      "sourceDesign": "spk-ipd-05-launch-06-ga-handoff/references/source-design.md",
+      "executionSpec": "spk-ipd-05-launch-06-ga-handoff/references/execution-spec.md",
+      "examples": "spk-ipd-05-launch-06-ga-handoff/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-07-01",
+      "stage": "lifecycle",
+      "stageNo": "06",
+      "activityNo": "01",
+      "name": "Lifecycle Signal Ingestion",
+      "skill": "spk-ipd-06-lifecycle-01-signal",
+      "skillVersion": "2.0.0",
+      "artifact": "LifecycleSignalSet",
+      "template": "templates/lifecycle/ACT-03-07-01-LifecycleSignalSet.template.md",
+      "humanGate": true,
+      "humanResponsibility": "LMT Lead 审核 Signal 质量、处理升级；Data Steward 确认数据用途与口径",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验 schema/许可/时间/产品版本 + LMT Signal Owner 接受/隔离）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-06-生命周期管理阶段.md",
+      "sourceLines": {
+        "start": 19,
+        "end": 292
+      },
+      "sourceSha256": "e97e8970f4f40fa55aba172c23c095c8764b7fa560cceaee59b39948a61687ff",
+      "sourceDesign": "spk-ipd-06-lifecycle-01-signal/references/source-design.md",
+      "executionSpec": "spk-ipd-06-lifecycle-01-signal/references/execution-spec.md",
+      "examples": "spk-ipd-06-lifecycle-01-signal/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-07-02",
+      "stage": "lifecycle",
+      "stageNo": "06",
+      "activityNo": "02",
+      "name": "Feedback Clustering & Analysis",
+      "skill": "spk-ipd-06-lifecycle-02-feedback",
+      "skillVersion": "2.0.0",
+      "artifact": "FeedbackThemeSet",
+      "template": "templates/lifecycle/ACT-03-07-02-FeedbackThemeSet.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Product Manager 审核聚类结果、确认优先级、处理误合并申诉",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 计算稳定度/样本分布/引用覆盖 + Product/VOC Owner 判定主题）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-06-生命周期管理阶段.md",
+      "sourceLines": {
+        "start": 294,
+        "end": 496
+      },
+      "sourceSha256": "e13d9fc5dba74558b4e39fa3f22532e84a824eed666426f3d3a894a591a67343",
+      "sourceDesign": "spk-ipd-06-lifecycle-02-feedback/references/source-design.md",
+      "executionSpec": "spk-ipd-06-lifecycle-02-feedback/references/execution-spec.md",
+      "examples": "spk-ipd-06-lifecycle-02-feedback/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-07-03",
+      "stage": "lifecycle",
+      "stageNo": "06",
+      "activityNo": "03",
+      "name": "Vulnerability-SBOM Correlation",
+      "skill": "spk-ipd-06-lifecycle-03-vulnerability",
+      "skillVersion": "2.0.0",
+      "artifact": "VulnerabilityExposureRecord",
+      "template": "templates/lifecycle/ACT-03-07-03-VulnerabilityExposureRecord.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Security Lead 审核漏洞评估、签署 VEX 声明、承诺修复时限或风险接受",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 精确版本匹配/CVSS 验证 + Security Owner 签署处置）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-06-生命周期管理阶段.md",
+      "sourceLines": {
+        "start": 498,
+        "end": 678
+      },
+      "sourceSha256": "a5a135d3f3dd628a5b047544eeb89ffaa20cc6c5756373617989ebf056dab25f",
+      "sourceDesign": "spk-ipd-06-lifecycle-03-vulnerability/references/source-design.md",
+      "executionSpec": "spk-ipd-06-lifecycle-03-vulnerability/references/execution-spec.md",
+      "examples": "spk-ipd-06-lifecycle-03-vulnerability/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-07-04",
+      "stage": "lifecycle",
+      "stageNo": "06",
+      "activityNo": "04",
+      "name": "Maintenance Train Management",
+      "skill": "spk-ipd-06-lifecycle-04-maintenance",
+      "skillVersion": "2.0.0",
+      "artifact": "MaintenanceTrainPlan",
+      "template": "templates/lifecycle/ACT-03-07-04-MaintenanceTrainPlan.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Release Manager 审批维护版本、签署发布；LMT Lead 承诺列车日期",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 计算容量/冲突/Release Manifest 门禁 + LMT/Release Manager 承诺列车）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-06-生命周期管理阶段.md",
+      "sourceLines": {
+        "start": 680,
+        "end": 835
+      },
+      "sourceSha256": "9708d209a8b76a1cadec43f089523bba0ec462960092a634f8c76792b9424de2",
+      "sourceDesign": "spk-ipd-06-lifecycle-04-maintenance/references/source-design.md",
+      "executionSpec": "spk-ipd-06-lifecycle-04-maintenance/references/execution-spec.md",
+      "examples": "spk-ipd-06-lifecycle-04-maintenance/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-07-05",
+      "stage": "lifecycle",
+      "stageNo": "06",
+      "activityNo": "05",
+      "name": "Quarterly Value Review",
+      "skill": "spk-ipd-06-lifecycle-05-value-review",
+      "skillVersion": "2.0.0",
+      "artifact": "QuarterlyValueReview",
+      "template": "templates/lifecycle/ACT-03-07-05-QuarterlyValueReview.template.md",
+      "humanGate": true,
+      "humanResponsibility": "LMT Lead 评议；IPMT 接收行动并决定投资方向",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 重算价值/服务/财务/风险指标 + LMT/IPMT 解释并决定行动）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-06-生命周期管理阶段.md",
+      "sourceLines": {
+        "start": 837,
+        "end": 1044
+      },
+      "sourceSha256": "a1d06600ddcc4fdf7d7f666246142ed230a1b6c75c3fd0f7d0450b86eb4dc83a",
+      "sourceDesign": "spk-ipd-06-lifecycle-05-value-review/references/source-design.md",
+      "executionSpec": "spk-ipd-06-lifecycle-05-value-review/references/execution-spec.md",
+      "examples": "spk-ipd-06-lifecycle-05-value-review/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-07-06",
+      "stage": "lifecycle",
+      "stageNo": "06",
+      "activityNo": "06",
+      "name": "Next-Gen Requirement Reflux",
+      "skill": "spk-ipd-06-lifecycle-06-reflux",
+      "skillVersion": "2.0.0",
+      "artifact": "NextGenRequirementCandidateSet",
+      "template": "templates/lifecycle/ACT-03-07-06-NextGenRequirementCandidateSet.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Product Owner 审核候选需求、确认回流、决定接受/拒绝/再研究",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验来源/去重/版本 + Product Owner 接受/拒绝/延后）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-06-生命周期管理阶段.md",
+      "sourceLines": {
+        "start": 1046,
+        "end": 1219
+      },
+      "sourceSha256": "0723acaa2b9eb111b0551a9c7ee4e070bb73f15e7c57c6f48630fe449ca9da77",
+      "sourceDesign": "spk-ipd-06-lifecycle-06-reflux/references/source-design.md",
+      "executionSpec": "spk-ipd-06-lifecycle-06-reflux/references/execution-spec.md",
+      "examples": "spk-ipd-06-lifecycle-06-reflux/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-07-07",
+      "stage": "lifecycle",
+      "stageNo": "06",
+      "activityNo": "07",
+      "name": "EOL Assessment",
+      "skill": "spk-ipd-06-lifecycle-07-eol",
+      "skillVersion": "2.0.0",
+      "artifact": "EOLAssessment",
+      "template": "templates/lifecycle/ACT-03-07-07-EOLAssessment.template.md",
+      "humanGate": true,
+      "humanResponsibility": "LMT Lead 审核 EOL 评估；法务/安全/客户成功确认无遗漏义务；IPMT 决定",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 计算合同义务/版本人口/迁移容量/财务区间 + LMT/Legal/Sales 评估）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-06-生命周期管理阶段.md",
+      "sourceLines": {
+        "start": 1221,
+        "end": 1413
+      },
+      "sourceSha256": "84f17110750255e7983ada7f4f049e77ba8a00becee6cb12fb91cd21df63d8ad",
+      "sourceDesign": "spk-ipd-06-lifecycle-07-eol/references/source-design.md",
+      "executionSpec": "spk-ipd-06-lifecycle-07-eol/references/execution-spec.md",
+      "examples": "spk-ipd-06-lifecycle-07-eol/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-07-08",
+      "stage": "lifecycle",
+      "stageNo": "06",
+      "activityNo": "08",
+      "name": "LDCP Decision Package",
+      "skill": "spk-ipd-06-lifecycle-08-ldcp",
+      "skillVersion": "2.0.0",
+      "artifact": "LDCPDecisionRecord",
+      "template": "templates/lifecycle/ACT-03-07-08-LDCPDecisionRecord.template.md",
+      "humanGate": true,
+      "humanResponsibility": "具名 IPMT 评委签署 LDCP 决定（**AI 无投票权，系统层面禁止 AI 写入 LDCP 状态**）",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验证据/权限/法定人数 + 具名 IPMT 评委签署）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-06-生命周期管理阶段.md",
+      "sourceLines": {
+        "start": 1415,
+        "end": 1627
+      },
+      "sourceSha256": "4c4432bf7db5fb567b008538c21e0571d2919b6360165945c33d6c2e638aca96",
+      "sourceDesign": "spk-ipd-06-lifecycle-08-ldcp/references/source-design.md",
+      "executionSpec": "spk-ipd-06-lifecycle-08-ldcp/references/execution-spec.md",
+      "examples": "spk-ipd-06-lifecycle-08-ldcp/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-07-09",
+      "stage": "lifecycle",
+      "stageNo": "06",
+      "activityNo": "09",
+      "name": "Customer Migration Execution",
+      "skill": "spk-ipd-06-lifecycle-09-migration",
+      "skillVersion": "2.0.0",
+      "artifact": "CustomerMigrationLedger",
+      "template": "templates/lifecycle/ACT-03-07-09-CustomerMigrationLedger.template.md",
+      "humanGate": true,
+      "humanResponsibility": "Customer Success 客户沟通和迁移支持；客户授权人验收迁移；Legal 确认合同合规",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验资格/通知期限/容量/数据校验 + Customer Success/Legal/客户授权人批准）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-06-生命周期管理阶段.md",
+      "sourceLines": {
+        "start": 1629,
+        "end": 1806
+      },
+      "sourceSha256": "63d4cb3641f0ae3dd7c19e53b1b975aace38faf41187e54e332042f6fd0c7dda",
+      "sourceDesign": "spk-ipd-06-lifecycle-09-migration/references/source-design.md",
+      "executionSpec": "spk-ipd-06-lifecycle-09-migration/references/execution-spec.md",
+      "examples": "spk-ipd-06-lifecycle-09-migration/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    },
+    {
+      "id": "ACT-03-07-10",
+      "stage": "lifecycle",
+      "stageNo": "06",
+      "activityNo": "10",
+      "name": "Knowledge Archival & Postmortem",
+      "skill": "spk-ipd-06-lifecycle-10-archival",
+      "skillVersion": "2.0.0",
+      "artifact": "LifecycleArchiveAndPostmortem",
+      "template": "templates/lifecycle/ACT-03-07-10-LifecycleArchiveAndPostmortem.template.md",
+      "humanGate": true,
+      "humanResponsibility": "LMT Lead 审核归档、签署 Postmortem；Knowledge Steward 审核知识晋级；PQA 批准归档发布",
+      "independentVerifier": true,
+      "verifierPolicy": "✓（DCS 校验保留期/hash/脱敏/引用 + LMT/PQA 批准归档/行动）",
+      "source": "/root/share/SPK-OS/24_houre_anly/IPD/05-kimi-k3-design/04-六阶段每阶段-具体设计与Activity执行配置表/04-06-生命周期管理阶段.md",
+      "sourceLines": {
+        "start": 1808,
+        "end": 2114
+      },
+      "sourceSha256": "3427afa9d46b9a95c380c2849a9645ccea48cdedd86c9e8951d12b1468114a45",
+      "sourceDesign": "spk-ipd-06-lifecycle-10-archival/references/source-design.md",
+      "executionSpec": "spk-ipd-06-lifecycle-10-archival/references/execution-spec.md",
+      "examples": "spk-ipd-06-lifecycle-10-archival/references/examples.md",
+      "requiredEvidence": [
+        "InputManifest",
+        "ArtifactManifest",
+        "EvidenceManifest",
+        "RunReceipt",
+        "ValidationReceipt"
+      ],
+      "supportActivities": [
+        "ACT-KM-00-01",
+        "ACT-KM-00-02",
+        "ACT-KM-00-04",
+        "ACT-KM-00-10"
+      ]
+    }
+  ]
+}
+

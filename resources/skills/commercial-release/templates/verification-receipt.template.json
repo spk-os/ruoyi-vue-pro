@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0",
+  "activityId": "ACT-03-XX-XX",
+  "runId": "run-id",
+  "producerActorId": "producer-id",
+  "verifierActorId": "different-verifier-id",
+  "verdict": "PASS|FAIL|BLOCKED",
+  "checks": [{"checkId": "id", "method": "deterministic command or independent analysis", "result": "PASS", "evidenceIds": ["id"]}],
+  "counterExamples": [],
+  "unresolvedRisks": [],
+  "verifiedAt": "ISO-8601",
+  "signature": "verifier provenance/signature"
+}

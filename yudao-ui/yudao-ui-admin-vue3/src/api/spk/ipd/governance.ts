@@ -49,3 +49,7 @@ export const getFlowConfigSnapshot = (flowType = 'FULL_RELEASE') =>
 /** 行内保存 activity_def 的 skills / envRequirements */
 export const updateActivityDefBindings = (id: number, data: { skills?: string; envRequirements?: string }) =>
   request.put({ url: `/spk/ipd/admin/workflows/flow-config/activity-def/${id}`, data })
+
+/** 改 skill 环境配置（skillsRoot / defaultEnv，Tab4 顶部配置块，DB 持久化即时生效） */
+export const updateSkillConfig = (data: { skillsRoot?: string; defaultEnv?: string }) =>
+  request.put({ url: '/spk/ipd/admin/workflows/flow-config/skill-config', data })

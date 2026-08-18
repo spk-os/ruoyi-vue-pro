@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0",
+  "decisionId": "decision-id",
+  "activityId": "ACT-03-XX-XX",
+  "authorizedActor": {"actorId": "human-id", "role": "authorized-role"},
+  "decision": "APPROVED|REJECTED|CONDITIONAL|DEFERRED",
+  "scope": "decision scope and baseline hash",
+  "conditions": [],
+  "signedAt": "ISO-8601",
+  "signature": "non-agent signature/provenance"
+}

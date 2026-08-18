@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.spkdelivery.service.flowconfig;
 
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.governance.SpkFlowConfigSnapshotRespVO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.flowconfig.SpkSkillConfigDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdactivity.SpkIpdActivityDefDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdProcessProfileDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdactivity.SpkIpdActivityDefMapper;
@@ -11,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.BufferedReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -25,7 +28,8 @@ import java.util.TreeMap;
  * SPK-OS 流程配置聚合服务。设计文档 §B（流程配置聚合页读端 + 可编辑）。
  * <p>一站式聚合 Profile + activity_def（按 stage 分组）+ skill 目录 + 目录模板，供前端 flow-config 四 tab 渲染。
  * 同时提供 activity_def.skills / envRequirements 的行内保存。
- * <p>skill 目录扫描 /root/.claude/skills/spk-*（设计文档 §7 清单兜底，扫描失败不阻断）。
+ * <p>skill 目录扫描 skillsRoot（经 {@link SpkSkillConfigService} 读 DB 单行配置，前端可改）下各 env 子目录，
+ * 按 env 分组返回含 SKILL.md 的 skill 列表（D3：对齐派发层 resolveSkillPath 三段式解析）。
  *
  * @author SPK-OS
  */
@@ -33,18 +37,15 @@ import java.util.TreeMap;
 @Service
 public class SpkFlowConfigService {
 
-    /** skill 文件系统根目录 */
-    private static final String SKILLS_DIR = "/root/.claude/skills";
-
-    /** 设计文档 §7 skill 兜底清单（文件系统扫描失败时返回） */
-    private static final List<String> SKILL_FALLBACK = Arrays.asList(
-            "spk-ipd-concept", "spk-ipd-plan", "spk-ipd-develop",
-            "spk-ipd-verify", "spk-ipd-launch", "spk-ipd-tr-gate");
+    /** skill 目录扫描时读 frontmatter 的最大行数（name/description 在头几行） */
+    private static final int FRONTMATTER_SCAN_LINES = 12;
 
     @Resource
     private SpkIpdProcessProfileMapper profileMapper;
     @Resource
     private SpkIpdActivityDefMapper activityDefMapper;
+    @Resource
+    private SpkSkillConfigService skillConfigService;
 
     /**
      * 流程配置聚合快照（一站式读端）。
@@ -74,8 +75,11 @@ public class SpkFlowConfigService {
         }
         // activity_def 按 stage 分组（取 active 定义）
         resp.setActivityDefsByStage(groupActivityDefsByStage());
-        // skill 目录
-        resp.setSkillCatalog(scanSkillCatalog());
+        // skill 环境配置（D3：路径+默认 env 从 DB 读，envCatalog 按 env 分组扫描）
+        SpkSkillConfigDO cfg = skillConfigService.getConfig();
+        resp.setSkillsRoot(cfg.getSkillsRoot());
+        resp.setDefaultSkillEnv(cfg.getDefaultEnv());
+        resp.setEnvCatalog(scanEnvCatalog(cfg.getSkillsRoot()));
         return resp;
     }
 
@@ -96,6 +100,16 @@ public class SpkFlowConfigService {
         activityDefMapper.updateById(update);
         log.info("[updateActivityDefBindings][id={} skills={} envRequirements={} 已更新]",
                 id, skills, envRequirements);
+    }
+
+    /**
+     * 改 skill 环境配置（skillsRoot / defaultEnv）。委托 {@link SpkSkillConfigService}（D2/D3）。
+     * 单行 upsert，写后派发层 route 下次读 DB 即取新值（即时生效）。
+     * 任一参数 null/空表示不改（保留原值）。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void updateSkillConfig(String skillsRoot, String defaultEnv) {
+        skillConfigService.updateConfig(skillsRoot, defaultEnv);
     }
 
     /** Profile DO → 前端可读 Map（含新治理字段） */
@@ -144,35 +158,95 @@ public class SpkFlowConfigService {
     }
 
     /**
-     * 扫描 /root/.claude/skills/ 下 spk-* 目录作为可选 skill 目录。
-     * 扫描失败/无权限返回设计文档 §7 兜底清单，不阻断前端渲染。
+     * 扫描 skillsRoot 下各 env 子目录（default/test/commercial-release/prototype-release 等），
+     * 每个 env 下列出含 SKILL.md 的 skill 目录，读 frontmatter 的 name/description。
+     * 返回 env → [{name, description, dir}] 的有序 Map（env 名升序）。
+     * <p>扫描失败/路径不存在返回空 Map，不阻断前端渲染（对齐派发层 resolveSkillPath 失败回退不阻断）。
+     * <p>对齐派发层 {@code SpkTaskRouterService.resolveSkillPath} 的 {@code {skillsRoot}/{env}/{skillName}/SKILL.md}
+     * 三段式解析——前端据 envCatalog[env] 动态列下拉 + 复刻三级回退命中状态。
      */
-    private List<String> scanSkillCatalog() {
-        List<String> result = new ArrayList<>();
-        try {
-            Path dir = Paths.get(SKILLS_DIR);
-            if (Files.isDirectory(dir)) {
-                try (var stream = Files.list(dir)) {
-                    stream.filter(Files::isDirectory)
-                            .map(p -> p.getFileName().toString())
-                            .filter(n -> n.startsWith("spk-"))
-                            .sorted()
-                            .forEach(result::add);
+    private Map<String, List<Map<String, Object>>> scanEnvCatalog(String skillsRoot) {
+        Map<String, List<Map<String, Object>>> catalog = new TreeMap<>();
+        if (skillsRoot == null || skillsRoot.isBlank()) {
+            return catalog;
+        }
+        Path root = Paths.get(skillsRoot);
+        if (!Files.isDirectory(root)) {
+            log.warn("[scanEnvCatalog][skillsRoot={} 非目录，返回空 catalog]", skillsRoot);
+            return catalog;
+        }
+        try (var envStream = Files.list(root)) {
+            // env 子目录按名排序
+            List<Path> envDirs = new ArrayList<>();
+            envStream.filter(Files::isDirectory).forEach(envDirs::add);
+            envDirs.sort(java.util.Comparator.comparing(p -> p.getFileName().toString()));
+            for (Path envDir : envDirs) {
+                String env = envDir.getFileName().toString();
+                List<Map<String, Object>> skills = new ArrayList<>();
+                try (var skillStream = Files.list(envDir)) {
+                    List<Path> skillDirs = new ArrayList<>();
+                    skillStream.filter(Files::isDirectory).forEach(skillDirs::add);
+                    skillDirs.sort(java.util.Comparator.comparing(p -> p.getFileName().toString()));
+                    for (Path skillDir : skillDirs) {
+                        Path skillMd = skillDir.resolve("SKILL.md");
+                        if (!Files.isRegularFile(skillMd)) {
+                            continue; // 跳过 README/非 skill 目录
+                        }
+                        Map<String, Object> info = new LinkedHashMap<>();
+                        info.put("dir", skillDir.getFileName().toString());
+                        info.put("name", skillDir.getFileName().toString());
+                        info.put("description", "");
+                        readFrontmatter(skillMd, info);
+                        skills.add(info);
+                    }
+                } catch (Exception e) {
+                    log.warn("[scanEnvCatalog][env={} 扫描失败：{}]", env, e.getMessage());
+                }
+                catalog.put(env, skills);
+            }
+        } catch (Exception e) {
+            log.warn("[scanEnvCatalog][扫描 {} 失败：{}]", skillsRoot, e.getMessage());
+        }
+        return catalog;
+    }
+
+    /**
+     * 读 SKILL.md frontmatter 的 name/description（前 N 行，简单行解析，不引 YAML 库）。
+     * frontmatter 在 `---` 围栏内，name/description 各一行；读到第二个 `---` 或超行即止。
+     * 解析失败保留 dir 名作 name，description 留空。
+     */
+    private void readFrontmatter(Path skillMd, Map<String, Object> info) {
+        try (BufferedReader reader = Files.newBufferedReader(skillMd, StandardCharsets.UTF_8)) {
+            boolean inFm = false;
+            int lineNo = 0;
+            String line;
+            while ((line = reader.readLine()) != null && lineNo < FRONTMATTER_SCAN_LINES) {
+                lineNo++;
+                String trimmed = line.trim();
+                if ("---".equals(trimmed)) {
+                    if (inFm) {
+                        break; // 围栏结束
+                    }
+                    inFm = true;
+                    continue;
+                }
+                if (!inFm) {
+                    continue;
+                }
+                if (trimmed.startsWith("name:")) {
+                    String v = trimmed.substring(5).trim();
+                    if (!v.isEmpty() && !"name".equals(info.get("name"))) {
+                        info.put("name", v);
+                    }
+                } else if (trimmed.startsWith("description:")) {
+                    String v = trimmed.substring(12).trim();
+                    if (!v.isEmpty()) {
+                        info.put("description", v);
+                    }
                 }
             }
         } catch (Exception e) {
-            log.warn("[scanSkillCatalog][扫描 {} 失败用兜底清单：{}]", SKILLS_DIR, e.getMessage());
+            log.warn("[readFrontmatter][{} 读取失败：{}]", skillMd, e.getMessage());
         }
-        if (result.isEmpty()) {
-            result.addAll(SKILL_FALLBACK);
-        } else {
-            // 确保兜底清单项都在（即使文件系统未建也可见）
-            for (String s : SKILL_FALLBACK) {
-                if (!result.contains(s)) {
-                    result.add(s);
-                }
-            }
-        }
-        return result;
     }
 }

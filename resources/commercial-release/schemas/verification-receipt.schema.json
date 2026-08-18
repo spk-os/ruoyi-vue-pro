@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "spk://commercial-release/verification-receipt.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "activityId", "runId", "producerActorId", "verifierActorId", "verdict", "checks", "verifiedAt", "signature"],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "activityId": {"type": "string"}, "runId": {"type": "string"},
+    "producerActorId": {"type": "string"}, "verifierActorId": {"type": "string"},
+    "verdict": {"enum": ["PASS", "FAIL", "BLOCKED"]},
+    "checks": {"type": "array", "minItems": 1}, "verifiedAt": {"type": "string"},
+    "signature": {"type": "string", "minLength": 1}
+  }
+}

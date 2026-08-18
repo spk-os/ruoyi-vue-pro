@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0",
+  "activityId": "ACT-03-XX-XX",
+  "stage": "concept|plan|develop|verify|launch|lifecycle",
+  "status": "BLOCKED",
+  "producer": {"actorId": "agent-id", "role": "role-name"},
+  "skill": {"name": "catalog-skill-name", "version": "semver-or-commit"},
+  "execution": {
+    "runId": "stable-run-id",
+    "startedAt": "ISO-8601",
+    "finishedAt": "ISO-8601",
+    "model": "provider/model@version",
+    "tools": [{"name": "tool", "version": "version", "exitCode": 0}]
+  },
+  "artifacts": [{"artifactId": "id", "type": "catalog-artifact", "path": "artifacts/file", "sha256": "64-lowercase-hex"}],
+  "evidence": [{"evidenceId": "id", "type": "RunReceipt", "path": "evidence/file", "sha256": "64-lowercase-hex"}],
+  "claims": [{"claimId": "id", "text": "可复核声明", "evidenceIds": ["evidence-id"]}],
+  "traceability": [{"sourceId": "upstream-id", "targetId": "artifact-id", "relation": "supports"}],
+  "verifier": {"required": false, "actorId": "", "verdict": "NOT_REQUIRED", "receiptPath": ""},
+  "humanApproval": {"required": false, "status": "NOT_REQUIRED", "recordPath": ""}
+}

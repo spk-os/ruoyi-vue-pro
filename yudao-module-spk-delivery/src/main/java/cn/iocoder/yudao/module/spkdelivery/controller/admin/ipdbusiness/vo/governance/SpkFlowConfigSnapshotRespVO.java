@@ -36,4 +36,13 @@ public class SpkFlowConfigSnapshotRespVO {
 
     @Schema(description = "可选 skill 目录（扫描 /root/.claude/skills/spk-* + 设计文档 §7 兜底）")
     private List<String> skillCatalog;
+
+    @Schema(description = "skill 根目录（DB 单行配置，前端「节点 skill 与环境」页可改；派发层 resolveSkillPath 用此路径）")
+    private String skillsRoot;
+
+    @Schema(description = "默认 skill 环境 default/test/commercial-release/prototype-release（派发层 resolveSkillEnv 三级链末级回退）")
+    private String defaultSkillEnv;
+
+    @Schema(description = "按 env 分组的 skill 目录：env → [{name, description, dir}]（扫描 skillsRoot 下各 env 子目录含 SKILL.md 的目录）")
+    private Map<String, List<Map<String, Object>>> envCatalog;
 }
