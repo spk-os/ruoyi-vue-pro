@@ -265,7 +265,23 @@ const remainingRouter: AppRouteRecordRaw[] = [
         props: (route) => ({
           projectId: route.query.projectId ? Number(route.query.projectId) : undefined
         })
-      }
+      },
+      // === SPK-OS Cortext-IPD UCD v4.0 路由重定向（设计文档 §7）===
+      // 备份高频页提回主菜单后，旧链接不 404；被合并的独立入口重定向到合并方。
+      { path: 'backup/ipd-approval', redirect: '/spk/ipd-approval' },
+      { path: 'backup/ipd-workbench', redirect: '/spk/ipd-workbench' },
+      { path: 'backup/ipd-team', redirect: '/spk/ipd-team' },
+      { path: 'backup/ipd-workflow', redirect: '/spk/ipd-approval' }, // v4.0 流程中心并入我的审批
+      { path: 'backup/ipd-cockpit', redirect: '/spk/ipd-monitor?tab=running' }, // 监控台并入监控与证据
+      { path: 'backup/spk-projects', redirect: '/spk/projects' }, // 与项目管理同组件
+      { path: 'backup/ipd-work-item', redirect: '/spk/projects?tab=plan' }, // Plane 工作项降为项目·需求与计划 Tab
+      { path: 'backup/ipd-overview', redirect: '/spk/ipd-home' }, // 旧总览并入研发总览
+      { path: 'backup/ipd-project', redirect: '/spk/projects' }, // 旧单实例项目并入项目空间
+      { path: 'backup/ipd-process', redirect: '/spk/ipd-approval?tab=mine' }, // 旧流程页并入我的审批·我的流程
+      { path: 'backup/spk-office', redirect: '/spk/ipd-team?tab=topology' }, // 指挥台降为团队·拓扑 Tab
+      // 智能体管理并入团队与智能体
+      { path: 'spk-agent/agent', redirect: '/spk/ipd-team?tab=agents' },
+      { path: 'spk-agent/agent-squad', redirect: '/spk/ipd-team?tab=squads' }
     ]
   },
   {
