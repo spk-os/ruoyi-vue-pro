@@ -9,6 +9,10 @@
             <div class="text-xs text-gray-400">{{ project.projectNo }} · {{ project.projectCode }}</div>
             <h2 class="text-lg font-bold m-0">{{ project.name }}</h2>
             <div class="text-sm text-gray-500 mt-2px">{{ project.objective }}</div>
+            <div v-if="nextAction" class="next-action mt-4px">
+              <Icon icon="ep:guide" class="mr-4px" />
+              <span class="text-xs text-gray-600">{{ nextAction }}</span>
+            </div>
           </div>
         </div>
         <div class="detail-header__right">
@@ -59,49 +63,72 @@
       <Swimlane v-else :external-pid="activeFlowRun.processInstanceId" />
     </ContentWrap>
 
-    <!-- 4. 需求追踪树 -->
+    <!-- 4. 版本（Vx 折叠树 + 门禁 + 就绪/启动流程；原型 modal 内容提为内联区，modal 保留作全屏入口） -->
     <ContentWrap>
-      <div class="block-title"><Icon class="mr-4px" icon="ep:connection" />需求追踪树（IR/SR/AR）</div>
-      <el-empty v-if="reqTree?.sparse" description="需求样本不足：尚未从 Plane 同步该项目的需求链" :image-size="60" />
-      <el-table v-else :data="reqTree?.nodes || []">
-        <el-table-column label="序号" prop="planeIssueSeq" width="90" />
-        <el-table-column label="类型" prop="requirementType" width="100">
-          <template #default="{ row }">
-            <el-tag size="small">{{ row.requirementType || '—' }}</el-tag>
+      <div class="flex justify-between items-center mb-10px">
+        <div class="block-title m-0"><Icon class="mr-4px" icon="ep:document" />版本</div>
+        <div class="flex gap-8px">
+          <el-button v-hasPermi="['spk-delivery:ipd-project:update']" size="small" @click="openMajorForm()"><Icon class="mr-4px" icon="ep:plus" />大版本</el-button>
+          <el-button size="small" @click="openVerModal"><Icon class="mr-4px" icon="ep:full-screen" />全屏</el-button>
+        </div>
+      </div>
+      <el-empty v-if="!majorReleases.length" description="尚无大版本" :image-size="60" />
+      <el-collapse v-else v-model="verCollapse" class="ver-collapse">
+        <el-collapse-item v-for="m in majorReleases" :key="m.id" :name="m.id">
+          <template #title>
+            <span class="font-semibold">V{{ m.majorNo }} · {{ m.name }}</span>
+            <el-tag class="ml-8px" size="small" :type="majorTagType(m.status)">{{ statusLabel(m.status) }}</el-tag>
+            <span class="text-xs text-gray-400 ml-8px">{{ versionsOf(m.id).length }} 个版本</span>
           </template>
-        </el-table-column>
-        <el-table-column label="标题" min-width="240" prop="title" show-overflow-tooltip />
-        <el-table-column label="状态" prop="status" width="120">
-          <template #default="{ row }">
-            <el-tag size="small" effect="plain">{{ statusLabel(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="最近同步" prop="lastSyncedAt" width="160" :formatter="dateFormatter" />
-      </el-table>
+          <el-table :data="versionsOf(m.id)" size="small">
+            <el-table-column label="版本号" prop="versionNo" width="120" />
+            <el-table-column label="类型" prop="versionType" width="90" />
+            <el-table-column label="状态" prop="status" width="100">
+              <template #default="{ row }"><el-tag size="small" :type="versionTagType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
+            </el-table-column>
+            <el-table-column label="就绪" prop="deliveryReadiness" width="100" />
+            <el-table-column label="计划完成" prop="plannedEndAt" width="150" :formatter="dateFormatter" />
+            <el-table-column label="操作" width="200">
+              <template #default="{ row }">
+                <el-button size="small" link type="primary" @click="handleReadiness(row)">就绪检查</el-button>
+                <el-button v-if="row.status === 'DRAFT'" size="small" link type="success" @click="handleReadyVersion(row)">置 READY</el-button>
+                <el-button size="small" link type="primary" @click="openFlowWizard(row)">启动流程</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-collapse-item>
+      </el-collapse>
     </ContentWrap>
 
-    <!-- 5. 最近活动 -->
+    <!-- 5. 需求与计划（需求追踪树 + Plane 工作项同步表，§4.2 并入项） -->
     <ContentWrap>
-      <div class="block-title"><Icon class="mr-4px" icon="ep:clock" />最近活动</div>
-      <el-empty v-if="!recentActivities.length" description="尚无活动记录" :image-size="60" />
-      <el-timeline v-else>
-        <el-timeline-item
-          v-for="a in recentActivities"
-          :key="a.activityRunId"
-          :timestamp="formatTime(a.queuedAt)"
-          :type="actTagType(a.status)"
-        >
-          <div class="flex items-center gap-8px">
-            <el-tag size="small" effect="plain">{{ a.stageLabel }}</el-tag>
-            <b>{{ a.activityName }}</b>
-            <el-tag size="small" :type="actTagType(a.status)">{{ actStatusLabel(a.status) }}</el-tag>
-          </div>
-          <div class="text-xs text-gray-500 mt-2px">
-            流程 {{ a.flowRunNo }} · 智能体 {{ a.leadAgentName || a.leadAgentCode || '—' }} · 产物 {{ a.artifactCount }}
-            <span v-if="a.finishedAt">· 完成 {{ formatTime(a.finishedAt) }}</span>
-          </div>
-        </el-timeline-item>
-      </el-timeline>
+      <el-tabs v-model="planTab" class="plan-tabs">
+        <el-tab-pane name="req">
+          <template #label><Icon class="mr-4px" icon="ep:connection" />需求追踪树（IR/SR/AR）</template>
+          <el-empty v-if="reqTree?.sparse" description="需求样本不足：尚未从 Plane 同步该项目的需求链" :image-size="60" />
+          <el-table v-else :data="reqTree?.nodes || []">
+            <el-table-column label="序号" prop="planeIssueSeq" width="90" />
+            <el-table-column label="类型" prop="requirementType" width="100">
+              <template #default="{ row }"><el-tag size="small">{{ row.requirementType || '—' }}</el-tag></template>
+            </el-table-column>
+            <el-table-column label="标题" min-width="240" prop="title" show-overflow-tooltip />
+            <el-table-column label="状态" prop="status" width="120">
+              <template #default="{ row }"><el-tag size="small" effect="plain">{{ statusLabel(row.status) }}</el-tag></template>
+            </el-table-column>
+            <el-table-column label="最近同步" prop="lastSyncedAt" width="160" :formatter="dateFormatter" />
+          </el-table>
+        </el-tab-pane>
+        <el-tab-pane name="work" lazy>
+          <template #label><Icon class="mr-4px" icon="ep:list" />Plane 工作项</template>
+          <WorkItemPanel :project-id="projectId" />
+        </el-tab-pane>
+      </el-tabs>
+    </ContentWrap>
+
+    <!-- 6. 项目参与者（S5 下沉：项目级 Agent/编队/人员绑定落点） -->
+    <ContentWrap :body-style="{ padding: '12px' }">
+      <div class="block-title"><Icon class="mr-4px" icon="ep:user-filled" />项目参与者</div>
+      <ProjectActorPanel :project-id="projectId" />
     </ContentWrap>
 
     <!-- 6. 问题 -->
@@ -139,7 +166,31 @@
       <Pagination v-model:limit="issueQuery.pageSize" v-model:page="issueQuery.pageNo" :total="issueTotal" @pagination="loadIssues" />
     </ContentWrap>
 
-    <!-- 版本列表 modal -->
+    <!-- 8. 最近活动（移至末尾，§4.2 顺序：版本→需求与计划→参与者→问题→最近活动） -->
+    <ContentWrap>
+      <div class="block-title"><Icon class="mr-4px" icon="ep:clock" />最近活动</div>
+      <el-empty v-if="!recentActivities.length" description="尚无活动记录" :image-size="60" />
+      <el-timeline v-else>
+        <el-timeline-item
+          v-for="a in recentActivities"
+          :key="a.activityRunId"
+          :timestamp="formatTime(a.queuedAt)"
+          :type="actTagType(a.status)"
+        >
+          <div class="flex items-center gap-8px">
+            <el-tag size="small" effect="plain">{{ a.stageLabel }}</el-tag>
+            <b>{{ a.activityName }}</b>
+            <el-tag size="small" :type="actTagType(a.status)">{{ actStatusLabel(a.status) }}</el-tag>
+          </div>
+          <div class="text-xs text-gray-500 mt-2px">
+            流程 {{ a.flowRunNo }} · 智能体 {{ a.leadAgentName || a.leadAgentCode || '—' }} · 产物 {{ a.artifactCount }}
+            <span v-if="a.finishedAt">· 完成 {{ formatTime(a.finishedAt) }}</span>
+          </div>
+        </el-timeline-item>
+      </el-timeline>
+    </ContentWrap>
+
+    <!-- 版本列表 modal（全屏入口，与内联版本区同源数据） -->
     <el-dialog v-model="verModalVisible" title="版本列表" width="860px">
       <el-empty v-if="!majorReleases.length" description="尚无大版本" :image-size="60" />
       <div v-for="m in majorReleases" :key="m.id" class="mb-16px">
@@ -208,6 +259,8 @@ import VersionForm from './VersionForm.vue'
 import IssueForm from './IssueForm.vue'
 import IssueTriageDialog from './IssueTriageDialog.vue'
 import IssueRelationDialog from './IssueRelationDialog.vue'
+import WorkItemPanel from './WorkItemPanel.vue'
+import ProjectActorPanel from './ProjectActorPanel.vue'
 
 defineOptions({ name: 'SpkIpdProjectDetail' })
 
@@ -251,6 +304,8 @@ const recentActivities = ref<any[]>([])
 
 // 版本列表 modal 数据
 const verModalVisible = ref(false)
+const verCollapse = ref<number[]>([]) // 内联版本折叠树展开项
+const planTab = ref('req') // 需求与计划区子 Tab
 const majorReleases = ref<IpdBusinessApi.SpkIpdMajorReleaseVO[]>([])
 const allVersions = ref<IpdBusinessApi.SpkIpdVersionVO[]>([])
 const versionsOf = (majorId: number) => allVersions.value.filter((v) => v.majorReleaseId === majorId)
@@ -272,6 +327,22 @@ const stageDrawerActivities = computed(() => {
 const goBack = () => router.back()
 const openVerModal = () => { verModalVisible.value = true }
 const openStageDrawer = (st: any) => { stageDrawerData.value = st; stageDrawerVisible.value = true }
+
+// 「下一步行动」引导：仅从真实 workspace 字段派生（project.status/activeFlowRun.status+blockReason+currentStageLabel/issueCount），不造假
+const nextAction = computed(() => {
+  const p = project.value
+  const fr = activeFlowRun.value
+  const st = p.status
+  if (st === 'DRAFT') return '下一步：激活项目以启动 IPD 流程'
+  if (st === 'PAUSED') return '下一步：恢复暂停的项目'
+  if (st === 'ARCHIVED') return '项目已归档'
+  // ACTIVE
+  if (!fr) return '下一步：为版本启动发布流程（版本区 → 启动流程）'
+  if (fr.blockReason) return `下一步：处理阻塞 — ${fr.blockReason}`
+  if (fr.status === 'RUNNING' && fr.currentStageLabel) return `下一步：推进「${fr.currentStageLabel}」阶段`
+  if (issueTotal.value > 0) return `下一步：处置 ${issueTotal.value} 个未决问题`
+  return '项目运行中，无待办'
+})
 
 const loadWorkspace = async () => {
   if (!projectId.value) return
@@ -441,6 +512,15 @@ const handleStartIssueFlow = async (row: IpdBusinessApi.SpkIpdIssueCaseVO) => {
   font-weight: 600;
   margin-bottom: 12px;
 }
+.next-action {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: var(--el-color-primary-light-9);
+  border-radius: 4px;
+}
+.ver-collapse :deep(.el-collapse-item__header) { font-size: 14px; }
+.plan-tabs :deep(.el-tabs__header) { margin-bottom: 10px; }
 .stage-tracker {
   display: grid;
   grid-template-columns: repeat(6, 1fr);

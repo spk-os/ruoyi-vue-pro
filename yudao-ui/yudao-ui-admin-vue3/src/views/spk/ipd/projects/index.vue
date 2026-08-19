@@ -15,6 +15,19 @@
           <el-option v-for="opt in HEALTH_OPTIONS" :key="opt.value" :label="opt.label" :value="opt.value" />
         </el-select>
       </el-form-item>
+      <el-form-item label="负责人" prop="ownerUserId">
+        <el-select v-model="queryParams.ownerUserId" class="!w-160px" clearable filterable placeholder="全部">
+          <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="当前阶段" prop="currentStage">
+        <el-select v-model="queryParams.currentStage" class="!w-140px" clearable placeholder="全部">
+          <el-option v-for="opt in STAGE_OPTIONS" :key="opt.value" :label="opt.label" :value="opt.value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="仅看阻断">
+        <el-switch v-model="queryParams.blockedOnly" />
+      </el-form-item>
       <el-form-item>
         <el-button @click="handleQuery"><Icon class="mr-5px" icon="ep:search" />搜索</el-button>
         <el-button @click="resetQuery"><Icon class="mr-5px" icon="ep:refresh" />重置</el-button>
@@ -87,35 +100,55 @@
       <el-empty v-if="!loading && filteredCards.length === 0" description="暂无项目，点「发起项目」创建" />
     </div>
 
-    <!-- 表格视图 -->
-    <el-table v-else v-loading="loading" :data="tableList" @row-click="openDetail">
-      <el-table-column label="项目" min-width="220" prop="name">
-        <template #default="{ row }">
-          <el-link type="primary" @click.stop="openDetail(row)">{{ row.name }}</el-link>
-          <div class="text-xs text-gray-400">{{ row.projectNo }} · {{ row.projectCode }}</div>
-        </template>
-      </el-table-column>
-      <el-table-column label="负责人" min-width="120">
-        <template #default="{ row }">{{ userLabel(row.ownerUserId) }}</template>
-      </el-table-column>
-      <el-table-column align="center" label="状态" prop="status" width="110">
-        <template #default="{ row }"><el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
-      </el-table-column>
-      <el-table-column align="center" label="健康" prop="health" width="100">
-        <template #default="{ row }"><el-tag :type="healthTagType(row.health)" effect="plain">{{ healthLabel(row.health) }}</el-tag></template>
-      </el-table-column>
-      <el-table-column align="center" label="计划完成" prop="plannedEndAt" width="160" :formatter="dateFormatter" />
-      <el-table-column align="center" fixed="right" label="操作" width="240">
-        <template #default="{ row }">
-          <el-button v-hasPermi="['spk-delivery:ipd-project:update']" v-if="row.status === 'DRAFT'" link type="primary" @click.stop="handleActivate(row)">激活</el-button>
-          <el-button v-hasPermi="['spk-delivery:ipd-project:update']" v-if="row.status === 'ACTIVE'" link type="warning" @click.stop="handlePause(row)">暂停</el-button>
-          <el-button v-hasPermi="['spk-delivery:ipd-project:update']" v-if="row.status === 'PAUSED'" link type="success" @click.stop="handleActivate(row)">恢复</el-button>
-          <el-button v-hasPermi="['spk-delivery:ipd-project:update']" link type="primary" @click.stop="openForm(row.id)">编辑</el-button>
-          <el-button v-hasPermi="['spk-delivery:ipd-project:archive']" v-if="row.status !== 'ARCHIVED'" link type="danger" @click.stop="handleArchive(row)">归档</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-    <Pagination v-if="view === 'table'" v-model:limit="queryParams.pageSize" v-model:page="queryParams.pageNo" :total="total" @pagination="getTableList" />
+    <!-- 表格视图（同源 cards 聚合数据，含 §4.2 全字段：大版本/活跃版本/剩余/阻塞流/待决策） -->
+    <template v-else>
+      <el-table v-loading="loading" :data="pagedCards" @row-click="openDetail">
+        <el-table-column label="项目" min-width="200" prop="name">
+          <template #default="{ row }">
+            <el-link type="primary" @click.stop="openDetail(row)">{{ row.name }}</el-link>
+            <div class="text-xs text-gray-400">{{ row.projectNo }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="负责人" min-width="100">
+          <template #default="{ row }">{{ userLabel(row.ownerUserId) }}</template>
+        </el-table-column>
+        <el-table-column align="center" label="状态" prop="status" width="90">
+          <template #default="{ row }"><el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag></template>
+        </el-table-column>
+        <el-table-column align="center" label="健康" prop="health" width="90">
+          <template #default="{ row }"><el-tag :type="healthTagType(row.health)" effect="plain" size="small">{{ healthLabel(row.health) }}</el-tag></template>
+        </el-table-column>
+        <el-table-column align="center" label="当前阶段" width="90">
+          <template #default="{ row }">{{ row.currentStageLabel || row.currentStage || '—' }}</template>
+        </el-table-column>
+        <el-table-column align="center" label="大版本" width="70">
+          <template #default="{ row }">{{ row.majorReleases ?? 0 }}</template>
+        </el-table-column>
+        <el-table-column align="center" label="活跃版本" width="110">
+          <template #default="{ row }">{{ row.activeVersion || '未接入' }}</template>
+        </el-table-column>
+        <el-table-column align="center" label="剩余" width="80">
+          <template #default="{ row }"><span :class="dueInClass(row.dueIn)">{{ dueInText(row.dueIn) }}</span></template>
+        </el-table-column>
+        <el-table-column align="center" label="阻塞流" width="80">
+          <template #default="{ row }"><span :class="{ 'text-red-600': row.blockedFlows > 0 }">{{ row.blockedFlows ?? 0 }}</span></template>
+        </el-table-column>
+        <el-table-column align="center" label="待决策" width="80">
+          <template #default="{ row }"><span :class="{ 'text-orange-600': row.pendingDecisions > 0 }">{{ row.pendingDecisions ?? 0 }}</span></template>
+        </el-table-column>
+        <el-table-column align="center" label="计划完成" prop="plannedEndAt" width="150" :formatter="dateFormatter" />
+        <el-table-column align="center" fixed="right" label="操作" width="220">
+          <template #default="{ row }">
+            <el-button v-hasPermi="['spk-delivery:ipd-project:update']" v-if="row.status === 'DRAFT'" link type="primary" @click.stop="handleActivate(row)">激活</el-button>
+            <el-button v-hasPermi="['spk-delivery:ipd-project:update']" v-if="row.status === 'ACTIVE'" link type="warning" @click.stop="handlePause(row)">暂停</el-button>
+            <el-button v-hasPermi="['spk-delivery:ipd-project:update']" v-if="row.status === 'PAUSED'" link type="success" @click.stop="handleActivate(row)">恢复</el-button>
+            <el-button v-hasPermi="['spk-delivery:ipd-project:update']" link type="primary" @click.stop="openForm(row.id)">编辑</el-button>
+            <el-button v-hasPermi="['spk-delivery:ipd-project:archive']" v-if="row.status !== 'ARCHIVED'" link type="danger" @click.stop="handleArchive(row)">归档</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <Pagination v-model:limit="queryParams.pageSize" v-model:page="queryParams.pageNo" :total="filteredCards.length" @pagination="() => {}" />
+    </template>
   </ContentWrap>
 
   <ProjectForm ref="formRef" @success="reload" />
@@ -138,6 +171,14 @@ const { push } = useRouter()
 const message = useMessage()
 
 const STAGE_LABELS = ['概念', '计划', '开发', '验证', '发布', '生命周期']
+const STAGE_OPTIONS = [
+  { value: 'concept', label: '概念' },
+  { value: 'plan', label: '计划' },
+  { value: 'develop', label: '开发' },
+  { value: 'qualify', label: '验证' },
+  { value: 'launch', label: '发布' },
+  { value: 'lifecycle', label: '生命周期' }
+]
 const STATUS_OPTIONS = [
   { value: 'DRAFT', label: '草稿' },
   { value: 'ACTIVE', label: '进行中' },
@@ -158,8 +199,6 @@ const healthTagType = (v: string) => ({ UNKNOWN: 'info', GOOD: 'success', WARN: 
 
 const loading = ref(false)
 const view = ref<'card' | 'table'>('card')
-const tableList = ref<IpdProjectVO[]>([])
-const total = ref(0)
 const cards = ref<any[]>([])
 const userList = ref<UserVO[]>([])
 
@@ -167,6 +206,9 @@ const queryParams = reactive({
   name: '',
   status: undefined as string | undefined,
   health: undefined as string | undefined,
+  ownerUserId: undefined as number | undefined,
+  currentStage: undefined as string | undefined,
+  blockedOnly: false,
   pageNo: 1,
   pageSize: 10
 })
@@ -184,8 +226,16 @@ const filteredCards = computed(() => {
     if (queryParams.name && !(c.name || '').toLowerCase().includes(queryParams.name.toLowerCase())) return false
     if (queryParams.status && c.status !== queryParams.status) return false
     if (queryParams.health && c.health !== queryParams.health) return false
+    if (queryParams.ownerUserId && c.ownerUserId !== queryParams.ownerUserId) return false
+    if (queryParams.currentStage && c.currentStage !== queryParams.currentStage) return false
+    if (queryParams.blockedOnly && !(c.blockedFlows > 0)) return false
     return true
   })
+})
+// 表格视图本地分页（同源 filteredCards 聚合数据）
+const pagedCards = computed(() => {
+  const start = (queryParams.pageNo - 1) * queryParams.pageSize
+  return filteredCards.value.slice(start, start + queryParams.pageSize)
 })
 
 const stageIndex = (stage?: string) => {
@@ -226,8 +276,8 @@ const openWizard = () => wizardRef.value?.open()
 
 const formRef = ref()
 const reload = () => {
+  // 表格视图同源 cards，仅刷 cards 即可
   getCards()
-  getTableList()
 }
 
 const getCards = async () => {
@@ -239,24 +289,11 @@ const getCards = async () => {
   }
 }
 
-const getTableList = async () => {
-  loading.value = true
-  try {
-    const data = await BusinessApi.getPage(queryParams)
-    tableList.value = data.list
-    total.value = data.total
-  } finally {
-    loading.value = false
-  }
-}
-
+// cards 端点全量返回聚合字段（含阻塞流/待决策/活跃版本），表格视图改用同源 pagedCards
+// getPage 仅保留为后端分页兜底入口（当前未在视图使用，避免冗余请求）
 const handleQuery = () => {
-  if (view.value === 'card') {
-    // 卡片本地过滤，无需重新请求
-  } else {
-    queryParams.pageNo = 1
-    getTableList()
-  }
+  // 卡片与表格均为本地过滤，无需重新请求
+  queryParams.pageNo = 1
 }
 const resetQuery = () => {
   queryFormRef.value?.resetFields()
@@ -288,7 +325,6 @@ const onWizardSuccess = () => {
 const init = async () => {
   userList.value = await getSimpleUserList()
   getCards()
-  getTableList()
 }
 
 onMounted(init)

@@ -7,6 +7,7 @@ import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdworkbench.vo.SpkI
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdworkbench.vo.SpkIpdWorkbenchRespVO.BoardColumn;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdworkbench.vo.SpkIpdWorkbenchRespVO.BoardItem;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdworkbench.vo.SpkIpdWorkbenchRespVO.InboxItem;
+import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdworkbench.vo.SpkIpdWorkbenchRespVO.TaskRow;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agent.SpkAgentTaskDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agentdef.SpkAgentDefDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.evidence.SpkRunReceiptDO;
@@ -19,6 +20,7 @@ import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agent.SpkAgentTaskMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agentdef.SpkAgentDefMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.evidence.SpkRunReceiptMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdFlowRunMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdProjectMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.taskcontract.SpkTaskContractMapper;
 import cn.iocoder.yudao.module.spkdelivery.enums.SpkAgentTaskStatusEnum;
 import cn.iocoder.yudao.module.spkdelivery.enums.SpkTaskContractStatusEnum;
@@ -27,6 +29,7 @@ import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdCommandServ
 import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdCommandService.CommandEnvelope;
 import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdFlowRunService;
 import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdProjectBusinessService;
+import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkStageResolver;
 import cn.iocoder.yudao.module.bpm.controller.admin.task.vo.task.BpmTaskPageReqVO;
 import cn.iocoder.yudao.module.bpm.service.task.BpmTaskService;
 import cn.iocoder.yudao.module.system.api.user.AdminUserApi;
@@ -34,12 +37,16 @@ import cn.iocoder.yudao.module.system.api.user.dto.AdminUserRespDTO;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.task.api.Task;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -84,6 +91,22 @@ public class SpkIpdWorkbenchServiceImpl implements SpkIpdWorkbenchService {
     private BpmTaskService bpmTaskService;
     @Resource
     private AdminUserApi adminUserApi;
+    @Resource
+    private SpkStageResolver stageResolver;
+    @Resource
+    private SpkIpdProjectMapper projectMapper;
+
+    // v4.0 §4.4 全局执行参数：真实配置只读快照（@Value 注入，非写死）
+    @Value("${spk-delivery.execution.adapter:native-ai}")
+    private String cfgAdapter;
+    @Value("${spk-delivery.execution.fast-mode:true}")
+    private boolean cfgFastMode;
+    @Value("${spk-delivery.execution.default-mode:test}")
+    private String cfgDefaultMode;
+    @Value("${spk-delivery.omnigent.timeout-ms:120000}")
+    private long cfgOmnigentTimeoutMs;
+    @Value("${spk-delivery.omnigent.poll-interval-ms:2000}")
+    private long cfgOmnigentPollMs;
 
     @Override
     public SpkIpdWorkbenchRespVO getWorkbench(Long userId, Long projectId, Long versionId) {
@@ -93,6 +116,12 @@ public class SpkIpdWorkbenchServiceImpl implements SpkIpdWorkbenchService {
         resp.setNextGate(detectNextGate(projectId, versionId));
         resp.setInbox(buildInbox(userId, projectId));
         resp.setBoard(buildBoard(projectId, versionId));
+        // v4.0 §4.4 三视图：任务/指挥/团队数据同源注入
+        resp.setTasks(buildTasks(projectId));
+        resp.setTaskStats(buildTaskStats(resp.getTasks()));
+        resp.setKpis(buildKpis(projectId, resp.getTasks()));
+        resp.setGlobalParams(buildGlobalParams());
+        resp.setEventStream(buildEventStream(projectId));
         return resp;
     }
 
@@ -101,6 +130,12 @@ public class SpkIpdWorkbenchServiceImpl implements SpkIpdWorkbenchService {
         SpkIpdWorkbenchRespVO resp = new SpkIpdWorkbenchRespVO();
         resp.setRefreshedAt(LocalDateTime.now().format(FMT));
         resp.setInbox(buildInbox(userId, projectId));
+        // v4.0 §4.4：inbox 端点亦承载任务视图（设计文档关键 API 即 /workbench/inbox）
+        resp.setTasks(buildTasks(projectId));
+        resp.setTaskStats(buildTaskStats(resp.getTasks()));
+        resp.setKpis(buildKpis(projectId, resp.getTasks()));
+        resp.setGlobalParams(buildGlobalParams());
+        resp.setEventStream(buildEventStream(projectId));
         return resp;
     }
 
@@ -109,6 +144,11 @@ public class SpkIpdWorkbenchServiceImpl implements SpkIpdWorkbenchService {
         SpkIpdWorkbenchRespVO resp = new SpkIpdWorkbenchRespVO();
         resp.setRefreshedAt(LocalDateTime.now().format(FMT));
         resp.setBoard(buildBoard(projectId, null));
+        // v4.0 §4.4：board 端点亦补任务列表，供指挥视图复用
+        resp.setTasks(buildTasks(projectId));
+        resp.setTaskStats(buildTaskStats(resp.getTasks()));
+        resp.setKpis(buildKpis(projectId, resp.getTasks()));
+        resp.setGlobalParams(buildGlobalParams());
         return resp;
     }
 
@@ -301,6 +341,276 @@ public class SpkIpdWorkbenchServiceImpl implements SpkIpdWorkbenchService {
             cols.add(col);
         }
         return cols;
+    }
+
+    // ==================== v4.0 §4.4 三视图：任务 / 指挥 / 团队 ====================
+
+    private List<TaskRow> buildTasks(Long projectId) {
+        List<SpkIpdFlowRunDO> runs = collectFlowRuns(projectId, null);
+        if (runs.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<String, SpkIpdFlowRunDO> pid2run = runs.stream()
+                .filter(r -> r.getProcessInstanceId() != null)
+                .collect(Collectors.toMap(SpkIpdFlowRunDO::getProcessInstanceId, r -> r, (a, b) -> a));
+        Set<Long> projIds = runs.stream().map(SpkIpdFlowRunDO::getProjectId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, String> projName = lookupProjectNames(projIds);
+        Set<Long> agentIds = new java.util.HashSet<>();
+        for (String pid : pid2run.keySet()) {
+            List<SpkTaskContractDO> cs = taskContractMapper.selectListByProcessInstanceId(pid);
+            if (cs != null) {
+                for (SpkTaskContractDO c : cs) {
+                    if (c.getLeadAgentId() != null) {
+                        agentIds.add(c.getLeadAgentId());
+                    }
+                }
+            }
+        }
+        Map<Long, SpkAgentDefDO> defMap = lookupAgentDefsByIds(agentIds);
+        List<TaskRow> rows = new ArrayList<>();
+        for (Map.Entry<String, SpkIpdFlowRunDO> en : pid2run.entrySet()) {
+            String pid = en.getKey();
+            SpkIpdFlowRunDO run = en.getValue();
+            String resolvedStage = safe(stageResolver.resolveCurrentStage(
+                    pid, run.getCurrentStage(), run.getStatus()));
+            List<SpkTaskContractDO> contracts = taskContractMapper.selectListByProcessInstanceId(pid);
+            if (contracts == null || contracts.isEmpty()) {
+                continue;
+            }
+            for (SpkTaskContractDO c : contracts) {
+                rows.add(toTaskRow(c, run, resolvedStage, projName, defMap));
+            }
+        }
+        rows.sort(Comparator.comparing(
+                (TaskRow r) -> r.getStatus() == null ? "" : r.getStatus()).reversed());
+        return rows;
+    }
+
+    private TaskRow toTaskRow(SpkTaskContractDO c, SpkIpdFlowRunDO run, String stage,
+                               Map<Long, String> projName, Map<Long, SpkAgentDefDO> defMap) {
+        TaskRow tr = new TaskRow();
+        tr.setActivityRunId(safe(c.getActivityRunId()));
+        tr.setName(safe(c.getActivityId()));
+        tr.setProjectId(run.getProjectId());
+        tr.setProjectName(projName == null ? "" : projName.getOrDefault(run.getProjectId(), ""));
+        tr.setFlowRunId(run.getId());
+        tr.setFlowRunNo(safe(run.getRunNo()));
+        tr.setStage(stage);
+        tr.setOwnerType("AGENT");
+        tr.setOwnerName(agentName(defMap, c.getLeadAgentId()));
+        tr.setStatus(c.getStatus());
+        tr.setProgress(progressOf(c));
+        tr.setDurationSec(durationSecOf(c));
+        if (run.getPlannedEndAt() != null) {
+            tr.setDueAt(run.getPlannedEndAt().format(FMT));
+        }
+        // Omnigent 会话 ID：task_contract.task_id 即 Omnigent session id（同 cockpit ActivityDetail 取值源，真实落库）
+        tr.setSessionId(safe(c.getTaskId()));
+        return tr;
+    }
+
+    /** 进度：终态 100，运行中 50，已入队 0（按状态真实推算，非凭空写死数值） */
+    private Integer progressOf(SpkTaskContractDO c) {
+        SpkTaskContractStatusEnum st = SpkTaskContractStatusEnum.of(c.getStatus());
+        if (st == null) {
+            return 0;
+        }
+        if (st.isTerminal()) {
+            return 100;
+        }
+        if (st == SpkTaskContractStatusEnum.RUNNING) {
+            return 50;
+        }
+        return 0;
+    }
+
+    /** 已运行时长（秒）：finishedAt-startedAt 或 startedAt-now，无则 null */
+    private Long durationSecOf(SpkTaskContractDO c) {
+        LocalDateTime start = c.getStartedAt();
+        if (start == null) {
+            return null;
+        }
+        LocalDateTime end = c.getFinishedAt() != null ? c.getFinishedAt() : LocalDateTime.now();
+        return Duration.between(start, end).getSeconds();
+    }
+
+    private Map<String, Long> buildTaskStats(List<TaskRow> tasks) {
+        Map<String, Long> stats = new LinkedHashMap<>();
+        stats.put("queued", 0L);
+        stats.put("running", 0L);
+        stats.put("failed", 0L);
+        stats.put("done", 0L);
+        stats.put("timeout", 0L);
+        stats.put("cancelled", 0L);
+        if (tasks == null) {
+            return stats;
+        }
+        for (TaskRow t : tasks) {
+            String s = t.getStatus() == null ? "" : t.getStatus().toLowerCase();
+            if (stats.containsKey(s)) {
+                stats.put(s, stats.get(s) + 1);
+            }
+        }
+        return stats;
+    }
+
+    private Map<String, Object> buildKpis(Long projectId, List<TaskRow> tasks) {
+        Map<String, Object> kpis = new LinkedHashMap<>();
+        long running = 0, queued = 0, done = 0, failed = 0;
+        long totalDur = 0;
+        long durCnt = 0;
+        long todayDone = 0;
+        LocalDate today = LocalDate.now();
+        if (tasks != null) {
+            for (TaskRow t : tasks) {
+                String s = t.getStatus() == null ? "" : t.getStatus().toLowerCase();
+                if ("running".equals(s)) {
+                    running++;
+                } else if ("queued".equals(s)) {
+                    queued++;
+                } else if ("done".equals(s)) {
+                    done++;
+                } else if ("failed".equals(s) || "timeout".equals(s)) {
+                    failed++;
+                }
+                if (t.getDurationSec() != null && "done".equals(s)) {
+                    totalDur += t.getDurationSec();
+                    durCnt++;
+                }
+            }
+        }
+        // 今日完成：按 run_receipt.finished_at 今日（真实收据时间）
+        try {
+            List<SpkIpdFlowRunDO> runs = collectFlowRuns(projectId, null);
+            Set<String> pids = runs.stream().map(SpkIpdFlowRunDO::getProcessInstanceId)
+                    .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+            for (String pid : pids) {
+                List<SpkRunReceiptDO> rs = runReceiptMapper.selectListByProcessInstanceId(pid);
+                if (rs == null) {
+                    continue;
+                }
+                for (SpkRunReceiptDO r : rs) {
+                    if (r.getFinishedAt() != null && r.getFinishedAt().toLocalDate().isEqual(today)) {
+                        todayDone++;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[buildKpis][今日完成统计失败 err={}]", e.getMessage());
+        }
+        long total = done + failed;
+        Double failureRate = total == 0 ? null
+                : Math.round(failed * 10000.0 / total) / 100.0;
+        Long avgDur = durCnt == 0 ? null : totalDur / durCnt;
+        kpis.put("running", running);
+        kpis.put("queued", queued);
+        kpis.put("todayDone", todayDone);
+        kpis.put("failureRate", failureRate);
+        kpis.put("avgDurationSec", avgDur);
+        return kpis;
+    }
+
+    private Map<String, Object> buildGlobalParams() {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("adapter", cfgAdapter);
+        p.put("fastMode", cfgFastMode);
+        p.put("defaultMode", cfgDefaultMode);
+        p.put("omnigentTimeoutMs", cfgOmnigentTimeoutMs);
+        p.put("pollIntervalMs", cfgOmnigentPollMs);
+        return p;
+    }
+
+    /** 事件流：跨 FlowRun 最近 task_contract 状态变更（按 finishedAt/startedAt/updateTime 降序，真实数据） */
+    private List<Map<String, Object>> buildEventStream(Long projectId) {
+        List<SpkIpdFlowRunDO> runs = collectFlowRuns(projectId, null);
+        if (runs.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<String, SpkIpdFlowRunDO> pid2run = runs.stream()
+                .filter(r -> r.getProcessInstanceId() != null)
+                .collect(Collectors.toMap(SpkIpdFlowRunDO::getProcessInstanceId, r -> r, (a, b) -> a));
+        List<Map<String, Object>> events = new ArrayList<>();
+        for (Map.Entry<String, SpkIpdFlowRunDO> en : pid2run.entrySet()) {
+            SpkIpdFlowRunDO run = en.getValue();
+            List<SpkTaskContractDO> cs = taskContractMapper.selectListByProcessInstanceId(en.getKey());
+            if (cs == null) {
+                continue;
+            }
+            for (SpkTaskContractDO c : cs) {
+                LocalDateTime ts = c.getFinishedAt() != null ? c.getFinishedAt()
+                        : (c.getStartedAt() != null ? c.getStartedAt() : c.getQueuedAt());
+                if (ts == null) {
+                    continue;
+                }
+                Map<String, Object> ev = new LinkedHashMap<>();
+                ev.put("at", ts.format(FMT));
+                ev.put("flowRunNo", safe(run.getRunNo()));
+                ev.put("activity", safe(c.getActivityId()));
+                ev.put("status", c.getStatus());
+                ev.put("agent", safe(c.getLeadAgentCode()));
+                ev.put("sortTs", ts);
+                events.add(ev);
+            }
+        }
+        events.sort(Comparator.comparing(m -> (LocalDateTime) m.get("sortTs"),
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> ev : events) {
+            ev.remove("sortTs");
+            out.add(ev);
+            if (out.size() >= 20) {
+                break;
+            }
+        }
+        return out;
+    }
+
+    /** 复用 buildBoard 的 FlowRun 收集逻辑（项目/全局） */
+    private List<SpkIpdFlowRunDO> collectFlowRuns(Long projectId, Long versionId) {
+        List<SpkIpdFlowRunDO> runs = new ArrayList<>();
+        if (versionId != null) {
+            List<SpkIpdFlowRunDO> sub = flowRunMapper.selectActiveByVersion(versionId);
+            if (sub != null) {
+                runs.addAll(sub);
+            }
+        } else if (projectId != null) {
+            for (SpkIpdMajorReleaseDO m : projectBusinessService.listMajorReleases(projectId)) {
+                for (SpkIpdVersionDO v : projectBusinessService.listVersions(m.getId())) {
+                    List<SpkIpdFlowRunDO> sub = flowRunMapper.selectActiveByVersion(v.getId());
+                    if (sub != null) {
+                        runs.addAll(sub);
+                    }
+                }
+            }
+        } else {
+            // 全局：取全部活跃 flow_run（status 非 COMPLETED/CANCELLED）
+            try {
+                runs = flowRunMapper.selectList(
+                        new cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX<SpkIpdFlowRunDO>()
+                                .notIn(SpkIpdFlowRunDO::getStatus,
+                                        java.util.List.of("COMPLETED", "CANCELLED")));
+            } catch (Exception e) {
+                log.warn("[collectFlowRuns][全局 flow_run 查询失败 err={}]", e.getMessage());
+            }
+        }
+        return runs;
+    }
+
+    private Map<Long, String> lookupProjectNames(Set<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        try {
+            List<SpkIpdProjectDO> ps = projectMapper.selectBatchIds(ids);
+            if (ps == null) {
+                return Collections.emptyMap();
+            }
+            return ps.stream().collect(Collectors.toMap(SpkIpdProjectDO::getId,
+                    p -> safe(p.getName()), (a, b) -> a));
+        } catch (Exception e) {
+            return Collections.emptyMap();
+        }
     }
 
     private BoardItem toBoardItem(SpkTaskContractDO c, SpkIpdFlowRunDO run) {

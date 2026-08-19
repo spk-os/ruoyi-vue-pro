@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
 /**
@@ -39,6 +41,14 @@ public class SpkIpdMonitorController {
     @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-cockpit:query')")
     public CommonResult<SpkIpdMonitorRespVO> monitor(@RequestParam(value = "projectId", required = false) Long projectId) {
         return success(monitorService.monitor(projectId));
+    }
+
+    @GetMapping("/costs")
+    @Operation(summary = "AI 成本与会话聚合：按模型/Activity/日趋势（§4.5 Tab6）")
+    @Parameter(name = "projectId", description = "项目 ID，为空则聚合全部")
+    @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-cockpit:query')")
+    public CommonResult<Map<String, Object>> costs(@RequestParam(value = "projectId", required = false) Long projectId) {
+        return success(monitorService.costs(projectId));
     }
 
 }
