@@ -424,6 +424,11 @@ export const getMonitor = (projectId?: number) => {
   return request.get({ url: '/spk/ipd/monitor', params: projectId ? { projectId } : {} })
 }
 
+// AI 成本与会话聚合（§4.5 Tab6）：按模型/Activity/日趋势，真实三跳 flow_run→contract→receipt
+export const getMonitorCosts = (projectId?: number) => {
+  return request.get({ url: '/spk/ipd/monitor/costs', params: projectId ? { projectId } : {} })
+}
+
 // ==================== 团队、参与者与分派 Team ====================
 
 export interface SpkIpdActorRow {

@@ -11,6 +11,7 @@
             <el-option v-for="v in versions" :key="v.id" :label="v.versionLabel" :value="v.id" />
           </el-select>
           <el-button text @click="load"><Icon icon="ep:refresh" />刷新</el-button>
+          <span class="text-xs text-gray-400 ml-10px">人员/容量按项目作用域聚合；Agent/编队为全局注册表管理</span>
         </div>
         <div class="flex gap-10px">
           <StatCard v-for="c in summaryCards" :key="c.label" :label="c.label" :value="c.value" :icon="c.icon" :type="c.type" />
@@ -40,6 +41,18 @@
             <el-table-column label="容量" prop="capacityPct" width="80" align="center">
               <template #default="{ row }">{{ row.capacityPct }}%</template>
             </el-table-column>
+            <el-table-column label="计划中" width="80" align="center">
+              <template #default="{ row }">{{ taskOf(row)?.planned ?? 0 }}</template>
+            </el-table-column>
+            <el-table-column label="进行中" width="80" align="center">
+              <template #default="{ row }"><el-tag v-if="taskOf(row)?.running" size="small" type="warning">{{ taskOf(row).running }}</el-tag><span v-else>0</span></template>
+            </el-table-column>
+            <el-table-column label="已完成" width="80" align="center">
+              <template #default="{ row }">{{ taskOf(row)?.done ?? 0 }}</template>
+            </el-table-column>
+            <el-table-column label="阻断" width="80" align="center">
+              <template #default="{ row }"><el-tag v-if="taskOf(row)?.blocked" size="small" type="danger">{{ taskOf(row).blocked }}</el-tag><span v-else>0</span></template>
+            </el-table-column>
             <el-table-column label="状态" width="90">
               <template #default="{ row }"><el-tag size="small" :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ statusLabel(row.status) }}</el-tag></template>
             </el-table-column>
@@ -52,89 +65,61 @@
           <el-empty v-if="!data.people?.length" description="暂无人员" :image-size="60" />
         </el-tab-pane>
 
-        <!-- Agent -->
-        <el-tab-pane name="agents">
-          <template #label><Icon class="mr-4px" icon="ep:cpu" />Agent {{ data.summary?.agents || 0 }}</template>
-          <div class="flex justify-between items-center mb-10px">
-            <span class="text-sm text-gray-500">项目级绑定的 Agent（引用 spk_agent_def，不创建系统用户）</span>
-            <el-button v-hasPermi="['spk-delivery:ipd-project:update']" type="primary" size="small" @click="openAdd('AGENT')">
-              <Icon class="mr-4px" icon="ep:plus" />绑定 Agent
-            </el-button>
-          </div>
-          <el-table :data="data.agents" size="small">
-            <el-table-column label="Agent" min-width="160">
-              <template #default="{ row }"><b>{{ row.name }}</b><div class="text-xs text-gray-400">{{ row.subtitle }}</div></template>
-            </el-table-column>
-            <el-table-column label="业务角色" prop="businessRole" width="140" />
-            <el-table-column label="Accountable" width="110" align="center">
-              <template #default="{ row }"><el-tag v-if="row.accountableFlag" type="warning" size="small">是</el-tag><span v-else class="text-gray-400">否</span></template>
-            </el-table-column>
-            <el-table-column label="容量" prop="capacityPct" width="80" align="center">
-              <template #default="{ row }">{{ row.capacityPct }}%</template>
-            </el-table-column>
-            <el-table-column label="状态" width="90">
-              <template #default="{ row }"><el-tag size="small" :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ statusLabel(row.status) }}</el-tag></template>
-            </el-table-column>
-            <el-table-column label="操作" width="90">
-              <template #default="{ row }">
-                <el-button v-hasPermi="['spk-delivery:ipd-project:update']" link type="danger" size="small" @click="onRemove(row)">解绑</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-if="!data.agents?.length" description="暂无绑定的 Agent" :image-size="60" />
+        <!-- Agent（全局注册表管理，设计 §4.6 line345：编号/运行时/默认模型/状态/操作+负载。项目级绑定已下沉至项目空间 S8） -->
+        <el-tab-pane name="agents" lazy>
+          <template #label><Icon class="mr-4px" icon="ep:cpu" />Agent</template>
+          <div class="text-sm text-gray-500 mb-10px">全局智能体定义注册表（复用 AgentForm/WakeDialog）；下方为运行负载（按 spk_task_contract 真实聚合）</div>
+          <AgentDefPanel />
+          <div class="load-sep">运行负载</div>
+          <AgentLoadPanel />
         </el-tab-pane>
 
-        <!-- 编队 -->
-        <el-tab-pane name="squads">
-          <template #label><Icon class="mr-4px" icon="ep:suitcase" />编队 {{ data.summary?.squads || 0 }}</template>
-          <div class="flex justify-between items-center mb-10px">
-            <span class="text-sm text-gray-500">项目级绑定的 Agent 编队（编队内部由 Task Router 选择执行 Agent）</span>
-            <el-button v-hasPermi="['spk-delivery:ipd-project:update']" type="primary" size="small" @click="openAdd('SQUAD')">
-              <Icon class="mr-4px" icon="ep:plus" />绑定编队
-            </el-button>
-          </div>
-          <el-table :data="data.squads" size="small">
-            <el-table-column label="编队" min-width="160">
-              <template #default="{ row }"><b>{{ row.name }}</b><div class="text-xs text-gray-400">{{ row.subtitle }}</div></template>
-            </el-table-column>
-            <el-table-column label="业务角色" prop="businessRole" width="140" />
-            <el-table-column label="Accountable" width="110" align="center">
-              <template #default="{ row }"><el-tag v-if="row.accountableFlag" type="warning" size="small">是</el-tag><span v-else class="text-gray-400">否</span></template>
-            </el-table-column>
-            <el-table-column label="容量" prop="capacityPct" width="80" align="center">
-              <template #default="{ row }">{{ row.capacityPct }}%</template>
-            </el-table-column>
-            <el-table-column label="操作" width="90">
-              <template #default="{ row }">
-                <el-button v-hasPermi="['spk-delivery:ipd-project:update']" link type="danger" size="small" @click="onRemove(row)">解绑</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-if="!data.squads?.length" description="暂无编队" :image-size="60" />
+        <!-- 编队（全局 squad 管理，设计 §4.6 line346：编号/成员数/状态/操作，复用 SquadForm。项目级绑定已下沉至项目空间 S8） -->
+        <el-tab-pane name="squads" lazy>
+          <template #label><Icon class="mr-4px" icon="ep:suitcase" />编队</template>
+          <div class="text-sm text-gray-500 mb-10px">全局智能体编队注册表（复用 SquadForm）；编队内部由 Task Router 选择执行 Agent</div>
+          <component :is="SquadPage" />
         </el-tab-pane>
 
-        <!-- 负载与产出 -->
+        <!-- 容量视图（增强热力图，设计 §4.6 line347：人+Agent 统一负载热力图，瓶颈角色高亮） -->
         <el-tab-pane name="load">
-          <template #label><Icon class="mr-4px" icon="ep:data-line" />负载与产出</template>
-          <div class="text-sm text-gray-500 mb-10px">人/Agent 的工作量、状态、产出统一展示（按分派计数）</div>
-          <el-table :data="data.load" size="small">
+          <template #label><Icon class="mr-4px" icon="ep:data-line" />容量视图</template>
+          <div class="text-sm text-gray-500 mb-10px">人/Agent/编队统一负载热力图（按 spk_task_contract 分派计数，单元格深浅=负载强度，阻断>0 行高亮为瓶颈）</div>
+          <el-table :data="data.load" size="small" :row-class-name="bottleneckRow">
             <el-table-column label="参与者" min-width="160">
               <template #default="{ row }"><b>{{ row.name }}</b><el-tag class="ml-8px" size="small">{{ row.actorType }}</el-tag></template>
             </el-table-column>
-            <el-table-column label="总数" prop="total" width="80" align="center" />
-            <el-table-column label="计划中" prop="planned" width="90" align="center" />
-            <el-table-column label="进行中" prop="running" width="90" align="center" />
-            <el-table-column label="阻断" prop="blocked" width="80" align="center">
-              <template #default="{ row }"><el-tag v-if="row.blocked" type="danger" size="small">{{ row.blocked }}</el-tag><span v-else>0</span></template>
+            <el-table-column label="计划中" prop="planned" width="90" align="center">
+              <template #default="{ row }"><span class="heat-cell" :style="heatStyle(row.planned, row.total)">{{ row.planned ?? 0 }}</span></template>
             </el-table-column>
-            <el-table-column label="已完成" prop="done" width="90" align="center" />
-            <el-table-column label="负载" min-width="160">
+            <el-table-column label="进行中" prop="running" width="90" align="center">
+              <template #default="{ row }"><span class="heat-cell" :style="heatStyle(row.running, row.total, true)">{{ row.running ?? 0 }}</span></template>
+            </el-table-column>
+            <el-table-column label="阻断" prop="blocked" width="80" align="center">
+              <template #default="{ row }"><span class="heat-cell" :style="heatStyle(row.blocked, row.total, false, true)">{{ row.blocked ?? 0 }}</span></template>
+            </el-table-column>
+            <el-table-column label="已完成" prop="done" width="90" align="center">
+              <template #default="{ row }"><span class="heat-cell" :style="heatStyle(row.done, row.total)">{{ row.done ?? 0 }}</span></template>
+            </el-table-column>
+            <el-table-column label="总数" prop="total" width="80" align="center" />
+            <el-table-column label="负载热度" min-width="180">
               <template #default="{ row }">
                 <el-progress :percentage="row.total ? Math.round((row.done / row.total) * 100) : 0" :status="row.blocked ? 'exception' : ''" />
               </template>
             </el-table-column>
           </el-table>
-          <el-empty v-if="!data.load?.length" description="暂无负载数据" :image-size="60" />
+          <el-empty v-if="!data.load?.length" description="暂无负载数据（项目尚未派发任务或未选项目作用域）" :image-size="60" />
+        </el-tab-pane>
+
+        <!-- 拓扑视图（诚实缺口：后端无组织拓扑/在线态势数据源，不画假图，待后续阶段补端点） -->
+        <el-tab-pane name="topology" lazy>
+          <template #label><Icon class="mr-4px" icon="ep:share" />拓扑视图</template>
+          <el-empty description="拓扑视图暂无数据源">
+            <template #description>
+              <p>拓扑视图暂无数据源</p>
+              <p class="text-xs text-gray-400">后端尚无组织关系/在线态势专用端点，设计稿 §4.6 line348 标注本 Tab 为可选并入项。为遵守"不造假"铁律，此处不绘制虚构拓扑图，待后续阶段补齐端点后接入。</p>
+            </template>
+          </el-empty>
         </el-tab-pane>
       </el-tabs>
     </ContentWrap>
@@ -181,8 +166,14 @@
 import * as IpdBusinessApi from '@/api/spk/ipd/business'
 import StatCard from '../overview/StatCard.vue'
 import { statusMap, labelText } from '@/views/spk/ipd/home/components/status'
+import AgentDefPanel from '../../agent/AgentDefPanel.vue'
+import AgentLoadPanel from '../../agent/AgentLoadPanel.vue'
+import { defineAsyncComponent } from 'vue'
 
 defineOptions({ name: 'SpkIpdTeam' })
+
+// 编队页降为组件复用（与 agent/index.vue Tab2 同源，避免两处维护）
+const SquadPage = defineAsyncComponent(() => import('../../squad/index.vue'))
 
 const message = useMessage()
 const loading = ref(true)
@@ -203,6 +194,27 @@ const summaryCards = computed(() => {
   ]
 })
 const statusLabel = (s?: string) => labelText(statusMap, s)
+
+// 人员 Tab 任务计数：按 (actorType, actorId) 关联 load 行（后端 ActorRow/LoadRow 均带此键）
+const loadMap = computed(() => {
+  const m = new Map<string, any>()
+  for (const r of data.value.load || []) {
+    m.set(`${r.actorType}:${r.actorId}`, r)
+  }
+  return m
+})
+const taskOf = (row: any) => loadMap.value.get(`${row.actorType}:${row.actorId}`)
+
+// 容量热力图：单元格背景随负载比例加深；进行中=橙、阻断=红、其余=蓝；阻断>0 行标瓶颈
+const heatStyle = (val: number, total: number, isRunning = false, isBlocked = false) => {
+  const v = val || 0
+  const t = total || v || 1
+  const ratio = Math.min(v / t, 1)
+  if (isBlocked) return v > 0 ? { background: 'rgba(245,108,108,0.55)', color: '#fff' } : {}
+  if (isRunning) return v > 0 ? { background: `rgba(230,162,60,${0.2 + ratio * 0.5})` } : {}
+  return v > 0 ? { background: `rgba(64,158,255,${0.15 + ratio * 0.4})` } : {}
+}
+const bottleneckRow = ({ row }: any) => (row.blocked > 0 ? 'heat-bottleneck' : '')
 
 const load = async () => {
   loading.value = true
@@ -298,3 +310,24 @@ const onRemove = async (row: any) => {
 
 onMounted(async () => { await loadProjects(); await load() })
 </script>
+
+<style lang="scss" scoped>
+.heat-cell {
+  display: inline-block;
+  min-width: 28px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+:deep(.heat-bottleneck) {
+  background: rgba(245, 108, 108, 0.08);
+}
+.load-sep {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--el-text-color-secondary);
+  border-left: 3px solid var(--el-color-primary);
+  padding-left: 8px;
+}
+</style>
