@@ -1,9 +1,10 @@
 <template>
   <div class="start-wizard">
     <el-steps :active="step" finish-status="success" align-center class="mb-20px">
-      <el-step title="选项目版本" />
-      <el-step title="选流程模板" />
-      <el-step title="预检与发起" />
+      <el-step title="选项目与版本" />
+      <el-step title="选模板" />
+      <el-step title="范围裁剪" />
+      <el-step title="预检与启动" />
     </el-steps>
 
     <!-- 步骤1：选项目 + 版本 + 流程类型 -->
@@ -30,37 +31,50 @@
       </div>
     </el-card>
 
-    <!-- 步骤2：选模板（流程类型说明 + 可裁剪项） -->
+    <!-- 步骤2：选模板（流程类型说明，简洁可懂） -->
     <el-card v-if="step === 1" shadow="never">
       <el-descriptions :column="1" border size="small" class="mb-12px">
         <el-descriptions-item label="流程类型">{{ flowTypeLabel(form.flowType) }}</el-descriptions-item>
         <el-descriptions-item label="说明">{{ flowTypeDesc(form.flowType) }}</el-descriptions-item>
         <el-descriptions-item label="绑定版本类型要求">FULL_RELEASE 仅绑 BASELINE；INCREMENT 配 FULL_RELEASE；跨验证独立</el-descriptions-item>
       </el-descriptions>
-      <el-form :model="form" label-width="100px">
-        <el-form-item label="裁剪-架构模式">
-          <el-select v-model="form.tailoring.architectureMode" clearable placeholder="不裁剪" class="!w-280px">
-            <el-option v-for="m in ARCH_MODES" :key="m" :label="m" :value="m" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="裁剪-结束门禁">
-          <el-input v-model="form.tailoring.endGate" placeholder="如 concept/tr/verify/release" class="!w-280px" />
-        </el-form-item>
-        <el-form-item label="裁剪-跳过活动">
-          <el-input v-model="skipActivitiesText" placeholder="逗号分隔 activity key" class="!w-360px" />
-        </el-form-item>
-        <el-form-item label="裁剪理由">
-          <el-input v-model="form.tailoring.reason" type="textarea" :rows="2" placeholder="裁剪说明（可选）" />
-        </el-form-item>
-      </el-form>
       <div class="step-actions">
         <el-button @click="step = 0">上一步</el-button>
-        <el-button type="primary" :loading="preflighting" @click="doPreflight">预检</el-button>
+        <el-button type="primary" :disabled="!form.projectId || !form.flowType" @click="step = 2">下一步</el-button>
       </div>
     </el-card>
 
-    <!-- 步骤3：预检 + 创建/启动 -->
+    <!-- 步骤3：范围裁剪（阶段/门禁 checkbox，用户可懂；映射到 tailoring 契约） -->
     <el-card v-if="step === 2" shadow="never">
+      <el-form :model="form" label-width="100px">
+        <el-form-item label="阶段裁剪">
+          <el-checkbox-group v-model="form.keepStages" class="stage-gates">
+            <el-checkbox v-for="s in STAGES" :key="s.key" :value="s.key" :disabled="s.fixed">{{ s.label }}</el-checkbox>
+          </el-checkbox-group>
+          <div class="form-hint">未勾选阶段将按 Profile 规则跳过或简化</div>
+        </el-form-item>
+        <el-form-item label="门禁裁剪">
+          <el-checkbox-group v-model="form.keepGates" class="stage-gates">
+            <el-checkbox v-for="g in GATES" :key="g.key" :value="g.key" :disabled="g.fixed">{{ g.label }}</el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+        <el-form-item label="架构模式">
+          <el-select v-model="form.architectureMode" clearable placeholder="不裁剪（可选）" class="!w-280px">
+            <el-option v-for="m in ARCH_MODES" :key="m" :label="m" :value="m" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="裁剪理由">
+          <el-input v-model="form.reason" type="textarea" :rows="2" placeholder="裁剪说明（可选）" />
+        </el-form-item>
+      </el-form>
+      <div class="step-actions">
+        <el-button @click="step = 1">上一步</el-button>
+        <el-button type="primary" @click="step = 3">下一步</el-button>
+      </div>
+    </el-card>
+
+    <!-- 步骤4：预检 + 创建/启动（预检结果就地显示，修复旧版跨步"点击无反应"） -->
+    <el-card v-if="step === 3" shadow="never">
       <div class="mb-12px text-sm text-gray-500">目标：{{ form.flowType }} 流程，版本绑定后执行预检（不阻断创建），通过后创建并异步启动。</div>
       <el-button :loading="preflighting" type="primary" @click="doPreflight">
         <Icon class="mr-4px" icon="ep:check" />执行预检
@@ -86,7 +100,7 @@
         <el-button class="mt-8px" type="primary" @click="goToRun">前往流程运行查看</el-button>
       </div>
       <div class="step-actions">
-        <el-button @click="step = 1">上一步</el-button>
+        <el-button @click="step = 2">上一步</el-button>
         <el-button type="success" :disabled="!preflightResult" :loading="creating" @click="doCreate">创建并启动</el-button>
       </div>
     </el-card>
@@ -113,6 +127,22 @@ const FLOW_TYPES = [
   { value: 'INTEGRATED_CROSS_VALIDATION', label: '集成交叉验证' }
 ]
 const ARCH_MODES = ['MONOLITH', 'MICROSERVICE', 'EVENT_DRIVEN', 'LAYERED', 'HYBRID']
+// 阶段/门禁裁剪选项（对齐原型；fixed 项不可取消）
+const STAGES = [
+  { key: 'concept', label: '概念', fixed: true },
+  { key: 'plan', label: '计划', fixed: false },
+  { key: 'develop', label: '开发', fixed: false },
+  { key: 'qualify', label: '验证', fixed: false },
+  { key: 'launch', label: '发布', fixed: false },
+  { key: 'lifecycle', label: '生命周期', fixed: false }
+]
+const GATES = [
+  { key: 'CDCP', label: 'CDCP', fixed: true },
+  { key: 'PDCP', label: 'PDCP', fixed: false },
+  { key: 'ADCP', label: 'ADCP', fixed: false },
+  { key: 'GA', label: 'GA', fixed: false },
+  { key: 'LDCP', label: 'LDCP', fixed: false }
+]
 const flowTypeLabel = (v?: string) => FLOW_TYPES.find(f => f.value === v)?.label || v
 const flowTypeDesc = (v?: string) => ({
   FULL_RELEASE: '绑定 BASELINE 版本，走完整 concept→tr→verify→release 六阶段',
@@ -124,16 +154,23 @@ const form = reactive({
   projectId: undefined as number | undefined,
   versionId: undefined as number | undefined,
   flowType: 'FULL_RELEASE',
-  tailoring: {
-    architectureMode: undefined as string | undefined,
-    endGate: '',
-    skipActivities: [] as string[],
-    reason: ''
-  }
+  keepStages: ['concept', 'plan', 'develop', 'qualify', 'launch', 'lifecycle'] as string[],
+  keepGates: ['CDCP', 'PDCP', 'ADCP'] as string[],
+  architectureMode: undefined as string | undefined,
+  reason: ''
 })
-const skipActivitiesText = computed({
-  get: () => form.tailoring.skipActivities.join(','),
-  set: (v: string) => { form.tailoring.skipActivities = v.split(/[,，]/).map(s => s.trim()).filter(Boolean) }
+// 裁剪 UI（keepStages/keepGates）映射到后端 tailoring 契约：未保留的阶段/门禁 → skipActivities
+const tailoring = computed(() => {
+  const skipActivities = [
+    ...STAGES.filter(s => !s.fixed && !form.keepStages.includes(s.key)).map(s => s.key),
+    ...GATES.filter(g => !g.fixed && !form.keepGates.includes(g.key)).map(g => g.key)
+  ]
+  return {
+    architectureMode: form.architectureMode,
+    endGate: form.keepGates.length ? form.keepGates[form.keepGates.length - 1] : '',
+    skipActivities,
+    reason: form.reason
+  }
 })
 const projects = ref<Array<{ id: number; name: string }>>([])
 const versions = ref<Array<{ id: number; versionLabel: string }>>([])
@@ -194,7 +231,7 @@ const doPreflight = async () => {
       projectId: form.projectId,
       versionId: form.versionId,
       flowType: form.flowType,
-      tailoring: form.tailoring
+      tailoring: tailoring.value
     })
   } catch (e: any) {
     message.error('预检失败：' + (e?.message || ''))
@@ -210,7 +247,7 @@ const doCreate = async () => {
       projectId: form.projectId,
       versionId: form.versionId,
       flowType: form.flowType,
-      tailoring: form.tailoring
+      tailoring: tailoring.value
     })
     let started = false
     try {
@@ -238,6 +275,16 @@ onMounted(loadProjects)
 <style lang="scss" scoped>
 .start-wizard { padding: 0 4px; }
 .step-actions { margin-top: 16px; text-align: right; }
+.stage-gates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.form-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-top: 4px;
+}
 .preflight-box {
   padding: 12px;
   background: var(--el-fill-color-light);

@@ -11,26 +11,34 @@
 -->
 <template>
   <div class="spk-ipd-workbench" data-test="workbench-page">
-    <!-- 上下文头 + 三视图切换 -->
-    <el-card class="mb-10px" shadow="never">
-      <div class="flex flex-wrap items-center gap-12px">
-        <span class="font-600 text-16px">指挥工作台</span>
-        <el-select v-model="projectId" placeholder="全部项目" clearable filterable class="!w-200px"
-          @change="reload">
-          <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
-        </el-select>
-        <el-tag v-if="nextGate" type="warning" effect="plain">下一门禁：{{ nextGate }}</el-tag>
-        <el-radio-group v-model="view" size="small" data-test="view-switcher">
-          <el-radio-button value="tasks" data-test="view-tasks">任务</el-radio-button>
-          <el-radio-button value="command" data-test="view-command">指挥</el-radio-button>
-          <el-radio-button value="team" data-test="view-team">团队</el-radio-button>
-        </el-radio-group>
-        <el-button :loading="loading" @click="reload" type="primary" plain size="small">
-          <Icon icon="ep:refresh" class="mr-4px" />刷新
-        </el-button>
-        <span class="text-gray-400 text-12px ml-auto">更新于 {{ refreshedAt || '—' }}</span>
+    <!-- 上下文头 + 三视图切换（对齐原型 .wb-header：白底 border-bottom，h1+ctx-selects+seg-control+refresh） -->
+    <div class="wb-header">
+      <h1>指挥工作台</h1>
+      <div class="ctx-selects">
+        <div class="ctx-select">
+          <label>项目</label>
+          <el-select v-model="projectId" placeholder="全部项目" clearable filterable size="small"
+            class="!w-200px" @change="reload">
+            <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+        </div>
+        <el-tag v-if="nextGate" type="warning" effect="plain" size="small">下一门禁：{{ nextGate }}</el-tag>
       </div>
-    </el-card>
+      <div class="seg-control" data-test="view-switcher">
+        <button class="seg-btn" :class="{ active: view === 'tasks' }" data-test="view-tasks"
+          @click="view = 'tasks'">任务</button>
+        <button class="seg-btn" :class="{ active: view === 'command' }" data-test="view-command"
+          @click="view = 'command'">指挥</button>
+        <button class="seg-btn" :class="{ active: view === 'team' }" data-test="view-team"
+          @click="view = 'team'">团队</button>
+      </div>
+      <div class="ctx-refresh">
+        <span class="ts">{{ refreshedAt || '—' }}</span>
+        <button class="refresh-btn" :disabled="loading" @click="reload">
+          <Icon icon="ep:refresh" class="mr-4px" />刷新
+        </button>
+      </div>
+    </div>
 
     <!-- ============ 视图一 · 任务 ============ -->
     <div v-show="view === 'tasks'">
@@ -928,6 +936,84 @@ const copyText = (t?: string) => { if (t) { navigator.clipboard?.writeText(t); E
 <style scoped lang="scss">
 .spk-ipd-workbench {
   padding: 0 0 10px;
+}
+/* 顶部「指挥工作台」条（对齐原型 .wb-header） */
+.wb-header {
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-light);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+    white-space: nowrap;
+    margin: 0;
+  }
+  .ctx-selects {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: 8px;
+  }
+  .ctx-select {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    label {
+      color: var(--el-text-color-secondary);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+  }
+  .seg-control {
+    display: flex;
+    border: 1px solid var(--el-border-color);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-left: auto;
+  }
+  .seg-btn {
+    padding: 7px 22px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--el-text-color-regular);
+    background: var(--el-bg-color);
+    border: none;
+    border-right: 1px solid var(--el-border-color);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+    &:last-child { border-right: none; }
+    &:hover { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+    &.active { background: var(--el-color-primary); color: #fff; }
+  }
+  .ctx-refresh {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    .ts {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+    }
+    .refresh-btn {
+      display: inline-flex;
+      align-items: center;
+      background: none;
+      border: 1px solid var(--el-border-color);
+      border-radius: 4px;
+      padding: 4px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--el-text-color-regular);
+      font-family: inherit;
+      &:hover:not(:disabled) { color: var(--el-color-primary); border-color: var(--el-color-primary-light-5); }
+      &:disabled { opacity: 0.5; cursor: not-allowed; }
+    }
+  }
 }
 .stat-row, .member-grid {
   display: grid;

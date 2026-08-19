@@ -31,12 +31,13 @@
         <StartFlowWizard />
       </el-tab-pane>
 
-      <!-- ⑤ 流程模板配置（管理员：链接原生 BPM 引擎能力，不复制） -->
+      <!-- ⑤ 流程模板配置（嵌入 governance/flow-config 四 Tab：工作流模板/交付目录/阶段产物/skill 与环境；v3 能力全保留） -->
       <el-tab-pane name="template" lazy>
         <template #label><Icon class="mr-4px" icon="ep:set-up" />流程模板</template>
-        <div class="template-links">
-          <el-card shadow="never" class="mb-12px">
-            <div class="text-sm text-gray-500 mb-12px">流程模型编辑器与运行实例管理复用 RuoYi 原生 BPM 组件；SPK 流程档案校验通过后才出现在创建向导。v3 流程配置/skill 配置能力零丢失，入口下移至原生 BPM 管理页。</div>
+        <FlowConfig />
+        <div class="template-links mt-12px">
+          <el-card shadow="never">
+            <div class="text-sm text-gray-500 mb-8px">BPM 引擎高级管理（流程模型编辑/运行实例/业务表单/用户角色映射）—— 复用 RuoYi 原生 BPM，不复制引擎能力。</div>
             <div class="link-grid">
               <el-button type="primary" @click="goNative('/bpm/model')"><Icon icon="ep:set-up" class="mr-4px" />流程模型管理</el-button>
               <el-button @click="goNative('/bpm/instance')"><Icon icon="ep:document" class="mr-4px" />运行实例</el-button>
@@ -61,6 +62,7 @@ import ApprovalList from './ApprovalList.vue'
 import DecisionPackage from './DecisionPackage.vue'
 import FlowRunList from '../workflow/FlowRunList.vue'
 import StartFlowWizard from './StartFlowWizard.vue'
+import FlowConfig from '../governance/flow-config/index.vue'
 import type { SpkIpdApprovalTaskRespVO } from '@/api/spk/ipd/approval'
 
 defineOptions({ name: 'SpkIpdApproval' })
