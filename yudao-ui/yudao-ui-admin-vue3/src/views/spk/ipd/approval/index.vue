@@ -31,9 +31,9 @@
         <StartFlowWizard />
       </el-tab-pane>
 
-      <!-- ⑤ 流程模板配置（嵌入 governance/flow-config 四 Tab：工作流模板/交付目录/阶段产物/skill 与环境；v3 能力全保留） -->
+      <!-- ⑤ 流程管理（嵌入 governance/flow-config 合一卡片：工作流模板/交付目录/阶段规范(产物校验+skill环境合一)/全局skill配置；v3 能力全保留） -->
       <el-tab-pane name="template" lazy>
-        <template #label><Icon class="mr-4px" icon="ep:set-up" />流程模板</template>
+        <template #label><Icon class="mr-4px" icon="ep:set-up" />流程管理</template>
         <FlowConfig />
         <div class="template-links mt-12px">
           <el-card shadow="never">

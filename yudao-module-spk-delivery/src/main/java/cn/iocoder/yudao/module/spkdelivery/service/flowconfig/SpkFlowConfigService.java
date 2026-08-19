@@ -84,22 +84,32 @@ public class SpkFlowConfigService {
     }
 
     /**
-     * 行内保存 activity_def 的 skills / envRequirements（流程配置页 tab3/tab4 编辑）。
-     * 只更新这两个字段，其余不动。
+     * 行内保存 activity_def 的阶段规范字段（流程配置页合一卡片编辑）。
+     * 支持字段：skills / envRequirements / outputArtifactType / useIndependentVerifier /
+     * verifierType / executionLocation。只更新 body 中出现的字段，其余不动（MP non-null 策略）。
+     * useIndependentVerifier 为 Integer(0/1)，前端传 "0"/"1"。
      */
     @Transactional(rollbackFor = Exception.class)
-    public void updateActivityDefBindings(Long id, String skills, String envRequirements) {
+    public void updateActivityDefBindings(Long id, Map<String, String> body) {
         SpkIpdActivityDefDO def = activityDefMapper.selectById(id);
         if (def == null) {
             throw new IllegalArgumentException("Activity 定义不存在：id=" + id);
         }
         SpkIpdActivityDefDO update = new SpkIpdActivityDefDO();
         update.setId(id);
-        update.setSkills(skills);
-        update.setEnvRequirements(envRequirements);
+        // 字符串字段：containsKey 才更新（允许空串清空，null 不动）
+        if (body.containsKey("skills")) update.setSkills(body.get("skills"));
+        if (body.containsKey("envRequirements")) update.setEnvRequirements(body.get("envRequirements"));
+        if (body.containsKey("outputArtifactType")) update.setOutputArtifactType(body.get("outputArtifactType"));
+        if (body.containsKey("verifierType")) update.setVerifierType(body.get("verifierType"));
+        if (body.containsKey("executionLocation")) update.setExecutionLocation(body.get("executionLocation"));
+        // Integer 字段：useIndependentVerifier 0/1，空串→null(不验证)
+        if (body.containsKey("useIndependentVerifier")) {
+            String v = body.get("useIndependentVerifier");
+            update.setUseIndependentVerifier(v == null || v.isBlank() ? null : Integer.valueOf(v));
+        }
         activityDefMapper.updateById(update);
-        log.info("[updateActivityDefBindings][id={} skills={} envRequirements={} 已更新]",
-                id, skills, envRequirements);
+        log.info("[updateActivityDefBindings][id={} 字段已更新：{}]", id, body.keySet());
     }
 
     /**

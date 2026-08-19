@@ -46,8 +46,8 @@ export const getSnapshotSchema = (flowType: string) =>
 /** 流程配置聚合快照：Profile + activity_def 按 stage 分组 + skill 目录 + 目录模板 */
 export const getFlowConfigSnapshot = (flowType = 'FULL_RELEASE') =>
   request.get({ url: '/spk/ipd/admin/workflows/flow-config/snapshot', params: { flowType } })
-/** 行内保存 activity_def 的 skills / envRequirements */
-export const updateActivityDefBindings = (id: number, data: { skills?: string; envRequirements?: string }) =>
+/** 行内保存 activity_def 的阶段规范字段（skills/envRequirements/outputArtifactType/useIndependentVerifier/verifierType/executionLocation） */
+export const updateActivityDefBindings = (id: number, data: Record<string, string>) =>
   request.put({ url: `/spk/ipd/admin/workflows/flow-config/activity-def/${id}`, data })
 
 /** 改 skill 环境配置（skillsRoot / defaultEnv，Tab4 顶部配置块，DB 持久化即时生效） */
