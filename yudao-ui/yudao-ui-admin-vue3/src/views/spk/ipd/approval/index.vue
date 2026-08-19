@@ -1,99 +1,85 @@
 <!--
-  SPK-OS IPD 审批待办/已办（设计文档 §10.8 / §7.8 流程中心）
-  聚合 IPD 待办/已办，底层复用 BPM 待办/已办分页；列展示项目/版本/阶段/门禁/健康等业务摘要。
-  点「决策」打开右侧抽屉，加载 IpdDecisionPackage（§7.9）。
+  SPK-OS IPD「我的审批」（UCD v4 §4.7：审批中心 + 流程中心合并为单页五 Tab）
+  ① 待我审批 ② 已办/抄送 ③ 我的流程(FlowRunList) ④ 发起流程(StartFlowWizard 三步引导) ⑤ 流程模板配置(链接原生 BPM)
+  审批项底层复用 BPM 待办/已办分页；点「决策」打开右侧抽屉加载 DecisionPackage 六区（§7.9）。
+  全真实后端聚合，无任何写死数据。支持 ?tab=&type= 路由参数（供 workflow 重定向与其他页跳转）。
 -->
 <template>
-  <ContentWrap>
-    <el-form class="-mb-15px" :inline="true" :model="queryParams" label-width="80px">
-      <el-form-item label="类型">
-        <el-radio-group v-model="queryParams.type" @change="handleQuery">
-          <el-radio-button label="todo">待办</el-radio-button>
-          <el-radio-button label="done">已办</el-radio-button>
-        </el-radio-group>
-      </el-form-item>
-      <el-form-item label="任务名" prop="name">
-        <el-input v-model="queryParams.name" placeholder="任务名" clearable class="!w-200px" @keyup.enter="handleQuery" />
-      </el-form-item>
-      <el-form-item>
-        <el-button @click="handleQuery"><Icon icon="ep:search" class="mr-5px" />搜索</el-button>
-        <el-button @click="resetQuery"><Icon icon="ep:refresh" class="mr-5px" />重置</el-button>
-      </el-form-item>
-    </el-form>
-  </ContentWrap>
-  <ContentWrap>
-    <el-table v-loading="loading" :data="list">
-      <el-table-column label="任务名" prop="name" min-width="160" fixed="left" />
-      <el-table-column label="项目" prop="projectName" min-width="140" />
-      <el-table-column label="版本" prop="versionLabel" width="90" />
-      <el-table-column label="阶段" prop="currentStage" width="90" />
-      <el-table-column label="门禁" prop="currentGate" width="100" />
-      <el-table-column label="健康" width="90">
-        <template #default="{ row }">
-          <el-tag :type="healthTag(row.health)" size="small">{{ healthLabel(row.health) }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="审批人" prop="assigneeNickname" width="100" />
-      <el-table-column label="等待" width="90">
-        <template #default="{ row }">{{ formatWait(row.waitDurationMs) }}</template>
-      </el-table-column>
-      <el-table-column label="创建时间" prop="createTime" width="170" :formatter="dateFormatter" />
-      <el-table-column v-if="queryParams.type === 'done'" label="结束时间" prop="endTime" width="170" :formatter="dateFormatter" />
-      <el-table-column label="操作" fixed="right" width="160">
-        <template #default="{ row }">
-          <el-button v-if="queryParams.type === 'todo'" link type="primary" @click="openDecision(row)">决策</el-button>
-          <el-button v-else link type="info" @click="openDecision(row)">查看决策包</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-    <Pagination :total="total" v-model:page="queryParams.pageNo" v-model:limit="queryParams.pageSize" @pagination="getList" />
-  </ContentWrap>
+  <div class="spk-ipd-approval">
+    <el-tabs v-model="activeTab" type="border-card" @tab-change="onTabChange">
+      <!-- ① 待我审批 -->
+      <el-tab-pane name="todo">
+        <template #label><Icon class="mr-4px" icon="ep:bell" />待我审批 {{ todoCountBadge }}</template>
+        <ApprovalList :type="'todo'" ref="todoListRef" @update:total="(n:number) => todoCount = n" @open-decision="openDecision" />
+      </el-tab-pane>
 
-  <el-drawer v-model="drawerVisible" :title="drawerTitle" direction="rtl" size="78%" :destroy-on-close="true">
-    <DecisionPackage v-if="drawerVisible" :task-id="currentTaskId" @decided="onDecided" />
-  </el-drawer>
+      <!-- ② 已办/抄送 -->
+      <el-tab-pane name="done" lazy>
+        <template #label><Icon class="mr-4px" icon="ep:finished" />已办 / 抄送</template>
+        <ApprovalList :type="'done'" @open-decision="openDecision" />
+      </el-tab-pane>
+
+      <!-- ③ 我的流程 -->
+      <el-tab-pane name="runs" lazy>
+        <template #label><Icon class="mr-4px" icon="ep:list" />我的流程</template>
+        <FlowRunList />
+      </el-tab-pane>
+
+      <!-- ④ 发起流程 -->
+      <el-tab-pane name="start" lazy>
+        <template #label><Icon class="mr-4px" icon="ep:plus" />发起流程</template>
+        <StartFlowWizard />
+      </el-tab-pane>
+
+      <!-- ⑤ 流程模板配置（管理员：链接原生 BPM 引擎能力，不复制） -->
+      <el-tab-pane name="template" lazy>
+        <template #label><Icon class="mr-4px" icon="ep:set-up" />流程模板</template>
+        <div class="template-links">
+          <el-card shadow="never" class="mb-12px">
+            <div class="text-sm text-gray-500 mb-12px">流程模型编辑器与运行实例管理复用 RuoYi 原生 BPM 组件；SPK 流程档案校验通过后才出现在创建向导。v3 流程配置/skill 配置能力零丢失，入口下移至原生 BPM 管理页。</div>
+            <div class="link-grid">
+              <el-button type="primary" @click="goNative('/bpm/model')"><Icon icon="ep:set-up" class="mr-4px" />流程模型管理</el-button>
+              <el-button @click="goNative('/bpm/instance')"><Icon icon="ep:document" class="mr-4px" />运行实例</el-button>
+              <el-button @click="goNative('/bpm/form')"><Icon icon="ep:form" class="mr-4px" />业务表单</el-button>
+              <el-button @click="goNative('/bpm/user-group')"><Icon icon="ep:user" class="mr-4px" />用户/角色映射</el-button>
+            </div>
+          </el-card>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
+
+    <el-drawer v-model="drawerVisible" :title="drawerTitle" direction="rtl" size="80%" :destroy-on-close="true">
+      <DecisionPackage v-if="drawerVisible" :task-id="currentTaskId" @decided="onDecided" />
+    </el-drawer>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { dateFormatter } from '@/utils/formatTime'
-import * as ApprovalApi from '@/api/spk/ipd/approval'
-import type { SpkIpdApprovalTaskRespVO } from '@/api/spk/ipd/approval'
+import { ref, onMounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import ApprovalList from './ApprovalList.vue'
 import DecisionPackage from './DecisionPackage.vue'
-import { healthMap, labelText } from '@/views/spk/ipd/home/components/status'
+import FlowRunList from '../workflow/FlowRunList.vue'
+import StartFlowWizard from './StartFlowWizard.vue'
+import type { SpkIpdApprovalTaskRespVO } from '@/api/spk/ipd/approval'
 
 defineOptions({ name: 'SpkIpdApproval' })
 
-const loading = ref(true)
-const total = ref(0)
-const list = ref<SpkIpdApprovalTaskRespVO[]>([])
-const queryParams = reactive({
-  pageNo: 1,
-  pageSize: 10,
-  type: 'todo',
-  name: '',
-  processDefinitionKey: 'spkIpdFlow'
-})
+const route = useRoute()
+const router = useRouter()
+const message = useMessage()
 
-const getList = async () => {
-  loading.value = true
-  try {
-    const data = await ApprovalApi.pageApprovalTasks(queryParams)
-    list.value = data.list
-    total.value = data.total
-  } finally {
-    loading.value = false
-  }
-}
-const handleQuery = () => {
-  queryParams.pageNo = 1
-  getList()
-}
-const resetQuery = () => {
-  queryParams.name = ''
-  handleQuery()
+// Tab 由路由 ?tab= 驱动（默认 todo）；支持 ?type=done 跳已办（workflow 重定向兼容）
+const activeTab = ref<string>((route.query.tab as string) || (route.query.type as string) || 'todo')
+const todoListRef = ref<InstanceType<typeof ApprovalList> | null>(null)
+const todoCount = ref(0)
+const todoCountBadge = computed(() => (todoCount.value ? `(${todoCount.value})` : ''))
+
+const onTabChange = (name: string | number) => {
+  router.replace({ path: route.path, query: { ...route.query, tab: String(name) } })
 }
 
+// 决策包抽屉
 const drawerVisible = ref(false)
 const drawerTitle = ref('')
 const currentTaskId = ref('')
@@ -103,18 +89,24 @@ const openDecision = (row: SpkIpdApprovalTaskRespVO) => {
   drawerVisible.value = true
 }
 const onDecided = () => {
-  // 决策后刷新列表（待办项可能消失）
-  getList()
+  message.success('决策已提交')
+  drawerVisible.value = false
+  // 决策后刷新当前 Tab 列表（待办项可能消失/已办项新增）
+  if (activeTab.value === 'todo') todoListRef.value?.refresh?.()
 }
 
-const healthTag = (h?: string) => (h === 'GOOD' ? 'success' : h === 'WARN' ? 'warning' : h === 'CRITICAL' ? 'danger' : 'info')
-const healthLabel = (s?: string) => labelText(healthMap, s)
-const formatWait = (ms?: number) => {
-  if (!ms || ms <= 0) return '-'
-  const h = Math.floor(ms / 3600000)
-  const m = Math.floor((ms % 3600000) / 60000)
-  return h > 0 ? `${h}h${m}m` : `${m}m`
-}
+const goNative = (path: string) => router.push(path)
 
-onMounted(getList)
+onMounted(() => {})
 </script>
+
+<style lang="scss" scoped>
+.spk-ipd-approval {
+  :deep(.el-tabs__content) { padding-top: 0; }
+}
+.template-links .link-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+</style>
