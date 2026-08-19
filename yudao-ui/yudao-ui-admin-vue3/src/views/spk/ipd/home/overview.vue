@@ -84,7 +84,7 @@
       <div class="spk-card">
         <div class="spk-card__header">
           <div class="spk-card__title">项目 × 阶段 健康度矩阵</div>
-          <router-link :to="{ name: 'SpkIpdHome', query: { view: 'monitor' } }" class="spk-card__link">打开运行监控 →</router-link>
+          <router-link :to="{ name: 'SpkIpdMonitor' }" class="spk-card__link">打开监控与证据 →</router-link>
         </div>
         <div class="spk-card__body spk-card__body--flush">
           <el-empty v-if="!matrixRows.length" description="暂无健康度数据" :image-size="50" />
@@ -181,6 +181,7 @@ import SpkBadge from './components/SpkBadge.vue'
 import SpkActionItem from './components/SpkActionItem.vue'
 import SpkFreshness from './components/SpkFreshness.vue'
 import { healthMap, statusMap, flowTypeMap, labelText } from './components/status'
+import { useOverviewData } from './composables/useOverviewData'
 
 defineOptions({ name: 'SpkIpdHomeOverview' })
 
@@ -188,7 +189,8 @@ const STAGES = ['概念', '计划', '开发', '验证', '发布', '生命周期'
 const message = useMessage()
 const { push } = useRouter()
 const loading = ref(true)
-const data = ref<IpdBusinessApi.SpkIpdOverviewVO>({})
+// 与 shell 行动引导条同源（§4.1）：共享 useOverviewData 单例，避免双取 getOverview()
+const { data, load: loadOverview } = useOverviewData()
 const integrations = ref<IpdBusinessApi.SpkIpdMonitorIntegration[]>([])
 
 const totalOf = (m?: Record<string, number>) => (m ? Object.values(m).reduce((a, b) => a + b, 0) : 0)
@@ -222,7 +224,7 @@ const attCount = computed(() => att.value.length)
 const attentionTop = computed(() => att.value.slice(0, 5))
 const onAct = (item: IpdBusinessApi.SpkIpdOverviewAttentionItem) => {
   if (item.type === 'BLOCKED_FLOW' || item.type === 'PENDING_DECISION') {
-    push({ name: 'SpkIpdHome', query: { view: 'monitor' } })
+    push({ name: 'SpkIpdMonitor' })
   } else if (item.refId) {
     push({ name: 'SpkIpdProjectDetail', query: { projectId: item.refId } })
   } else {
@@ -290,11 +292,12 @@ const eventColor = (e: any) => {
 const load = async () => {
   loading.value = true
   try {
-    const [ov, mon] = await Promise.all([
-      IpdBusinessApi.getOverview(),
-      IpdBusinessApi.getMonitor().catch(() => ({}))
+    // getOverview() 走共享 composable（TTL 软缓存，shell 已取则命中不重复请求）；
+    // getMonitor() 仅此视图需要（集成健康），独立取。
+    const [mon] = await Promise.all([
+      IpdBusinessApi.getMonitor().catch(() => ({})),
+      loadOverview()
     ])
-    data.value = (ov || {}) as IpdBusinessApi.SpkIpdOverviewVO
     integrations.value = ((mon as any)?.integrations) || []
   } catch (e: any) {
     if (e?.message) message.error(e.message)

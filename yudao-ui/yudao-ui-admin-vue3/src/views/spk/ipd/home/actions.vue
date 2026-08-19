@@ -162,10 +162,10 @@ const briefing = computed(() => {
     out.push({ focus: '今日焦点', text: `有 ${approvals.length} 项审批/决策待你处理，最紧迫：${approvals[0].title}`, to: { name: 'SpkIpdApproval' } })
   }
   if (blocked.length) {
-    out.push({ focus: '风险', text: `${blocked.length} 项阻断/失败需介入：${blocked[0].title}`, to: { name: 'SpkIpdHome', query: { view: 'monitor' } } })
+    out.push({ focus: '风险', text: `${blocked.length} 项阻断/失败需介入：${blocked[0].title}`, to: { name: 'SpkIpdMonitor' } })
   }
   if (context.value?.nextGate) {
-    out.push({ focus: '即将到期', text: `下一门禁 ${context.value.nextGate} 即将到期`, to: { name: 'SpkIpdHome', query: { view: 'monitor' } } })
+    out.push({ focus: '即将到期', text: `下一门禁 ${context.value.nextGate} 即将到期`, to: { name: 'SpkIpdMonitor' } })
   }
   return out
 })
@@ -232,7 +232,7 @@ const onInboxAct = (item: WorkbenchInboxItem) => {
   if (item.action === 'APPROVE' || item.type === 'MY_TODO') {
     push({ name: 'SpkIpdApproval' })
   } else if (item.flowRunId) {
-    push({ name: 'SpkIpdHome', query: { view: 'monitor' } })
+    push({ name: 'SpkIpdMonitor' })
   }
 }
 
