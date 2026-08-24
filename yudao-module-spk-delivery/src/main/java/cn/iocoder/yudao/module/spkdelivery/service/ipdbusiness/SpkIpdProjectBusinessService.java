@@ -18,6 +18,8 @@ import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdFlowRunMa
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdMajorReleaseMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdProjectMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdVersionMapper;
+import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkGiteaIntegrationService;
+import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkPlaneIntegrationService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -57,6 +59,10 @@ public class SpkIpdProjectBusinessService {
     private SpkIpdVersionMapper versionMapper;
     @Resource
     private SpkIpdFlowRunMapper flowRunMapper;
+    @Resource
+    private SpkPlaneIntegrationService planeIntegrationService;
+    @Resource
+    private SpkGiteaIntegrationService giteaIntegrationService;
 
     // ==================== 项目 ====================
 
@@ -71,6 +77,7 @@ public class SpkIpdProjectBusinessService {
                 .description(req.getDescription())
                 .objective(req.getObjective())
                 .ownerUserId(req.getOwnerUserId())
+                .deliveryRoot(req.getDeliveryRoot())
                 .status("DRAFT")
                 .health(HEALTH_UNKNOWN)
                 .plannedStartAt(req.getPlannedStartAt())
@@ -90,7 +97,8 @@ public class SpkIpdProjectBusinessService {
         if (!"DRAFT".equals(project.getStatus())) {
             throw exception(IPD_PROJECT_NOT_DRAFT);
         }
-        copyNonNull(req, project, "name", "description", "objective", "ownerUserId", "plannedStartAt", "plannedEndAt");
+        copyNonNull(req, project, "name", "description", "objective", "ownerUserId", "deliveryRoot",
+                "plannedStartAt", "plannedEndAt");
         project.setLockVersion(req.getLockVersion());
         projectMapper.updateById(project);
         return project;
@@ -336,8 +344,8 @@ public class SpkIpdProjectBusinessService {
 
     /**
      * 版本启动就绪度。设计文档 section 10.3 /ready、section 10.5 preflight。
-     * checks 逐项可解释：PASS/WARN/BLOCK。S1 实现：版本范围、负责人、流程类型兼容、无活跃流。
-     * 外部绑定（Plane/Gitea）在 S2/S4 接入前返回 WARN，不阻断。
+     * checks 逐项可解释：PASS/WARN/BLOCK。版本范围、负责人、无活跃流和
+     * Plane/Gitea 外部交付链均必须在启动前通过。
      */
     public SpkIpdReadinessRespVO readiness(Long versionId) {
         SpkIpdVersionDO version = getVersionOrThrow(versionId);
@@ -370,17 +378,33 @@ public class SpkIpdProjectBusinessService {
         if (!activeOk) ready = false;
         checks.add(active);
 
-        // 外部绑定：S1 暂不接入，WARN 不阻断
-        SpkIpdReadinessRespVO.Check binding = new SpkIpdReadinessRespVO.Check();
-        binding.setCode("PLANE_BINDING");
-        binding.setStatus("WARN");
-        binding.setMessage("Plane/Gitea 绑定校验将在 S2/S4 接入");
-        checks.add(binding);
+        SpkIpdReadinessRespVO.Check plane = integrationCheck(
+                "PLANE_BINDING", "Plane 项目绑定可用", "Plane 项目绑定不可用",
+                "OPEN_PROJECT_INTEGRATIONS", planeIntegrationService.healthCheck());
+        checks.add(plane);
+        if (!"PASS".equals(plane.getStatus())) ready = false;
+
+        SpkIpdReadinessRespVO.Check gitea = integrationCheck(
+                "GITEA_BINDING", "Gitea 仓库绑定可用", "Gitea 仓库绑定不可用",
+                "OPEN_PROJECT_INTEGRATIONS", giteaIntegrationService.healthCheck());
+        checks.add(gitea);
+        if (!"PASS".equals(gitea.getStatus())) ready = false;
 
         resp.setReady(ready);
         resp.setChecks(checks);
         resp.setEffectiveStages(effectiveStages(version.getVersionType()));
         return resp;
+    }
+
+    private SpkIpdReadinessRespVO.Check integrationCheck(String code, String passMessage,
+                                                           String blockMessage, String action,
+                                                           boolean healthy) {
+        SpkIpdReadinessRespVO.Check check = new SpkIpdReadinessRespVO.Check();
+        check.setCode(code);
+        check.setStatus(healthy ? "PASS" : "BLOCK");
+        check.setMessage(healthy ? passMessage : blockMessage);
+        check.setAction(healthy ? null : action);
+        return check;
     }
 
     /**
@@ -460,5 +484,3 @@ public class SpkIpdProjectBusinessService {
         }
     }
 }
-
-

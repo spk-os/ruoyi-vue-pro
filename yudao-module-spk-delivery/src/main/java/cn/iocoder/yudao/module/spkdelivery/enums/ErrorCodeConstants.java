@@ -16,6 +16,9 @@ public interface ErrorCodeConstants {
     ErrorCode AGENT_TASK_ALREADY_DONE = new ErrorCode(1_050_100_003, "Agent 任务已结束，不可重复回调");
     ErrorCode AGENT_ROLE_NOT_EXISTS = new ErrorCode(1_050_100_004, "Agent 角色不存在");
     ErrorCode AGENT_RUNTIME_UNAVAILABLE = new ErrorCode(1_050_100_005, "Agent 运行时不可用");
+    ErrorCode AGENT_RECOVERY_REASON_REQUIRED = new ErrorCode(1_050_100_006, "基础设施恢复必须填写修复原因");
+    ErrorCode AGENT_RECOVERY_STATE_INVALID = new ErrorCode(1_050_100_007, "仅 BLOCKED FlowRun 可执行基础设施恢复");
+    ErrorCode AGENT_RECOVERY_WAIT_STATE_MISSING = new ErrorCode(1_050_100_008, "基础设施恢复失败：流程未停留在预期 receiveTask");
 
     // ========== 门禁 G1-G8 / TR（1-050-101-000） ==========
     ErrorCode GATE_RECORD_NOT_EXISTS = new ErrorCode(1_050_101_000, "门禁记录不存在");

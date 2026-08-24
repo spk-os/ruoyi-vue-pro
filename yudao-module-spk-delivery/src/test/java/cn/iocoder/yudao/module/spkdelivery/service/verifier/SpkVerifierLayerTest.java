@@ -1,16 +1,28 @@
 package cn.iocoder.yudao.module.spkdelivery.service.verifier;
 
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
+import cn.iocoder.yudao.module.spkdelivery.service.agent.SpkAgentDispatchReq;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.evidence.SpkVerificationReceiptDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.artifact.SpkArtifactManifestDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agentdef.SpkAgentDefDO;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
+import org.flowable.engine.RuntimeService;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * SpkVerifierService 三层校验之 Layer 1（结构）/ Layer 2（验收）纯单元测试。
@@ -82,6 +94,43 @@ class SpkVerifierLayerTest {
     }
 
     @Test
+    void layer1_projectPlanRejectsSummaryOnlyRequirementInsteadOfExecutableSpecs() throws Exception {
+        JsonNode schema = loadScript("project-plan", "schema.json");
+        JsonNode instance = JsonUtils.parseTree("""
+                {
+                  "plan_id":"plan-1","version":"1.0","created_at":"2026-08-22","created_by":"agent",
+                  "requirements":[{
+                    "requirementId":"REQ-01","name":"执行层重建","description":"摘要","level":"P0",
+                    "test_specification":"单行测试摘要","completion_definition":"完成"
+                  }],
+                  "specifications":{"architecture":"单行架构摘要"},
+                  "rtm":[],"wbs":[],"milestones":[],"resource_matrix":[],"critical_path":[],
+                  "risk_register":[],"environment":{},
+                  "plane_sync":{"status":"planned","gitea_project":"org/project"},
+                  "tr2_pdcp_criteria":{"entry":[],"exit":[],"fail_conditions":[]},
+                  "sources":[],"evidence":[]
+                }
+                """);
+
+        List<String> errors = SpkJsonSchemaValidator.validate(schema, instance);
+
+        assertTrue(errors.stream().anyMatch(e -> e.contains("/requirements/0/objective")),
+                "每条需求必须有目标，不能只给摘要");
+        assertTrue(errors.stream().anyMatch(e -> e.contains("/requirements/0/acceptance_criteria")),
+                "每条需求必须有结构化验收标准");
+        assertTrue(errors.stream().anyMatch(e -> e.contains("/requirements/0/development_specification")),
+                "每条需求必须有可执行开发规格");
+        assertTrue(errors.stream().anyMatch(e -> e.contains("/requirements/0/test_specification")
+                        && e.contains("类型应为 object")),
+                "测试规格必须是结构化用例而不是单行字符串");
+        assertTrue(errors.stream().anyMatch(e -> e.contains("/specifications/architecture")
+                        && e.contains("类型应为 object")),
+                "阶段规格必须是结构化对象而不是单行字符串");
+        assertTrue(errors.stream().anyMatch(e -> e.contains("/plane_sync/issue_mappings")),
+                "Plane 同步必须保留 REQ 到 issue 的映射");
+    }
+
+    @Test
     void layer2_validArtifact_passesFailSeverityRules() throws Exception {
         JsonNode acceptance = loadScript("customer-need-brief", "acceptance.json");
         JsonNode instance = JsonUtils.parseTree(VALID);
@@ -112,18 +161,126 @@ class SpkVerifierLayerTest {
     }
 
     @Test
-    void layer2_validArtifact_signoffConditional_triggersConditional() throws Exception {
-        // 合法产物无 signed_by → signoff_complete(conditional) 应未通过（属 conditional 非 fail）
+    void layer2_acceptanceDoesNotRequireHumanSignoffBeforeDcp() throws Exception {
+        // Agent/Verifier 只提交待审产物；signed_by 由后续 DCP 人工审批生成，不能成为前置验收条件。
         JsonNode acceptance = loadScript("customer-need-brief", "acceptance.json");
-        JsonNode instance = JsonUtils.parseTree(VALID);
         JsonNode rules = acceptance.path("rules");
-        boolean signoffConditionalViolated = false;
+        boolean containsPrematureSignoffRule = false;
         for (JsonNode rule : rules) {
-            SpkAcceptanceRuleEngine.Result r = SpkAcceptanceRuleEngine.evaluate(rule, instance);
-            if ("signoff_complete".equals(r.id) && !r.passed && !r.isFail()) {
-                signoffConditionalViolated = true;
+            if ("signoff_complete".equals(rule.path("id").asText())) {
+                containsPrematureSignoffRule = true;
             }
         }
-        assertTrue(signoffConditionalViolated, "无签署须触发 signoff_complete conditional 规则");
+        assertFalse(containsPrematureSignoffRule, "DCP 前的验收规则不得要求人工签署");
+    }
+
+    @Test
+    void layer3_narrativeWrappedJson_preservesPassVerdict() throws Exception {
+        Object verdict = parseVerdict("所有关键证据声明已通过独立源码复算验证。\n\n"
+                + "{\"overall\":\"PASS\",\"summary\":\"证据链完整\","
+                + "\"evidencePoints\":[{\"point\":\"REQ-01\",\"verdict\":\"Confirmed\"}]}");
+
+        assertEquals("PASS", field(verdict, "conclusion"));
+        assertEquals("证据链完整", field(verdict, "summary"));
+        assertTrue(field(verdict, "pointsJson").contains("REQ-01"));
+    }
+
+    @Test
+    void layer3_nonJson_keepsFailClosedConditional() throws Exception {
+        Object verdict = parseVerdict("验证通过，但没有返回约定 JSON");
+
+        assertEquals("CONDITIONAL", field(verdict, "conclusion"));
+    }
+
+    @Test
+    void verifierInheritsFrozenCommercialFlowProjectContext() throws Exception {
+        RuntimeService runtimeService = mock(RuntimeService.class);
+        when(runtimeService.getVariable("process-1", "projectId")).thenReturn(40L);
+        when(runtimeService.getVariable("process-1", "versionId")).thenReturn("38");
+        when(runtimeService.getVariable("process-1", "projectRoot"))
+                .thenReturn("/work/SPK-OS/dev/spk-infomation");
+        SpkVerifierService service = serviceWithRuntime(runtimeService);
+
+        SpkAgentDispatchReq req = service.inheritFlowProjectContext(
+                new SpkAgentDispatchReq().setNodeKey("verify:artifact-1"),
+                "process-1", "commercial-release");
+
+        assertEquals(40L, req.getProjectId());
+        assertEquals(38L, req.getVersionId());
+        assertEquals("/work/SPK-OS/dev/spk-infomation", req.getWorkspace());
+    }
+
+    @Test
+    void verifierRejectsMissingCommercialFlowProjectContext() throws Exception {
+        SpkVerifierService service = serviceWithRuntime(mock(RuntimeService.class));
+
+        assertThrows(IllegalStateException.class, () -> service.inheritFlowProjectContext(
+                new SpkAgentDispatchReq().setNodeKey("verify:artifact-1"),
+                "process-1", "commercial-release"));
+    }
+
+    @Test
+    void reusesOnlySignedPassReceiptForSameArtifactRunAndVerifier() {
+        SpkVerificationReceiptDO pass = SpkVerificationReceiptDO.builder()
+                .receiptId("vrf-pass").verifierId(15L).activityRunId("run-1")
+                .overallConclusion("PASS").signedAt(LocalDateTime.now()).build();
+        SpkVerificationReceiptDO error = SpkVerificationReceiptDO.builder()
+                .receiptId("vrf-error").verifierId(15L).activityRunId("run-1")
+                .overallConclusion("ERROR").signedAt(LocalDateTime.now().plusSeconds(1)).build();
+
+        assertEquals("vrf-pass", SpkVerifierService.selectReusablePassReceipt(
+                List.of(pass, error), 15L, "run-1").getReceiptId());
+        assertEquals(null, SpkVerifierService.selectReusablePassReceipt(
+                List.of(pass), 15L, "run-2"));
+    }
+
+    @Test
+    void deterministicFailSkipsSlowSemanticAgent() {
+        SpkAcceptanceRuleEngine.Result failedRule = new SpkAcceptanceRuleEngine.Result();
+        failedRule.severity = "fail";
+        failedRule.passed = false;
+
+        assertTrue(SpkVerifierService.shouldSkipSemantic(
+                List.of("/plan_id 缺少必填字段"), List.of()));
+        assertTrue(SpkVerifierService.shouldSkipSemantic(List.of(), List.of(failedRule)));
+        assertFalse(SpkVerifierService.shouldSkipSemantic(List.of(), List.of()));
+    }
+
+    @Test
+    void projectPlanVerifierUnderstandsFutureDeliverablesAreNotSourceEvidence() throws Exception {
+        SpkVerifierService service = new SpkVerifierService();
+        Method method = SpkVerifierService.class.getDeclaredMethod("buildVerifyPrompt",
+                SpkAgentDefDO.class, SpkArtifactManifestDO.class, String.class);
+        method.setAccessible(true);
+        String prompt = (String) method.invoke(service,
+                SpkAgentDefDO.builder().name("独立验证员").build(),
+                SpkArtifactManifestDO.builder().artifactType("project-plan").summary("计划").build(),
+                "{\"plan_id\":\"plan-1\"}");
+
+        assertTrue(prompt.contains("计划阶段尚未进入开发"));
+        assertTrue(prompt.contains("未来交付物"));
+        assertTrue(prompt.contains("不得因其当前不存在而判 FAIL"));
+        assertTrue(prompt.contains("权威来源证据"));
+    }
+
+    private static Object parseVerdict(String result) throws Exception {
+        SpkVerifierService service = new SpkVerifierService();
+        Method method = SpkVerifierService.class.getDeclaredMethod("parseVerdict", String.class);
+        method.setAccessible(true);
+        return method.invoke(service, result);
+    }
+
+    private static String field(Object target, String name) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return (String) field.get(target);
+    }
+
+    private static SpkVerifierService serviceWithRuntime(RuntimeService runtimeService) throws Exception {
+        SpkVerifierService service = new SpkVerifierService();
+        Field field = SpkVerifierService.class.getDeclaredField("runtimeService");
+        field.setAccessible(true);
+        field.set(service, runtimeService);
+        return service;
     }
 }

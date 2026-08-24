@@ -27,8 +27,8 @@ import java.util.Objects;
  * 把 {@code overallConclusion}（PASS/FAIL/CONDITIONAL）与 {@code summary} 写回流程变量
  * {@code verificationConclusion} / {@code verificationSummary}，供后续 exclusiveGateway 分支决策。
  *
- * <p><b>幂等/降级</b>：activityRunId/产物/verifier 任一缺失则写 CONCLUSION=SKIP 并记日志，
- * 不阻断流程（sub-process 部署态非活流程时常见，安全 no-op）。
+ * <p><b>Fail-closed</b>：activityRunId/产物/verifier 任一缺失均写 CONCLUSION=FAIL，
+ * 让后续网关进入失败/人审路径；不可把系统错误伪装成 SKIP 后放行。
  *
  * @author SPK-OS
  */
@@ -56,31 +56,31 @@ public class SpkVerifierDelegate implements JavaDelegate {
         // 取本实例最近一次合同（即上一节点的产物所属 ActivityRun）
         SpkTaskContractDO contract = latestContract(instanceId);
         if (contract == null || contract.getActivityRunId() == null) {
-            log.warn("[execute][无 ActivityRun 可核证 instanceId={} verifierType={}，写 SKIP]",
+            log.warn("[execute][无 ActivityRun 可核证 instanceId={} verifierType={}，写 FAIL]",
                     instanceId, verifierType);
-            execution.setVariable(VAR_VERIFICATION_CONCLUSION, "SKIP");
-            execution.setVariable(VAR_VERIFICATION_SUMMARY, "无前置 ActivityRun，跳过核证");
+            execution.setVariable(VAR_VERIFICATION_CONCLUSION, "FAIL");
+            execution.setVariable(VAR_VERIFICATION_SUMMARY, "无前置 ActivityRun，核证失败");
             return;
         }
         List<SpkArtifactManifestDO> arts = artifactMapper.selectListByActivityRunId(contract.getActivityRunId());
         if (arts == null || arts.isEmpty()) {
-            log.warn("[execute][无产物可核证 activityRunId={}，写 SKIP]", contract.getActivityRunId());
-            execution.setVariable(VAR_VERIFICATION_CONCLUSION, "SKIP");
-            execution.setVariable(VAR_VERIFICATION_SUMMARY, "无前置产物，跳过核证");
+            log.warn("[execute][无产物可核证 activityRunId={}，写 FAIL]", contract.getActivityRunId());
+            execution.setVariable(VAR_VERIFICATION_CONCLUSION, "FAIL");
+            execution.setVariable(VAR_VERIFICATION_SUMMARY, "无前置产物，核证失败");
             return;
         }
         SpkArtifactManifestDO artifact = arts.get(arts.size() - 1);
         SpkAgentDefDO verifier = pickVerifier(verifierType, contract);
         if (verifier == null) {
-            log.warn("[execute][无可用 verifier verifierType={}，写 SKIP]", verifierType);
-            execution.setVariable(VAR_VERIFICATION_CONCLUSION, "SKIP");
-            execution.setVariable(VAR_VERIFICATION_SUMMARY, "无 verifier 角色匹配，跳过核证");
+            log.warn("[execute][无可用 verifier verifierType={}，写 FAIL]", verifierType);
+            execution.setVariable(VAR_VERIFICATION_CONCLUSION, "FAIL");
+            execution.setVariable(VAR_VERIFICATION_SUMMARY, "无 verifier 角色匹配，核证失败");
             return;
         }
         SpkVerificationReceiptDO receipt = verifierService.verify(verifier, artifact,
                 contract.getActivityRunId(), instanceId);
         String conclusion = receipt != null && receipt.getOverallConclusion() != null
-                ? receipt.getOverallConclusion() : "CONDITIONAL";
+                ? receipt.getOverallConclusion() : "FAIL";
         String summary = receipt != null ? receipt.getSummary() : "";
         execution.setVariable(VAR_VERIFICATION_CONCLUSION, conclusion);
         execution.setVariable(VAR_VERIFICATION_SUMMARY, summary);

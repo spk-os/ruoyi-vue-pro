@@ -72,6 +72,13 @@ public final class SpkIpdBusinessConstants {
     public static final String VAR_TRACE_ID = "traceId";
     public static final String VAR_BUSINESS_KEY = "businessKey";
     public static final String VAR_PROJECT_NAME = "projectName";
+    public static final String VAR_PROJECT_CODE = "projectCode";
+    public static final String VAR_PROJECT_DESCRIPTION = "projectDescription";
+    public static final String VAR_PROJECT_OBJECTIVE = "projectObjective";
+    public static final String VAR_PROJECT_ROOT = "projectRoot";
+    public static final String VAR_VERSION_NO = "versionNo";
+    public static final String VAR_VERSION_OBJECTIVE = "versionObjective";
+    public static final String VAR_VERSION_SCOPE = "versionScope";
 
     // ---------- 命令类型 ----------
     public static final String CMD_START_FLOW = "START_FLOW";

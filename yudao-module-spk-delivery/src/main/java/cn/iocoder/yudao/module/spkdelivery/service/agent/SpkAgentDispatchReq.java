@@ -51,13 +51,28 @@ public class SpkAgentDispatchReq {
     private Long projectId;
     /** 版本 id（workspace 隔离路径分段） */
     private Long versionId;
+    /**
+     * 项目实际工作区绝对路径。治理 FlowRun 启动时解析并冻结，Omnigent→Claude Code
+     * 必须直接在该目录执行；为空时才使用历史的按 run 隔离产物目录。
+     */
+    private String workspace;
     /** 执行模式 local/omnigent（按 lead.mode 决定走哪个 adapter；与 executionLocation 正交） */
     private String mode;
     /** Omnigent 侧 agent-id（mode=omnigent 时 OmnigentAdapter 用此值，空回退全局配置） */
     private String omnigentAgentId;
+    /**
+     * Cortex Agent 定义中冻结的模型标识。显式 Omnigent 路由必须把该值作为
+     * model_override 传入会话，禁止由 Claude Code/Omnigent 静默选择默认模型。
+     */
+    private String model;
     /** def 快照（stage/outputArtifactType/prompt 等，adapter 可选读，避免耦合 ActivityDef） */
     private String stage;
     private String outputArtifactType;
+    /**
+     * Cortex 为本次 ActivityRun 冻结的唯一主产物文件。Omnigent Agent 必须写入该绝对路径，
+     * Adapter 在会话终态后按精确路径读取并校验，禁止把过程性 assistant 文本登记为产物。
+     */
+    private String outputFile;
 
     // ===== 节点 skill 绑定（Phase1 G：prompt 注入 skill 指令最小闭环） =====
 

@@ -7,6 +7,7 @@ import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdProc
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdactivity.SpkIpdActivityDefMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdProcessProfileMapper;
 import cn.iocoder.yudao.module.spkdelivery.service.delivery.DeliveryPathResolver;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -85,7 +86,7 @@ public class SpkFlowConfigService {
 
     /**
      * 行内保存 activity_def 的阶段规范字段（流程配置页合一卡片编辑）。
-     * 支持字段：skills / envRequirements / outputArtifactType / useIndependentVerifier /
+     * 支持字段：skills / envRequirements / outputArtifactType / useWorkerAgent / useIndependentVerifier /
      * verifierType / executionLocation。只更新 body 中出现的字段，其余不动（MP non-null 策略）。
      * useIndependentVerifier 为 Integer(0/1)，前端传 "0"/"1"。
      */
@@ -95,21 +96,65 @@ public class SpkFlowConfigService {
         if (def == null) {
             throw new IllegalArgumentException("Activity 定义不存在：id=" + id);
         }
-        SpkIpdActivityDefDO update = new SpkIpdActivityDefDO();
-        update.setId(id);
+        LambdaUpdateWrapper<SpkIpdActivityDefDO> update = new LambdaUpdateWrapper<>();
+        update.eq(SpkIpdActivityDefDO::getId, id);
+        boolean changed = false;
         // 字符串字段：containsKey 才更新（允许空串清空，null 不动）
-        if (body.containsKey("skills")) update.setSkills(body.get("skills"));
-        if (body.containsKey("envRequirements")) update.setEnvRequirements(body.get("envRequirements"));
-        if (body.containsKey("outputArtifactType")) update.setOutputArtifactType(body.get("outputArtifactType"));
-        if (body.containsKey("verifierType")) update.setVerifierType(body.get("verifierType"));
-        if (body.containsKey("executionLocation")) update.setExecutionLocation(body.get("executionLocation"));
-        // Integer 字段：useIndependentVerifier 0/1，空串→null(不验证)
-        if (body.containsKey("useIndependentVerifier")) {
-            String v = body.get("useIndependentVerifier");
-            update.setUseIndependentVerifier(v == null || v.isBlank() ? null : Integer.valueOf(v));
+        if (body.containsKey("skills")) {
+            update.set(SpkIpdActivityDefDO::getSkills, body.get("skills"));
+            changed = true;
         }
-        activityDefMapper.updateById(update);
+        if (body.containsKey("envRequirements")) {
+            update.set(SpkIpdActivityDefDO::getEnvRequirements, body.get("envRequirements"));
+            changed = true;
+        }
+        if (body.containsKey("outputArtifactType")) {
+            update.set(SpkIpdActivityDefDO::getOutputArtifactType, body.get("outputArtifactType"));
+            changed = true;
+        }
+        if (body.containsKey("verifierType")) {
+            update.set(SpkIpdActivityDefDO::getVerifierType, body.get("verifierType"));
+            changed = true;
+        }
+        if (body.containsKey("executionLocation")) {
+            update.set(SpkIpdActivityDefDO::getExecutionLocation, body.get("executionLocation"));
+            changed = true;
+        }
+        // Integer 字段必须显式 SET；旧 updateById 受全局 field-strategy 影响会静默忽略开关。
+        if (body.containsKey("useWorkerAgent")) {
+            update.set(SpkIpdActivityDefDO::getUseWorkerAgent,
+                    parseBinaryFlag("useWorkerAgent", body.get("useWorkerAgent")));
+            changed = true;
+        }
+        if (body.containsKey("useIndependentVerifier")) {
+            update.set(SpkIpdActivityDefDO::getUseIndependentVerifier,
+                    parseBinaryFlag("useIndependentVerifier", body.get("useIndependentVerifier")));
+            changed = true;
+        }
+        if (!changed) {
+            throw new IllegalArgumentException("没有可更新的 Activity 配置字段");
+        }
+        int updated = activityDefMapper.update(null, update);
+        if (updated != 1) {
+            throw new IllegalStateException("Activity 配置未落库：id=" + id + ", affectedRows=" + updated);
+        }
         log.info("[updateActivityDefBindings][id={} 字段已更新：{}]", id, body.keySet());
+    }
+
+    static Integer parseBinaryFlag(String field, String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        int parsed;
+        try {
+            parsed = Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(field + " 只能是 0 或 1");
+        }
+        if (parsed != 0 && parsed != 1) {
+            throw new IllegalArgumentException(field + " 只能是 0 或 1");
+        }
+        return parsed;
     }
 
     /**
@@ -158,6 +203,7 @@ public class SpkFlowConfigService {
         m.put("name", d.getName());
         m.put("stage", d.getStage());
         m.put("outputArtifactType", d.getOutputArtifactType());
+        m.put("useWorkerAgent", d.getUseWorkerAgent());
         m.put("useIndependentVerifier", d.getUseIndependentVerifier());
         m.put("verifierType", d.getVerifierType());
         m.put("executionLocation", d.getExecutionLocation());

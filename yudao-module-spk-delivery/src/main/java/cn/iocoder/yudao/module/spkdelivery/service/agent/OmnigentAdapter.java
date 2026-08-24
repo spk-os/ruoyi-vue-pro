@@ -12,6 +12,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -132,6 +136,9 @@ public class OmnigentAdapter implements FrameworkAdapter {
         }
         String effectiveAgentId = resolveAgentId(rawAgentId);
         try {
+            // 项目 workspace 与本次唯一主产物路径必须在创建会话前冻结并校验。
+            String ws = resolveWorkspace(req);
+            Path expectedOutputFile = validateExpectedOutputFile(ws, req.getOutputFile());
             // 会话续跑：同 activityRunId 复用既有 conv，否则新建
             String convId = (req.getActivityRunId() != null)
                     ? sessionCache.get(req.getActivityRunId()) : null;
@@ -142,16 +149,19 @@ public class OmnigentAdapter implements FrameworkAdapter {
                     sessionCache.put(req.getActivityRunId(), convId);
                 }
             }
-            log.info("[dispatchTask][omnigent instanceId={} nodeKey={} leadCode={} agentId={} convId={} reused={} sse={}]",
-                    req.getInstanceId(), req.getNodeKey(), req.getLeadCode(), effectiveAgentId, convId, reused, sseMode);
-            // per-project/version/activityRunId workspace 隔离（host 须真实存在，本地路径自动 mkdir）
-            String ws = resolveWorkspace(req);
+            log.info("[dispatchTask][omnigent instanceId={} nodeKey={} leadCode={} agentId={} model={} workspace={} convId={} reused={} sse={}]",
+                    req.getInstanceId(), req.getNodeKey(), req.getLeadCode(), effectiveAgentId, req.getModel(), ws,
+                    convId, reused, sseMode);
             // 关键：create session 只种 seed 消息，必须 launch runner 才真正触发 agent 执行
             launchRunner(convId, ws);
             String assistantText = sseMode ? subscribeAssistantText(convId) : pollAssistantText(convId);
+            // IPD Activity 的主产物只认 Cortex 冻结的精确文件；assistant 最后一条消息仅是诊断信息，
+            // 绝不能再把“正在生成/让我检查”等过程文本伪装成 JSON Artifact。
+            String authoritativeResult = expectedOutputFile != null
+                    ? readExpectedOutputEnvelope(expectedOutputFile) : assistantText;
             // files 结构化回流：取 resources/files 真实文件 {path, fileId, sha}，拼成结构化 JSON + markdown 段
             String filesJson = listFilesStructured(convId);
-            String resultText = buildResultText(assistantText, filesJson);
+            String resultText = buildResultText(authoritativeResult, filesJson);
             return new SpkAgentDispatchResult()
                     .setTaskId(convId)
                     .setConversationId(0L)
@@ -166,6 +176,26 @@ public class OmnigentAdapter implements FrameworkAdapter {
 
     /** 组装产物文本：assistant 正文 + 结构化 files 段（markdown 表 + JSON），供 parsePayload 提取 document。 */
     private String buildResultText(String assistantText, String filesJson) {
+        // 结构化主产物必须始终保持为单个 JSON envelope。若 Claude Code 已按 Cortex 协议返回
+        // JSON，则把 Omnigent 文件清单并入 envelope，不能再追加 Markdown 破坏可解析性。
+        // 容忍模型在合法 JSON 前输出一小段前导语，但 JSON 本身仍必须是以 document object
+        // 为核心、且一直完整到响应结尾的单一对象；不修补非法 JSON。
+        String normalizedEnvelope = normalizeJsonEnvelope(assistantText);
+        if (normalizedEnvelope != null) {
+            try {
+                JsonNode envelope = JsonUtils.parseTree(normalizedEnvelope);
+                if (envelope != null && envelope.isObject()) {
+                    @SuppressWarnings("unchecked")
+                    java.util.Map<String, Object> result = JsonUtils.parseObject(normalizedEnvelope, java.util.Map.class);
+                    if (filesJson != null && !filesJson.isBlank()) {
+                        result.put("files", JsonUtils.parseObject(filesJson, java.util.List.class));
+                    }
+                    return JsonUtils.toJsonString(result);
+                }
+            } catch (Exception ignore) {
+                // 兼容旧 Agent 的非结构化结果；Task Router/Verifier 会 fail-closed 并触发自动重试。
+            }
+        }
         StringBuilder sb = new StringBuilder();
         if (assistantText != null && !assistantText.isBlank()) {
             sb.append(assistantText);
@@ -193,11 +223,45 @@ public class OmnigentAdapter implements FrameworkAdapter {
     }
 
     /**
+     * 只归一化「可选前导语 + 一个完整 JSON envelope」，不尝试修复未转义引号、
+     * Markdown 围栏或 JSON 后缀文字。后续 schema 和独立验证仍会 fail-closed。
+     */
+    static String normalizeJsonEnvelope(String assistantText) {
+        if (assistantText == null || assistantText.isBlank()) {
+            return null;
+        }
+        String text = assistantText.trim();
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) != '{') {
+                continue;
+            }
+            String candidate = text.substring(i).trim();
+            try {
+                JsonNode envelope = JsonUtils.getObjectMapper().readTree(candidate);
+                JsonNode document = envelope == null ? null : envelope.get("document");
+                if (envelope != null && envelope.isObject() && document != null && document.isObject()) {
+                    return candidate;
+                }
+            } catch (Exception ignore) {
+                // 尝试下一个左花括号；全部失败则由上层按非结构化产物阻断。
+            }
+        }
+        return null;
+    }
+
+    /**
      * 解析 per-activity workspace 路径：{workspace根}/spk/{projectId|na}/{versionId|na}/{activityRunId}。
      * Omnigent host 须真实存在此路径，否则 launch runner 400。本地路径（/work/... 或 /tmp/...）自动 mkdir。
      * 非本地 host 路径无法 mkdir，降级回退全局 workspace 根（已存在）以保证 runner 可启动。
      */
     private String resolveWorkspace(SpkAgentDispatchReq req) {
+        if (req.getWorkspace() != null && !req.getWorkspace().isBlank()) {
+            String projectWorkspace = req.getWorkspace().trim();
+            if (!ensureWorkspace(projectWorkspace)) {
+                throw new RuntimeException("无法创建或访问项目工作区：" + projectWorkspace);
+            }
+            return projectWorkspace;
+        }
         String root = (workspace == null || workspace.isBlank()) ? "/work/SPK-OS/artifacts" : workspace;
         String pid = req.getProjectId() != null ? String.valueOf(req.getProjectId()) : "na";
         String vid = req.getVersionId() != null ? String.valueOf(req.getVersionId()) : "na";
@@ -210,6 +274,63 @@ public class OmnigentAdapter implements FrameworkAdapter {
         // 降级：隔离路径 ensure 失败（远程不可写），回退全局根（host 侧已存在）保证 runner 可启动
         log.warn("[resolveWorkspace][隔离路径 {} 无法确保，回退全局根 {}]", ws, root);
         return root;
+    }
+
+    /**
+     * 校验主产物路径只能位于当前项目 workspace 的 .ipd/output 下，防止 Agent/配置借路径越界读取。
+     * 返回 null 仅用于非 IPD 的历史通用派发；IPD Router 总会提供 outputFile。
+     */
+    static Path validateExpectedOutputFile(String workspace, String outputFile) {
+        if (outputFile == null || outputFile.isBlank()) {
+            return null;
+        }
+        if (workspace == null || workspace.isBlank()) {
+            throw new IllegalStateException("已声明 outputFile 但 workspace 为空");
+        }
+        Path workspacePath = Paths.get(workspace).toAbsolutePath().normalize();
+        Path controlledRoot = workspacePath.resolve(".ipd").resolve("output").normalize();
+        Path expected = Paths.get(outputFile).toAbsolutePath().normalize();
+        if (!expected.startsWith(controlledRoot) || !expected.toString().endsWith(".json")) {
+            throw new IllegalStateException("Cortex 主产物路径越界或非 JSON：" + expected);
+        }
+        try {
+            Files.createDirectories(expected.getParent());
+        } catch (Exception e) {
+            throw new IllegalStateException("无法创建 Cortex 主产物目录：" + expected.getParent(), e);
+        }
+        return expected;
+    }
+
+    /** 按精确路径读取并严格校验 Cortex JSON envelope；不扫描目录、不猜测文件名。 */
+    static String readExpectedOutputEnvelope(Path expected) {
+        try {
+            if (expected == null || !Files.isRegularFile(expected)) {
+                throw new IllegalStateException("Claude Code 未写入 Cortex 冻结的主产物文件：" + expected);
+            }
+            long bytes = Files.size(expected);
+            if (bytes <= 0 || bytes > 50L * 1024 * 1024) {
+                throw new IllegalStateException("Cortex 主产物文件大小非法：" + bytes + " bytes");
+            }
+            String content = Files.readString(expected, StandardCharsets.UTF_8);
+            // 使用 ObjectMapper 直接解析：无效 JSON 是本协议的预期失败分支，不应由 JsonUtils
+            // 额外打印 ERROR 堆栈；调用方仍会收到 fail-closed 异常并触发 Cortex 自动重试。
+            JsonNode envelope = JsonUtils.getObjectMapper().readTree(content);
+            JsonNode document = envelope == null ? null : envelope.get("document");
+            JsonNode summary = envelope == null ? null : envelope.get("summary");
+            JsonNode conclusion = envelope == null ? null : envelope.get("conclusion");
+            boolean conclusionValid = conclusion != null && conclusion.isTextual()
+                    && (conclusion.asText().startsWith("PASS") || conclusion.asText().startsWith("FAIL"));
+            if (envelope == null || !envelope.isObject() || document == null || !document.isObject()
+                    || summary == null || !summary.isTextual() || summary.asText().isBlank()
+                    || !conclusionValid) {
+                throw new IllegalStateException("Cortex 主产物不符合 {document object,summary,conclusion} 协议：" + expected);
+            }
+            return envelope.toString();
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("读取/解析 Cortex 主产物失败：" + expected, e);
+        }
     }
 
     /** 本地路径自动 mkdir（仅对可写本地路径生效）；返回是否成功确保。 */
@@ -317,10 +438,7 @@ public class OmnigentAdapter implements FrameworkAdapter {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("type", "message");
         item.put("data", data);
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("agent_id", effectiveAgentId);
-        body.put("title", "SPK-IPD " + nodeKey + (req.getLeadCode() != null ? " " + req.getLeadCode() : ""));
-        body.put("initial_items", List.of(item));
+        Map<String, Object> body = buildSessionCreateBody(req, effectiveAgentId, nodeKey, item);
         String resp = postJson("/v1/sessions", JsonUtils.toJsonString(body));
         JsonNode node = JsonUtils.parseTree(resp);
         JsonNode idNode = node.get("id");
@@ -331,11 +449,32 @@ public class OmnigentAdapter implements FrameworkAdapter {
     }
 
     /**
+     * 以 Cortex Agent 配置为模型选择的唯一权威来源。显式 mode=omnigent 的请求若未携带
+     * model，必须在 Cortex 侧失败，不能让 Omnigent/Claude Code 回退到 harness 默认值。
+     */
+    static Map<String, Object> buildSessionCreateBody(SpkAgentDispatchReq req, String effectiveAgentId,
+                                                       String nodeKey, Map<String, Object> item) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("agent_id", effectiveAgentId);
+        body.put("title", "SPK-IPD " + nodeKey + (req.getLeadCode() != null ? " " + req.getLeadCode() : ""));
+        body.put("initial_items", List.of(item));
+        String configuredModel = req.getModel() == null ? null : req.getModel().trim();
+        if ("omnigent".equalsIgnoreCase(req.getMode()) && (configuredModel == null || configuredModel.isBlank())) {
+            throw new IllegalStateException("Cortex Agent 未配置 model，拒绝回退到 Omnigent/Claude Code 默认模型");
+        }
+        if (configuredModel != null && !configuredModel.isBlank()) {
+            body.put("model_override", configuredModel);
+        }
+        return body;
+    }
+
+    /**
      * 启动 runner —— POST /v1/hosts/{host_id}/runners {session_id, workspace}。
      * 这是真正触发 Omnigent agent 执行的步骤（create session 只种 seed 消息不触发 run）。
      * host_id 留空时动态解析首个 online 且 claude-sdk harness 已配置的 host。
      * workspace 必须是 host 上真实存在的绝对路径，否则 400（由 resolveWorkspace 保证）。
-     * 已存在 runner 时返回 409，视为已启动（幂等）。
+     * 已存在 runner 时，Omnigent 不同版本会返回 409，或返回 400 +
+     * {@code session already has a runner bound}，两者均视为已启动（幂等）。
      */
     private void launchRunner(String convId, String ws) throws Exception {
         String hid = resolveHostId();
@@ -349,14 +488,25 @@ public class OmnigentAdapter implements FrameworkAdapter {
             String resp = postJson("/v1/hosts/" + hid + "/runners", JsonUtils.toJsonString(body));
             log.info("[launchRunner][convId={} hostId={} workspace={} resp={}]", convId, hid, ws, truncate(resp, 200));
         } catch (RuntimeException e) {
-            // 409 = runner 已存在（幂等，视为成功）；其它 >=400 抛出
+            // runner 已存在（幂等，视为成功）；其它 >=400 抛出。Omnigent 当前版本把
+            // “session already has a runner bound”错误地归类为 400，不能因此把已正常
+            // 启动的 Claude Code 会话判为失败。
             String msg = e.getMessage();
-            if (msg != null && msg.contains("409")) {
-                log.info("[launchRunner][convId={} runner 已存在（409 幂等）]", convId);
+            if (isRunnerAlreadyBound(msg)) {
+                log.info("[launchRunner][convId={} runner 已存在（幂等）]", convId);
                 return;
             }
             throw e;
         }
+    }
+
+    static boolean isRunnerAlreadyBound(String errorMessage) {
+        if (errorMessage == null) {
+            return false;
+        }
+        String normalized = errorMessage.toLowerCase(java.util.Locale.ROOT);
+        return normalized.contains("409")
+                || normalized.contains("session already has a runner bound");
     }
 
     /**
@@ -395,21 +545,56 @@ public class OmnigentAdapter implements FrameworkAdapter {
 
     private String pollAssistantText(String convId) throws Exception {
         long deadline = System.currentTimeMillis() + timeoutMs;
-        String lastText = null;
         while (System.currentTimeMillis() < deadline) {
-            String resp = getJson("/v1/sessions/" + convId + "/items?limit=100&order=asc");
-            String text = extractAssistantText(resp);
-            if (text != null && !text.isBlank()) {
-                lastText = text;
-                // 已出现 assistant 文本，再等一轮确认稳定后返回
-                Thread.sleep(Math.min(pollIntervalMs, 1000));
-                String resp2 = getJson("/v1/sessions/" + convId + "/items?limit=100&order=asc");
-                String text2 = extractAssistantText(resp2);
-                return (text2 != null && !text2.isBlank()) ? text2 : text;
+            JsonNode session = sessionNode(getJson("/v1/sessions/" + convId));
+            String status = textOf(session.get("status"));
+            if ("failed".equals(status)) {
+                throw new RuntimeException("Omnigent 会话执行失败：" + sessionFailureReason(session));
+            }
+            if ("waiting".equals(status)) {
+                throw new RuntimeException("Omnigent 会话进入 waiting；商用自动流程禁止等待人工输入");
+            }
+            if ("idle".equals(status)) {
+                String resp = getJson("/v1/sessions/" + convId + "/items?limit=100&order=asc");
+                String text = extractAssistantText(resp);
+                if (text != null && !text.isBlank()) {
+                    // idle 是 Omnigent 的任务终态。只有进入终态后才取最后一条 assistant，
+                    // 避免把 Claude Code 调用工具前的“我需要先读取……”误当最终产物。
+                    Thread.sleep(Math.min(pollIntervalMs, 500));
+                    JsonNode stableSession = sessionNode(getJson("/v1/sessions/" + convId));
+                    if ("idle".equals(textOf(stableSession.get("status")))) {
+                        return extractAssistantText(getJson("/v1/sessions/" + convId
+                                + "/items?limit=100&order=asc"));
+                    }
+                }
+            } else if (!"running".equals(status)) {
+                throw new RuntimeException("Omnigent 会话返回未知状态：" + status);
             }
             Thread.sleep(pollIntervalMs);
         }
-        return lastText;
+        throw new RuntimeException("Omnigent 会话等待终态超时（" + timeoutMs + "ms）");
+    }
+
+    private static JsonNode sessionNode(String response) {
+        JsonNode root = JsonUtils.parseTree(response);
+        JsonNode data = root == null ? null : root.get("data");
+        return data != null && data.isObject() ? data : root;
+    }
+
+    private static String sessionFailureReason(JsonNode session) {
+        String error = textOf(session.get("error"));
+        if (error != null && !error.isBlank()) {
+            return error;
+        }
+        JsonNode labels = session.get("labels");
+        if (labels != null && labels.isObject()) {
+            String message = textOf(labels.get("omnigent.last_task_error_message"));
+            String code = textOf(labels.get("omnigent.last_task_error_code"));
+            if (message != null && !message.isBlank()) {
+                return (code == null || code.isBlank()) ? message : code + ": " + message;
+            }
+        }
+        return "未提供失败原因";
     }
 
     /**
@@ -514,14 +699,14 @@ public class OmnigentAdapter implements FrameworkAdapter {
      * （role/content 在顶层，无 data 包装）；而 createSession 响应里是嵌套 {@code {data:{role,content}}}。
      * 此处两种都兼容：优先取 item.data，回落到 item 顶层。
      */
-    private String extractAssistantText(String resp) {
+    static String extractAssistantText(String resp) {
         try {
             JsonNode root = JsonUtils.parseTree(resp);
             JsonNode data = root.get("data");
             if (data == null || !data.isArray() || data.isEmpty()) {
                 return null;
             }
-            StringBuilder sb = new StringBuilder();
+            String latest = null;
             for (JsonNode item : data) {
                 if (!"message".equals(textOf(item.get("type")))) {
                     continue;
@@ -538,16 +723,20 @@ public class OmnigentAdapter implements FrameworkAdapter {
                 }
                 JsonNode content = d.get("content");
                 if (content != null && content.isArray()) {
+                    StringBuilder current = new StringBuilder();
                     for (JsonNode block : content) {
                         String t = textOf(block.get("text"));
                         if (t != null && !t.isBlank()) {
-                            if (sb.length() > 0) sb.append('\n');
-                            sb.append(t);
+                            if (current.length() > 0) current.append('\n');
+                            current.append(t);
                         }
+                    }
+                    if (current.length() > 0) {
+                        latest = current.toString();
                     }
                 }
             }
-            return sb.length() == 0 ? null : sb.toString();
+            return latest;
         } catch (Exception e) {
             log.warn("[extractAssistantText][解析失败：{}]", e.getMessage());
             return null;

@@ -256,6 +256,26 @@ public class SpkIpdFlowRunService {
             BpmProcessInstanceCreateReqDTO createReq = new BpmProcessInstanceCreateReqDTO();
             createReq.setProcessDefinitionKey(flowKey);
             createReq.setBusinessKey(run.getBusinessKey());
+            cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdProjectDO project =
+                    run.getProjectId() == null ? null : projectBusinessService.getProject(run.getProjectId());
+            SpkIpdVersionDO version = run.getVersionId() == null ? null : versionMapper.selectById(run.getVersionId());
+            String deliveryRoot;
+            try {
+                deliveryRoot = deliveryPathResolver.resolveProjectRoot(project, run.getBusinessKey());
+            } catch (IllegalArgumentException ie) {
+                throw cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception(
+                        cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.IPD_DELIVERY_ROOT_INVALID);
+            }
+            // 在 Flowable 同步触发第一个 Agent 前先创建项目骨架，保证 Omnigent runner 的 workspace 已存在。
+            try {
+                String configuredProjectName = project != null && project.getName() != null
+                        ? project.getName() : "IPD-Project-" + run.getProjectId();
+                flowStateWriter.provisionProject(run.getBusinessKey(), deliveryRoot,
+                        configuredProjectName, flowKey, "product");
+            } catch (Exception e) {
+                log.warn("[start][flowRunId={} 交付目录初始化失败，交由 Omnigent 启动时再次确保 root={}：{}]",
+                        flowRunId, deliveryRoot, e.getMessage());
+            }
             Map<String, Object> variables = new LinkedHashMap<>();
             variables.put(VAR_BUSINESS_KEY, run.getBusinessKey());
             variables.put(VAR_FLOW_RUN_ID, run.getId());
@@ -269,9 +289,18 @@ public class SpkIpdFlowRunService {
             variables.put(VAR_FLOW_TYPE, run.getFlowType());
             variables.put(VAR_PROFILE_VERSION, run.getProfileVersion());
             variables.put(VAR_TRACE_ID, idempotencyKey);
-            // projectName 供概念阶段 agent 读取（兼容旧 SpkIpdProjectService 变量名）
-            if (run.getProjectId() != null) {
-                variables.put(VAR_PROJECT_NAME, "IPD-Project-" + run.getProjectId());
+            // 冻结项目/版本上下文：Router 会注入每个 Claude Code Activity prompt 并指定实际 workspace。
+            if (project != null) {
+                putIfNotNull(variables, VAR_PROJECT_NAME, project.getName());
+                putIfNotNull(variables, VAR_PROJECT_CODE, project.getProjectCode());
+                putIfNotNull(variables, VAR_PROJECT_DESCRIPTION, project.getDescription());
+                putIfNotNull(variables, VAR_PROJECT_OBJECTIVE, project.getObjective());
+                variables.put(VAR_PROJECT_ROOT, deliveryRoot);
+            }
+            if (version != null) {
+                putIfNotNull(variables, VAR_VERSION_NO, version.getVersionNo());
+                putIfNotNull(variables, VAR_VERSION_OBJECTIVE, version.getObjective());
+                putIfNotNull(variables, VAR_VERSION_SCOPE, version.getScopeSummary());
             }
             // spk_mode / spk_skill_env：启动时选择（端点 query 参传入）。route 内只读 getVariable 解析。
             //   mode：test=桩仅测试 / product=真实交付（buildPrompt 按此分叉）；空归 test。
@@ -292,27 +321,6 @@ public class SpkIpdFlowRunService {
             run.setStartedAt(LocalDateTime.now());
             run.setCurrentStage("concept");
             flowRunMapper.updateById(run);
-            // Phase2 E/H：治理 FlowRun 启动时初始化交付目录骨架（.flow/ asset/ src/ docs/ + project.yaml + manifest.json）。
-            // 优先用 Project DO.delivery_root（plan §F：LaunchWizard 选根目录落库），否则按 businessKey 渲染 Profile 默认根。
-            // 失败降级记 warn 不阻断流程发起（DB 是关键路径，FS 是增强）；路径安全违抛 IPD_DELIVERY_ROOT_INVALID（坑#路径注入铁律不降级）。
-            String deliveryRoot = null;
-            try {
-                cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdProjectDO project =
-                        run.getProjectId() == null ? null : projectBusinessService.getProject(run.getProjectId());
-                deliveryRoot = deliveryPathResolver.resolveProjectRoot(project, run.getBusinessKey());
-                if (deliveryRoot != null) {
-                    String projectName = project != null && project.getName() != null
-                            ? project.getName() : "IPD-Project-" + run.getProjectId();
-                    flowStateWriter.provisionProject(run.getBusinessKey(), deliveryRoot,
-                            projectName, flowKey, "product");
-                }
-            } catch (IllegalArgumentException ie) {
-                throw cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception(
-                        cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.IPD_DELIVERY_ROOT_INVALID);
-            } catch (Exception e) {
-                log.warn("[start][flowRunId={} 交付目录初始化失败降级 root={}：{}]",
-                        flowRunId, deliveryRoot, e.getMessage());
-            }
             // D4：写引擎实例档案（修 G4——此前全模块零写入致运行统计页永远空）
             writeEngineInstance(run, processInstanceId, flowKey, pub);
             commandService.markSuccess(cmd.commandId(),
@@ -839,6 +847,12 @@ public class SpkIpdFlowRunService {
         return writeJson(t);
     }
 
+    private static void putIfNotNull(Map<String, Object> target, String key, Object value) {
+        if (value != null) {
+            target.put(key, value);
+        }
+    }
+
     private String writeJson(Object o) {
         try {
             return json.writeValueAsString(o);
@@ -852,5 +866,3 @@ public class SpkIpdFlowRunService {
         return uid != null ? uid : 1L;
     }
 }
-
-

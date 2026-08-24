@@ -41,8 +41,8 @@ public class SpkAgentDefBaseVO {
     @Schema(description = "状态 offline/idle/busy/error", example = "offline")
     private String status;
 
-    @Schema(description = "默认模型", example = "ali_glm-5.2")
-    @Size(max = 100, message = "默认模型长度不能超过 100")
+    @Schema(description = "Agent 执行模型；Omnigent 路由将作为 model_override 显式传递", example = "ali_glm-5.2")
+    @Size(max = 100, message = "Agent 执行模型长度不能超过 100")
     private String model;
 
     @Schema(description = "关联 yudao AI 角色 id（wake 必填）", example = "1")

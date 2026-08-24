@@ -25,6 +25,7 @@ import cn.iocoder.yudao.module.spkdelivery.service.delivery.FlowStateWriter;
 import cn.iocoder.yudao.module.spkdelivery.service.evidence.SpkEvidenceService;
 import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkGiteaIntegrationService;
 import cn.iocoder.yudao.module.spkdelivery.service.integration.SpkPlaneIntegrationService;
+import cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdReworkVariables;
 import cn.iocoder.yudao.module.spkdelivery.service.modelcapability.SpkModelCapabilityRegistry;
 import cn.iocoder.yudao.module.spkdelivery.service.verifier.SpkVerifierService;
 import cn.iocoder.yudao.module.spkdelivery.framework.monitoring.SpkIpdMetrics;
@@ -46,6 +47,7 @@ import java.util.UUID;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.*;
+import static cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdBusinessConstants.*;
 
 /**
  * SPK-OS Task Router —— IPD Activity 路由判决 + 三件套执行编排
@@ -102,6 +104,15 @@ public class SpkTaskRouterService {
     @Value("${spk-delivery.execution.adapter-override:}")
     private String adapterOverride;
     /**
+     * TaskContract 的外层硬超时。它必须晚于具体 adapter 的等待超时，让 adapter 先返回可审计失败，
+     * 避免定时任务在同步 route 尚未退出时并发创建第二个 Omnigent 会话。
+     */
+    @Value("${spk-delivery.execution.task-timeout-seconds:3900}")
+    private int taskTimeoutSeconds;
+    /** 与 Independent Verifier 共用的确定性 Schema/Acceptance 根目录。 */
+    @Value("${spk-delivery.verifier.scripts-root:/work/SPK-OS/soft/basic/ruoyi/resources/verifier-scripts}")
+    private String verifierScriptsRoot;
+    /**
      * skill 根目录与默认 env 现经 {@link SpkSkillConfigService} 读 DB 单行配置表（D2：前端「节点 skill 与环境」页可改）。
      * <p>
      * 历史：原 {@code @Value} 硬注入 skillsRoot/defaultSkillEnv，路径/env 改动需改 yaml + 重启。
@@ -125,6 +136,123 @@ public class SpkTaskRouterService {
     public SpkRouteResult route(String activityId, String activityVersion,
                                 String processInstanceId, String taskId, String businessKey,
                                 String nodeKey, String receiveTaskKey, List<String> inputRefs) {
+        SpkIpdActivityDefDO def = activityDefMapper.selectByActivityIdAndVersion(activityId,
+                activityVersion != null ? activityVersion : "1.0.0");
+        if (requiresCommercialRequirementFanout(def, processInstanceId)) {
+            return routeCommercialRequirementFanout(activityId, activityVersion, processInstanceId,
+                    taskId, businessKey, nodeKey, receiveTaskKey, inputRefs);
+        }
+        return routeSingle(activityId, activityVersion, processInstanceId, taskId, businessKey,
+                nodeKey, receiveTaskKey, inputRefs, null);
+    }
+
+    /**
+     * 商用开发宏活动的 Cortex 原生 fan-out/fan-in。
+     * 每个冻结 REQ 都走一次 routeSingle，产生独立合同、运行标识、工作区和 Omnigent 会话；
+     * 全部通过后再创建独立集成合同。任一分片失败立即 fail-closed，不会把宏活动标记完成。
+     */
+    private SpkRouteResult routeCommercialRequirementFanout(String activityId, String activityVersion,
+                                                              String processInstanceId, String taskId,
+                                                              String businessKey, String nodeKey,
+                                                              String receiveTaskKey, List<String> inputRefs) {
+        Map<String, Object> projectContext = readProjectContext(processInstanceId);
+        List<SpkRequirementFanoutPlanner.RequirementSlice> slices =
+                SpkRequirementFanoutPlanner.parseFrozenScope(stringValue(projectContext.get("versionScope")));
+        List<String> artifactIds = new ArrayList<>();
+        int approvalReworkCount = currentApprovalReworkCount(processInstanceId, "develop");
+        int ordinal = 0;
+        for (SpkRequirementFanoutPlanner.RequirementSlice slice : slices) {
+            ordinal++;
+            String resumedArtifactId = findCompletedRequirementArtifact(processInstanceId, activityId,
+                    slice, approvalReworkCount);
+            if (resumedArtifactId != null) {
+                artifactIds.add(resumedArtifactId);
+                log.info("[routeCommercialRequirementFanout][requirementId={} approvalCycle={} resume artifactId={}]",
+                        slice.id(), approvalReworkCount, resumedArtifactId);
+                continue;
+            }
+            SpkRouteResult requirementResult = routeSingle(activityId, activityVersion, processInstanceId,
+                    taskId, businessKey, nodeKey, receiveTaskKey, inputRefs,
+                    SpkRequirementFanoutPlanner.requirementPrompt(slice, ordinal, slices.size(),
+                            approvalReworkCount));
+            if (!SpkTaskContractStatusEnum.DONE.getLabel().equalsIgnoreCase(requirementResult.getStatus())) {
+                log.warn("[routeCommercialRequirementFanout][requirementId={} contractId={} failed]",
+                        slice.id(), requirementResult.getContractId());
+                return requirementResult;
+            }
+            if (requirementResult.getArtifactId() == null || requirementResult.getArtifactId().isBlank()) {
+                throw new IllegalStateException("需求合同完成但缺少主产物: " + slice.id());
+            }
+            artifactIds.add(requirementResult.getArtifactId());
+        }
+        List<String> integrationRefs = new ArrayList<>();
+        if (inputRefs != null) {
+            integrationRefs.addAll(inputRefs);
+        }
+        integrationRefs.addAll(artifactIds);
+        return routeSingle(activityId, activityVersion, processInstanceId, taskId, businessKey,
+                nodeKey, receiveTaskKey, integrationRefs,
+                SpkRequirementFanoutPlanner.integrationPrompt(slices, artifactIds));
+    }
+
+    /**
+     * 自动重试宏活动时复用同一审批返工轮次中已经独立核验、签署且 hash 有效的需求产物。
+     * 审批 REJECT 会递增 approval rework count，因此下一审批轮不会错误复用被驳回的旧实现。
+     */
+    private String findCompletedRequirementArtifact(String processInstanceId, String activityId,
+                                                     SpkRequirementFanoutPlanner.RequirementSlice slice,
+                                                     int approvalReworkCount) {
+        List<SpkTaskContractDO> contracts = contractMapper.selectListByProcessInstanceId(processInstanceId);
+        if (contracts == null || contracts.isEmpty()) {
+            return null;
+        }
+        for (int i = contracts.size() - 1; i >= 0; i--) {
+            SpkTaskContractDO contract = contracts.get(i);
+            if (!activityId.equals(contract.getActivityId())
+                    || !SpkTaskContractStatusEnum.DONE.getLabel().equalsIgnoreCase(contract.getStatus())
+                    || !SpkRequirementFanoutPlanner.matchesRequirementContract(
+                    contract.getPrompt(), slice, approvalReworkCount)) {
+                continue;
+            }
+            List<SpkArtifactManifestDO> artifacts = artifactService.listByActivityRunId(contract.getActivityRunId());
+            if (artifacts == null) {
+                continue;
+            }
+            for (SpkArtifactManifestDO artifact : artifacts) {
+                if ("signed".equalsIgnoreCase(artifact.getStatus()) && artifactService.verifyHash(artifact)) {
+                    return artifact.getArtifactId();
+                }
+            }
+        }
+        return null;
+    }
+
+    private int currentApprovalReworkCount(String processInstanceId, String expectedStage) {
+        try {
+            Object targetStage = runtimeService.getVariable(processInstanceId, SpkIpdReworkVariables.TARGET_STAGE);
+            if (targetStage == null || !expectedStage.equalsIgnoreCase(targetStage.toString())) {
+                return 0;
+            }
+            Object count = runtimeService.getVariable(processInstanceId, SpkIpdReworkVariables.COUNT);
+            return count instanceof Number number ? Math.max(0, number.intValue()) : 0;
+        } catch (Exception e) {
+            throw new IllegalStateException("无法冻结开发需求扇出审批轮次", e);
+        }
+    }
+
+    private boolean requiresCommercialRequirementFanout(SpkIpdActivityDefDO def, String processInstanceId) {
+        if (def == null || def.getUseWorkerAgent() == null || def.getUseWorkerAgent() != 1
+                || !"develop".equalsIgnoreCase(def.getStage())
+                || !"product".equalsIgnoreCase(readMode(processInstanceId))) {
+            return false;
+        }
+        return SpkCommercialDeliveryGuard.isCommercialRelease(resolveSkillEnv(def, processInstanceId));
+    }
+
+    private SpkRouteResult routeSingle(String activityId, String activityVersion,
+                                       String processInstanceId, String taskId, String businessKey,
+                                       String nodeKey, String receiveTaskKey, List<String> inputRefs,
+                                       String promptSupplement) {
         // 1. 加载 Activity 定义
         SpkIpdActivityDefDO def = activityDefMapper.selectByActivityIdAndVersion(activityId,
                 activityVersion != null ? activityVersion : "1.0.0");
@@ -140,9 +268,25 @@ public class SpkTaskRouterService {
         //   铁律：prompt 必须随模式分叉——否则 product 仍拿 DB 里的测试桩 prompt 产浅报告，与 test 无区别。
         String mode = readMode(processInstanceId);
         boolean product = "product".equalsIgnoreCase(mode);
-        String prompt = buildPrompt(def.getPromptTemplate(), product);
+        String prompt = appendAutomaticReworkContext(
+                buildPrompt(def.getPromptTemplate(), product), processInstanceId, def.getStage(), activityId);
+        Map<String, Object> projectContext = readProjectContext(processInstanceId);
+        prompt = SpkProjectPromptBuilder.append(prompt, projectContext);
+        // 项目专用 Skill 是通用商用 Skill 的增量约束。内容与哈希在 TaskContract 创建前冻结，
+        // 不允许 Adapter/Agent 启动后再读取一份可变规则。
+        prompt = SpkProjectSkillPromptBuilder.append(prompt,
+                stringValue(projectContext.get("projectRoot")), def.getStage());
+        if (promptSupplement != null && !promptSupplement.isBlank()) {
+            prompt = prompt + promptSupplement;
+        }
         // 2. 生成 activityRunId + 选 Lead
         String activityRunId = "run-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        String outputFile = SpkArtifactOutputPromptBuilder.outputFile(
+                stringValue(projectContext.get("projectRoot")), activityRunId, def.getOutputArtifactType());
+        boolean requireVerifierContract = product && SpkCommercialDeliveryGuard.isCommercialRelease(
+                resolveSkillEnv(def, processInstanceId));
+        prompt = SpkArtifactOutputPromptBuilder.append(prompt, def.getOutputArtifactType(), outputFile,
+                verifierScriptsRoot, requireVerifierContract);
         SpkAgentDefDO lead = selectLead(def);
         if (lead == null) {
             throw exception(TASK_ROUTER_NO_LEAD);
@@ -174,7 +318,7 @@ public class SpkTaskRouterService {
                 .contextManifestUri(contextUri)
                 .inputRefs(JsonUtils.toJsonString(inputRefs))
                 .outputSpec(def.getOutputArtifactType())
-                .timeoutSeconds(600)
+                .timeoutSeconds(taskTimeoutSeconds)
                 .retryPolicy("{\"max_attempts\":3}")
                 .prompt(prompt)
                 .status(SpkTaskContractStatusEnum.QUEUED.getLabel())
@@ -208,20 +352,26 @@ public class SpkTaskRouterService {
                     .setLeadCode(lead.getCode())
                     .setLeadDefId(lead.getId())
                     .setActivityRunId(activityRunId)
+                    .setProjectId(longValue(projectContext.get("projectId")))
+                    .setVersionId(longValue(projectContext.get("versionId")))
+                    .setWorkspace(stringValue(projectContext.get("projectRoot")))
                     .setMode(effectiveLead.getMode())
                     .setOmnigentAgentId(effectiveLead.getOmnigentAgentId())
+                    .setModel(effectiveLead.getModel())
                     .setStage(def.getStage())
-                    .setOutputArtifactType(def.getOutputArtifactType());
+                    .setOutputArtifactType(def.getOutputArtifactType())
+                    .setOutputFile(outputFile);
             // G：节点 skill 绑定注入（skill 名来自 def.skills/stage 回退；commercial-release
             //   使用编号阶段编排器承接宏活动，再由编排器路由到 50 个细粒度 Activity Skill）。
             //   skillPath = {skillsRoot}/{env}/{skillName}/SKILL.md，env 解析链：
             //   def.envRequirements.skillEnv（per-activity 覆盖）→ 流程变量 spk_skill_env（启动选择）→ 配置默认。
-            //   文件缺失自动回退 default 环境再回退跳过，保证不阻断派发（真实 LLM 路径 injectSkillInstruction 读全文）。
+            //   commercial-release 文件缺失时 fail-closed；非商用环境仍允许三级回退。
+            String skillEnv = resolveSkillEnv(def, processInstanceId);
             String skillName = resolveSkill(def);
             if (skillName != null) {
-                String skillEnv = resolveSkillEnv(def, processInstanceId);
                 skillName = resolveSkillNameForEnv(skillName, skillEnv, def.getStage());
                 String skillPath = resolveSkillPath(skillName, skillEnv, def.getStage());
+                SpkCommercialDeliveryGuard.requireSkill(skillEnv, skillName, skillPath, def.getActivityId());
                 req.setSkillName(skillName);
                 if (skillPath != null) {
                     req.setSkillPath(skillPath);
@@ -230,8 +380,16 @@ public class SpkTaskRouterService {
                 // skillPath 非空=SKILL.md 命中（三级回退成功），null=全部 miss 跳过注入（配置缺漏信号）。
                 log.info("[route][skill nodeKey={} activityId={} skillName={} skillEnv={} skillPath={}]",
                         nodeKey, def.getActivityId(), skillName, skillEnv, skillPath);
+            } else {
+                // 商用流程的每个 Agent Activity 都必须显式绑定 Skill；缺失时禁止无规约执行。
+                SpkCommercialDeliveryGuard.requireSkill(skillEnv, null, null, def.getActivityId());
             }
+            SpkCommercialDeliveryGuard.requireProjectExecutionContext(skillEnv, req.getProjectId(),
+                    req.getVersionId(), req.getWorkspace(), def.getActivityId());
             FrameworkAdapter adapter = selectAdapter(def, effectiveLead);
+            SpkCommercialDeliveryGuard.requireOmnigentClaudeCodeRoute(skillEnv, adapter.getName(),
+                    effectiveLead.getModel(), effectiveLead.getRuntimeType(), effectiveLead.getOmnigentAgentId(),
+                    effectiveLead.getCode());
             SpkAgentDispatchResult dispatch = adapter.dispatchTask(req);
             result.setProvider(adapter.getName());
             // 持久化 adapter 返回的 taskId（omnigent=conv_xxx 会话 id / native-ai=convId#sendMsgId）
@@ -242,7 +400,8 @@ public class SpkTaskRouterService {
                 contractMapper.updateById(contract);
             }
             // 7. 解析 Lead 产物 {document, summary, conclusion}（P6：长文档不进流程变量）
-            Payload payload = parsePayload(dispatch.getResult());
+            Payload payload = parsePayload(dispatch.getResult(),
+                    SpkCommercialDeliveryGuard.isCommercialRelease(skillEnv));
             // 8. 落 Artifact（全文）+ RunReceipt + Evidence（三件套）
             SpkArtifactManifestDO artifact = artifactService.register(activityRunId, processInstanceId,
                     def.getOutputArtifactType(), payload.document,
@@ -256,11 +415,34 @@ public class SpkTaskRouterService {
             } catch (Exception me) {
                 log.warn("[route][activityRunId={} 镜像产物失败降级：{}]", activityRunId, truncate(me.getMessage(), 200));
             }
-            // 9. 长文档提交 Gitea，失败不阻断 Activity done（agentResult 存 giteaUrl:null + error）
-            //    test 模式：commit 到 main（既有路径）。
-            //    product 模式：建 concept 分支 + commit 到分支 + 开 PR + Plane 录入需求（见 doProductDelivery），
-            //    不重复 commit main 以免 PR 为空。每个交付动作独立 try/catch，失败降级不阻断 Activity done。
-            //    mode/product 在方法顶部已读（供 prompt 装配与本处交付分支共用，触发器线程只读安全）。
+            // RunReceipt 属于内部执行证据，可以在验证前冻结；任何 Gitea/Plane 外发必须等待验证通过。
+            SpkRunReceiptDO receipt = writeRunReceipt(activityRunId, contractId, lead, dispatch,
+                    artifact, processInstanceId, def, adapter.getName());
+            result.setRunReceiptId(receipt.getRunId()).setProvider(adapter.getName()).setModel(receipt.getModel());
+            metrics.incrementArtifact();
+            // 8. 条件验证
+            if (def.getUseIndependentVerifier() != null && def.getUseIndependentVerifier() == 1) {
+                SpkAgentDefDO verifier = selectVerifier(def);
+                if (verifier != null) {
+                    SpkVerificationReceiptDO v = verifierService.verify(verifier, artifact,
+                            activityRunId, processInstanceId);
+                    String conclusion = v != null ? v.getOverallConclusion() : null;
+                    result.setVerificationConclusion(conclusion)
+                            .setVerifierCode(verifier.getCode())
+                            .setVerificationSummary(v != null ? v.getSummary() : null);
+                    if (conclusion != null) {
+                        metrics.incrementVerification(conclusion);
+                    }
+                }
+                SpkCommercialDeliveryGuard.requireVerificationPassed(true,
+                        verifier != null ? verifier.getCode() : null,
+                        result.getVerificationConclusion());
+                artifact = artifactService.sign(artifact.getArtifactId(), verifier.getCode());
+            } else {
+                artifact = artifactService.sign(artifact.getArtifactId(), lead.getCode());
+            }
+            result.setArtifactId(artifact.getArtifactId());
+            // 9. 只有签署后的产物才能外发。此前实现先建 PR/Plane 再验证，导致失败产物污染外部系统。
             String giteaUrl = null;
             String giteaError = null;
             try {
@@ -273,16 +455,16 @@ public class SpkTaskRouterService {
                 giteaError = truncate(ge.getMessage(), 200);
                 log.warn("[route][activityRunId={} gitea createFile 失败：{}]", activityRunId, giteaError);
             }
-            // 9.1 product 模式 concept 阶段真实交付动作（建 Gitea 分支/PR + Plane 需求）
             Map<String, Object> delivery = null;
             if (product) {
-                delivery = doProductDelivery(def, activityRunId, processInstanceId, payload);
+                delivery = doProductDelivery(def, activityRunId, processInstanceId, payload,
+                        SpkCommercialDeliveryGuard.isCommercialRelease(resolveSkillEnv(def, processInstanceId)));
                 Object docUrl = delivery.get("giteaDocUrl");
                 if (docUrl instanceof String s && !s.isBlank()) {
                     giteaUrl = s;
                 }
             }
-            // 10. agentResult 只存摘要+结论+链接（不存长文档，避免 Flowable 变量膨胀）
+            // agentResult 只存摘要+结论+链接（不存长文档，避免 Flowable 变量膨胀）。
             Map<String, Object> agentResultObj = new LinkedHashMap<>();
             agentResultObj.put("summary", payload.summary);
             agentResultObj.put("conclusion", payload.conclusion);
@@ -295,26 +477,7 @@ public class SpkTaskRouterService {
                 agentResultObj.put("delivery", delivery);
             }
             result.setAgentResult(JsonUtils.toJsonString(agentResultObj));
-            SpkRunReceiptDO receipt = writeRunReceipt(activityRunId, contractId, lead, dispatch,
-                    artifact, processInstanceId, def, adapter.getName());
-            result.setRunReceiptId(receipt.getRunId()).setProvider(adapter.getName()).setModel(receipt.getModel());
-            metrics.incrementArtifact();
-            // 8. 条件验证
-            if (def.getUseIndependentVerifier() != null && def.getUseIndependentVerifier() == 1) {
-                SpkAgentDefDO verifier = selectVerifier(def);
-                if (verifier != null) {
-                    SpkVerificationReceiptDO v = verifierService.verify(verifier, artifact,
-                            activityRunId, processInstanceId);
-                    result.setVerificationConclusion(v.getOverallConclusion())
-                            .setVerifierCode(verifier.getCode());
-                    artifact = artifactService.sign(artifact.getArtifactId(), verifier.getCode());
-                    metrics.incrementVerification(v.getOverallConclusion());
-                }
-            } else {
-                artifact = artifactService.sign(artifact.getArtifactId(), lead.getCode());
-            }
-            result.setArtifactId(artifact.getArtifactId());
-            // 9. 标记 done
+            // 10. 标记 done
             markContractDone(contract);
             result.setStatus(SpkTaskContractStatusEnum.DONE.getLabel());
             metrics.incrementActivityRun("done");
@@ -570,8 +733,15 @@ public class SpkTaskRouterService {
      * </ul>
      */
     private static Payload parsePayload(String raw) {
+        return parsePayload(raw, false);
+    }
+
+    private static Payload parsePayload(String raw, boolean strict) {
         Payload p = new Payload();
         if (raw == null || raw.isBlank()) {
+            if (strict) {
+                throw new IllegalStateException("商用 Activity 主产物为空");
+            }
             p.document = "";
             p.summary = "";
             p.conclusion = "FAIL: 无产物";
@@ -581,11 +751,19 @@ public class SpkTaskRouterService {
             JsonNode node = JsonUtils.parseTree(raw);
             JsonNode doc = node.get("document");
             if (doc != null && !doc.isNull()) {
-                p.document = doc.asText();
+                if (strict && !doc.isObject()) {
+                    throw new IllegalStateException("商用 Activity document 必须是 JSON object");
+                }
+                // Claude Code 可直接返回 document 对象；持久化时保留为规范 JSON，禁止 asText() 丢空。
+                p.document = doc.isTextual() ? doc.asText() : doc.toString();
                 JsonNode s = node.get("summary");
                 p.summary = s == null || s.isNull() ? "" : s.asText();
                 JsonNode c = node.get("conclusion");
                 p.conclusion = c == null || c.isNull() ? "未提取" : c.asText();
+                if (strict && (p.summary.isBlank() || !(p.conclusion.startsWith("PASS")
+                        || p.conclusion.startsWith("FAIL")))) {
+                    throw new IllegalStateException("商用 Activity summary/conclusion 不符合输出协议");
+                }
                 return p;
             }
             // 兼容 fast 桩：{deliverable, content, summary}
@@ -598,7 +776,16 @@ public class SpkTaskRouterService {
                 return p;
             }
         } catch (Exception ignore) {
+            if (strict) {
+                if (ignore instanceof IllegalStateException illegalStateException) {
+                    throw illegalStateException;
+                }
+                throw new IllegalStateException("商用 Activity 主产物不是有效 JSON envelope", ignore);
+            }
             // 非 JSON，fallback
+        }
+        if (strict) {
+            throw new IllegalStateException("商用 Activity 主产物缺少 document object");
         }
         // 非结构化 JSON：按 spk-reporter 的 markdown 报告格式提取 摘要/结论。
         // 报告形如：
@@ -661,6 +848,94 @@ public class SpkTaskRouterService {
         }
     }
 
+    /**
+     * 读取审批门写入的返工上下文并附加到同阶段 prompt。这里只读 Flowable 变量，
+     * 旧阶段意见不会泄漏到后续阶段；新 Activity 会由流程自动创建 Omnigent 会话并执行。
+     */
+    private String appendAutomaticReworkContext(String prompt, String processInstanceId,
+                                                String activityStage, String activityId) {
+        if (processInstanceId == null || processInstanceId.isBlank()) {
+            return prompt;
+        }
+        try {
+            Object stage = runtimeService.getVariable(processInstanceId, SpkIpdReworkVariables.TARGET_STAGE);
+            Object gate = runtimeService.getVariable(processInstanceId, SpkIpdReworkVariables.GATE);
+            Object reason = runtimeService.getVariable(processInstanceId, SpkIpdReworkVariables.REASON);
+            Object count = runtimeService.getVariable(processInstanceId, SpkIpdReworkVariables.COUNT);
+            int reworkCount = count instanceof Number n ? n.intValue() : 0;
+            String withApprovalRework = SpkReworkPromptBuilder.append(prompt, activityStage,
+                    stage == null ? null : stage.toString(),
+                    gate == null ? null : gate.toString(),
+                    reason == null ? null : reason.toString(), reworkCount);
+            Object retryActivity = runtimeService.getVariable(processInstanceId,
+                    SpkActivityRetryVariables.ACTIVITY_ID);
+            Object retryReason = runtimeService.getVariable(processInstanceId,
+                    SpkActivityRetryVariables.REASON);
+            Object retryCountValue = runtimeService.getVariable(processInstanceId,
+                    SpkActivityRetryVariables.COUNT);
+            Object retryMaxValue = runtimeService.getVariable(processInstanceId,
+                    SpkActivityRetryVariables.MAX_ATTEMPTS);
+            int retryCount = retryCountValue instanceof Number n ? n.intValue() : 0;
+            int retryMax = retryMaxValue instanceof Number n ? n.intValue() : 3;
+            return SpkActivityRetryPromptBuilder.append(withApprovalRework, activityId,
+                    retryActivity == null ? null : retryActivity.toString(),
+                    retryReason == null ? null : retryReason.toString(), retryCount, retryMax);
+        } catch (Exception e) {
+            log.warn("[appendAutomaticReworkContext][processInstanceId={} 读取返工上下文失败：{}]",
+                    processInstanceId, truncate(e.getMessage(), 200));
+            return prompt;
+        }
+    }
+
+    /**
+     * 一次性读取 FlowRun 启动时冻结的项目上下文。Activity 线程只读流程变量，
+     * 不在同步 trigger 路径写变量，保持 Flowable 互锁约束。
+     */
+    private Map<String, Object> readProjectContext(String processInstanceId) {
+        Map<String, Object> context = new LinkedHashMap<>();
+        if (processInstanceId == null || processInstanceId.isBlank()) {
+            return context;
+        }
+        try {
+            putVariable(context, "projectId", processInstanceId, VAR_PROJECT_ID);
+            putVariable(context, "projectCode", processInstanceId, VAR_PROJECT_CODE);
+            putVariable(context, "projectName", processInstanceId, VAR_PROJECT_NAME);
+            putVariable(context, "projectRoot", processInstanceId, VAR_PROJECT_ROOT);
+            putVariable(context, "projectDescription", processInstanceId, VAR_PROJECT_DESCRIPTION);
+            putVariable(context, "projectObjective", processInstanceId, VAR_PROJECT_OBJECTIVE);
+            putVariable(context, "versionId", processInstanceId, VAR_VERSION_ID);
+            putVariable(context, "versionNo", processInstanceId, VAR_VERSION_NO);
+            putVariable(context, "versionObjective", processInstanceId, VAR_VERSION_OBJECTIVE);
+            putVariable(context, "versionScope", processInstanceId, VAR_VERSION_SCOPE);
+        } catch (Exception e) {
+            log.warn("[readProjectContext][processInstanceId={} 读取失败：{}]",
+                    processInstanceId, truncate(e.getMessage(), 200));
+        }
+        return context;
+    }
+
+    private void putVariable(Map<String, Object> target, String key, String processInstanceId, String variableName) {
+        Object value = runtimeService.getVariable(processInstanceId, variableName);
+        if (value != null) {
+            target.put(key, value);
+        }
+    }
+
+    private static Long longValue(Object value) {
+        if (value instanceof Number n) {
+            return n.longValue();
+        }
+        try {
+            return value == null ? null : Long.valueOf(value.toString());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static String stringValue(Object value) {
+        return value == null ? null : value.toString();
+    }
+
     /** test 模式附加的轻量化指令（控成本/时延）：≤400 字、不分发子智能体、直接作答。 */
     private static final String TEST_PROMPT_OVERRIDE =
             "\n\n【测试场景】请直接给出简洁快速的简要报告（中文，不超过 400 字，3-5 段，结构清晰）。"
@@ -690,19 +965,20 @@ public class SpkTaskRouterService {
     }
 
     /**
-     * product 模式 concept 阶段真实交付动作：建 Gitea concept 分支 → 报告文档 commit 到该分支 →
-     * 开 PR（head=concept/{runId} base=main）→ Plane 录入需求清单。每个动作独立 try/catch，
-     * 失败记 *Error 降级、不阻断 Activity done（同既有 gitea createFile 降级模式）。
+     * product 模式真实交付动作：建 Gitea 阶段分支 → 报告文档 commit 到该分支 →
+     * 开 PR（head=ipd/{stage}/{runId} base=main）；计划阶段另把结构化需求同步到 Plane。
+     * commercial-release 下任何必需交付动作失败均 fail-closed，禁止 Activity done。
      * <p>
      * 不重复 commit main：test 模式已走 main 路径，product 走分支+PR，避免 PR diff 为空被 Gitea 拒。
      */
     private Map<String, Object> doProductDelivery(SpkIpdActivityDefDO def, String activityRunId,
-                                                   String processInstanceId, Payload payload) {
+                                                   String processInstanceId, Payload payload,
+                                                   boolean commercialRelease) {
         Map<String, Object> d = new LinkedHashMap<>();
         d.put("mode", "product");
         d.put("stage", def.getStage());
-        String branch = "concept/" + activityRunId;
-        // 1) 建 concept 分支（Gitea 仓库须先有 main 与初始 commit，见 [[plane-gitea-integration-contract]]）
+        String branch = "ipd/" + def.getStage() + "/" + activityRunId;
+        // 1) 建阶段分支（Gitea 仓库须先有 main 与初始 commit，见 [[plane-gitea-integration-contract]]）
         try {
             giteaService.createBranch(branch, "main");
             d.put("branch", branch);
@@ -724,7 +1000,7 @@ public class SpkTaskRouterService {
             log.warn("[doProductDelivery][activityRunId={} commit doc 失败：{}]",
                     activityRunId, truncate(e.getMessage(), 200));
         }
-        // 3) 开 PR head=concept/{runId} base=main
+        // 3) 开 PR head=ipd/{stage}/{runId} base=main
         try {
             String title = "feat(" + def.getStage() + "): " + def.getName() + " " + activityRunId;
             String body = (payload.summary != null && !payload.summary.isBlank())
@@ -737,27 +1013,45 @@ public class SpkTaskRouterService {
             log.warn("[doProductDelivery][activityRunId={} 开 PR 失败：{}]",
                     activityRunId, truncate(e.getMessage(), 200));
         }
-        // 4) Plane 录入需求（concept 阶段需求洞察报告末尾 ```requirements JSON 块；projectId 配置就绪时）
-        try {
-            List<SpkPlaneIntegrationService.PlaneRequirementReq> reqs = parseRequirements(payload.document);
-            if (!reqs.isEmpty()) {
-                Map<String, String> issueMap = planeService.importRequirements(reqs);
-                d.put("planeIssues", issueMap);
-            } else {
-                d.put("planeSkipped", "无 requirements 块或为空");
+        // 4) 计划阶段把冻结的结构化需求同步到 Plane；其余阶段不得重复创建 issue。
+        if ("plan".equalsIgnoreCase(def.getStage())) {
+            try {
+                List<SpkPlaneIntegrationService.PlaneRequirementReq> reqs = parseRequirements(payload.document);
+                if (!reqs.isEmpty()) {
+                    Map<String, Object> projectContext = readProjectContext(processInstanceId);
+                    String planeScope = "project-" + stringValue(projectContext.get("projectId"))
+                            + "-version-" + stringValue(projectContext.get("versionId"));
+                    Map<String, String> issueMap = planeService.importRequirements(reqs, planeScope);
+                    d.put("planeIssues", issueMap);
+                    d.put("planeIdempotencyScope", planeScope);
+                    if (commercialRelease && issueMap.size() != reqs.size()) {
+                        d.put("planeError", "Plane 同步不完整: expected=" + reqs.size()
+                                + ", actual=" + issueMap.size());
+                    }
+                } else {
+                    d.put("planeError", "计划阶段主产物缺少结构化 requirements 数组");
+                }
+            } catch (Exception e) {
+                d.put("planeError", truncate(e.getMessage(), 200));
+                log.warn("[doProductDelivery][activityRunId={} Plane 录入失败：{}]",
+                        activityRunId, truncate(e.getMessage(), 200));
             }
-        } catch (Exception e) {
-            d.put("planeError", truncate(e.getMessage(), 200));
-            log.warn("[doProductDelivery][activityRunId={} Plane 录入失败：{}]",
-                    activityRunId, truncate(e.getMessage(), 200));
         }
-        // 记 delivery 证据（失败不阻断）
+        // 记 delivery 证据；商用模式下证据或外部交付失败都必须阻断。
         try {
             evidenceService.append(activityRunId, processInstanceId,
                     SpkEvidenceTypeEnum.RUN.getLabel(), activityRunId, d);
         } catch (Exception e) {
+            if (commercialRelease) {
+                throw new IllegalStateException("商用交付证据写入失败", e);
+            }
             log.warn("[doProductDelivery][activityRunId={} 记 delivery 证据失败：{}]",
                     activityRunId, truncate(e.getMessage(), 200));
+        }
+        if (commercialRelease && (d.containsKey("branchError") || d.containsKey("docError")
+                || d.containsKey("prError") || d.containsKey("planeError")
+                || !d.containsKey("branch") || !d.containsKey("giteaDocUrl") || !d.containsKey("prUrl"))) {
+            throw new IllegalStateException("商用外部交付未完整成功: " + d.keySet());
         }
         log.info("[doProductDelivery][activityRunId={} stage={} product 交付完成 keys={}]",
                 activityRunId, def.getStage(), d.keySet());
@@ -765,7 +1059,7 @@ public class SpkTaskRouterService {
     }
 
     /**
-     * 从 Lead 产物 markdown 中提取 ```requirements 代码块的 JSON 需求清单，
+     * 从 Lead 产物 JSON 的 requirements 数组（首选）或 markdown ```requirements 兼容块中提取需求，
      * 反序列化为 {@link SpkPlaneIntegrationService.PlaneRequirementReq}（level 默认 IR）。
      * 解析失败 / 无块 / 非数组一律返回空列表（降级，不阻断 PR/Activity done）。
      * 约定：concept 阶段需求洞察 Activity prompt 末尾要求输出该块（见 spk_ipd_activity_def_init.sql）。
@@ -775,33 +1069,52 @@ public class SpkTaskRouterService {
         if (document == null || document.isBlank()) {
             return res;
         }
-        java.util.regex.Pattern pat = java.util.regex.Pattern.compile(
-                "```requirements\\s*([\\s\\S]*?)```", java.util.regex.Pattern.CASE_INSENSITIVE);
-        java.util.regex.Matcher m = pat.matcher(document);
-        if (!m.find()) {
-            return res;
-        }
-        String json = m.group(1).trim();
         JsonNode arr;
         try {
-            arr = JsonUtils.parseTree(json);
+            JsonNode root = JsonUtils.parseTree(document);
+            arr = root != null && root.isObject() ? root.get("requirements") : null;
         } catch (Exception e) {
-            return res;
+            arr = null;
+        }
+        if (arr == null || !arr.isArray()) {
+            java.util.regex.Pattern pat = java.util.regex.Pattern.compile(
+                    "```requirements\\s*([\\s\\S]*?)```", java.util.regex.Pattern.CASE_INSENSITIVE);
+            java.util.regex.Matcher m = pat.matcher(document);
+            if (!m.find()) {
+                return res;
+            }
+            try {
+                arr = JsonUtils.parseTree(m.group(1).trim());
+            } catch (Exception e) {
+                return res;
+            }
         }
         if (arr == null || !arr.isArray()) {
             return res;
         }
         for (JsonNode n : arr) {
-            String name = n.has("name") ? n.get("name").asText() : null;
+            String name = textField(n, "name", "title", "summary");
             if (name == null || name.isBlank()) {
                 continue;
             }
-            String key = n.has("key") && !n.get("key").isNull() ? n.get("key").asText() : null;
+            String key = textField(n, "key", "requirementId", "id");
             String level = n.has("level") && !n.get("level").isNull() ? n.get("level").asText() : "IR";
-            String desc = n.has("description") && !n.get("description").isNull() ? n.get("description").asText() : null;
+            String desc = n.has("description") && !n.get("description").isNull()
+                    ? (n.get("description").isTextual() ? n.get("description").asText() : n.get("description").toString())
+                    : n.toString();
             res.add(new SpkPlaneIntegrationService.PlaneRequirementReq(key, level, name, desc, null));
         }
         return res;
+    }
+
+    private static String textField(JsonNode node, String... names) {
+        for (String name : names) {
+            JsonNode value = node.get(name);
+            if (value != null && !value.isNull() && !value.asText().isBlank()) {
+                return value.asText();
+            }
+        }
+        return null;
     }
 
     private static class Payload {

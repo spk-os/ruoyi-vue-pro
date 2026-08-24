@@ -74,7 +74,8 @@ public class SpkAgentDefDO extends BaseDO {
      */
     private String status;
     /**
-     * 默认模型（模型名或 id，描述性）
+     * Agent 执行模型（模型名或 id）。mode=omnigent 时由 Cortex 作为 model_override
+     * 显式传给 Omnigent，属于执行配置而非描述性默认值。
      */
     private String model;
     /**

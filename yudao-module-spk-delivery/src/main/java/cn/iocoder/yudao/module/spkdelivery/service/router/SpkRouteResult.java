@@ -38,6 +38,8 @@ public class SpkRouteResult {
     /** 验证结论 PASS/CONDITIONAL/FAIL/null（无验证则 null） */
     private String verificationConclusion;
     private String verifierCode;
+    /** 独立核验摘要，供 Cortex 自动重试时原样反馈给下一次 Agent 执行。 */
+    private String verificationSummary;
     /** 执行状态 done/failed */
     private String status;
 

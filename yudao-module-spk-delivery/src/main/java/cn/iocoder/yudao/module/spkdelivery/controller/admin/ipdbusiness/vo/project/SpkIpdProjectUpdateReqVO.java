@@ -27,6 +27,9 @@ public class SpkIpdProjectUpdateReqVO {
     @Schema(description = "项目负责人")
     private Long ownerUserId;
 
+    @Schema(description = "项目实际交付/开发工作区绝对路径")
+    private String deliveryRoot;
+
     @Schema(description = "计划开始时间")
     private LocalDateTime plannedStartAt;
 

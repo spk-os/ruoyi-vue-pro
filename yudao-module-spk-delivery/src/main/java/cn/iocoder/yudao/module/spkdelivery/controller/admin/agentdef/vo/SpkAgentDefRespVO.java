@@ -30,7 +30,7 @@ public class SpkAgentDefRespVO {
     private String workingMemory;
     @Schema(description = "状态")
     private String status;
-    @Schema(description = "默认模型")
+    @Schema(description = "Agent 执行模型")
     private String model;
     @Schema(description = "关联 AI 角色 id")
     private Long roleId;

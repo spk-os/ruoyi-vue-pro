@@ -11,11 +11,14 @@ import cn.iocoder.yudao.module.spkdelivery.service.agent.SpkAgentDispatchReq;
 import cn.iocoder.yudao.module.spkdelivery.service.agent.SpkAgentDispatchResult;
 import cn.iocoder.yudao.module.spkdelivery.service.artifact.SpkArtifactService;
 import cn.iocoder.yudao.module.spkdelivery.service.evidence.SpkEvidenceService;
+import cn.iocoder.yudao.module.spkdelivery.service.flowconfig.SpkSkillConfigService;
 import cn.iocoder.yudao.module.spkdelivery.service.modelcapability.SpkModelCapabilityRegistry;
+import cn.iocoder.yudao.module.spkdelivery.service.router.SpkCommercialDeliveryGuard;
 import tools.jackson.databind.JsonNode;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.flowable.engine.RuntimeService;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -30,6 +33,9 @@ import java.util.UUID;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.VERIFIER_NOT_EXISTS;
+import static cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdBusinessConstants.VAR_PROJECT_ID;
+import static cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdBusinessConstants.VAR_PROJECT_ROOT;
+import static cn.iocoder.yudao.module.spkdelivery.service.ipdbusiness.SpkIpdBusinessConstants.VAR_VERSION_ID;
 
 /**
  * SPK-OS Verifier Service —— Independent Verifier 验证（三层校验）。
@@ -42,15 +48,14 @@ import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.VERIF
  * 谓词（{@link SpkAcceptanceRuleEngine}）做确定性业务规则检查（来源可追溯/反例校验/置信度标注等），
  * 规则 severity=fail 违反即 FAIL，severity=conditional 违反即 CONDITIONAL。
  * <p>
- * <b>Layer 3 语义复核</b>：经 NativeAiAdapter 调 Independent Verifier agent 做 recheck/redteam/
- * completeness/traceback 四方法语义复核（fast-mode 走 PASS 桩；真实 LLM 重试 3 次，耗尽降级 ERROR）。
+ * <b>Layer 3 语义复核</b>：经 Omnigent→Claude Code 调 Independent Verifier agent 做 recheck/redteam/
+ * completeness/traceback 四方法语义复核；每次用独立 activityRunId 创建隔离会话，调用失败记 ERROR。
  * <p>
  * <b>裁决聚合</b>：取 Layer1/2 确定性结论与 Layer3 语义结论的严重度较高者（FAIL &gt; CONDITIONAL &gt; PASS）；
  * Layer3 PASS 不能推翻结构/验收 FAIL。schema/acceptance 文件缺失则该 artifactType 未配置三层校验，
  * 仅走 Layer3（向后兼容，与旧行为一致）。
  * <p>
- * 物理隔离 P1 降级为逻辑隔离：独立 AiChatConversation（经 NativeAiAdapter 的 conversationCache
- * 按 instanceId#nodeKey#roleId 隔离）、独立 capability snapshot、独立 evidence 写入路径。
+ * 物理隔离 P1 降级为逻辑隔离：独立 Omnigent 会话、独立 capability snapshot、独立 evidence 写入路径。
  *
  * @author SPK-OS
  */
@@ -73,8 +78,12 @@ public class SpkVerifierService {
     private SpkEvidenceService evidenceService;
     @Resource
     private SpkModelCapabilityRegistry capabilityRegistry;
-    @Resource(name = "native-ai")
+    @Resource(name = "omnigent")
     private FrameworkAdapter frameworkAdapter;
+    @Resource
+    private RuntimeService runtimeService;
+    @Resource
+    private SpkSkillConfigService skillConfigService;
 
     /**
      * 触发对某产物的独立验证（三层校验：结构 / 验收 / 语义）。
@@ -89,6 +98,17 @@ public class SpkVerifierService {
                                            String activityRunId, String processInstanceId) {
         if (verifier == null || verifier.getRoleId() == null) {
             throw exception(VERIFIER_NOT_EXISTS);
+        }
+        // Router 已在 Activity 完成前执行一次 Independent Verifier；阶段 TR/Aegis 随后会对
+        // 同一不可变产物再请求核证。对相同 artifact/run/verifier 的已签 PASS 收据直接复用，
+        // 防止重复绑定同一个 Omnigent runner、重复消耗模型并产生互相矛盾的收据。
+        // ERROR/CONDITIONAL/FAIL 不复用，后续自动返工的新产物仍会正常重新验证。
+        SpkVerificationReceiptDO reusable = selectReusablePassReceipt(
+                receiptMapper.selectByArtifactId(artifact.getArtifactId()), verifier.getId(), activityRunId);
+        if (reusable != null) {
+            log.info("[verify][复用已签 PASS 收据 receiptId={} activityRunId={} artifactId={} verifier={}]",
+                    reusable.getReceiptId(), activityRunId, artifact.getArtifactId(), verifier.getCode());
+            return reusable;
         }
         // 0. 读产物正文 + 解析 schemaRef（= artifactType）；加载 schema/acceptance
         String artifactContent = readArtifactContent(artifact);
@@ -118,25 +138,52 @@ public class SpkVerifierService {
             }
         }
 
-        // Layer 3 语义复核（LLM；NativeAiAdapter 已重试 transient，耗尽降级 ERROR）
-        String snapshotId = capabilityRegistry.freezeSnapshot("verifier:" + verifier.getCode());
-        String prompt = buildVerifyPrompt(verifier, artifact, artifactContent);
-        SpkAgentDispatchReq req = new SpkAgentDispatchReq()
-                .setRoleId(verifier.getRoleId())
-                .setPrompt(prompt)
-                .setInstanceId(processInstanceId)
-                .setNodeKey("verify:" + artifact.getArtifactId());
+        // Layer 3 语义复核。Layer1/2 已经确定 FAIL 时不再启动昂贵的 Claude 会话：
+        // 语义判断不能推翻确定性失败，重复调度只会延迟自动返工并制造噪声回执。
+        String snapshotId;
         ParsedVerdict llm;
-        try {
-            SpkAgentDispatchResult result = frameworkAdapter.dispatchTask(req);
-            llm = parseVerdict(result.getResult());
-        } catch (Exception e) {
-            log.error("[verify][activityRunId={} artifactId={} 验证器 LLM 调用失败（重试耗尽），"
-                    + "降级 ERROR 推进，主产物已真实生成]", activityRunId, artifact.getArtifactId(), e);
+        if (shouldSkipSemantic(structuralErrors, ruleResults)) {
+            snapshotId = "deterministic-fail";
             llm = new ParsedVerdict();
-            llm.conclusion = "ERROR";
-            llm.summary = "验证器 LLM 调用失败（已重试）：" + truncate(e.getMessage(), 200);
+            llm.conclusion = "PASS";
+            llm.summary = "Layer1/Layer2 已确定 FAIL，跳过不能改变裁决的语义复核";
             llm.pointsJson = "[]";
+            log.info("[verify][activityRunId={} artifactId={} 确定性失败，跳过语义复核]",
+                    activityRunId, artifact.getArtifactId());
+        } else {
+            snapshotId = capabilityRegistry.freezeSnapshot("verifier:" + verifier.getCode());
+            String prompt = buildVerifyPrompt(verifier, artifact, artifactContent);
+            String skillEnv = resolveSkillEnv(processInstanceId);
+            String skillPath = resolveVerifierSkillPath(skillEnv);
+            SpkCommercialDeliveryGuard.requireSkill(skillEnv, "spk-ipd-verifier", skillPath,
+                    "verify:" + artifact.getArtifactId());
+            SpkCommercialDeliveryGuard.requireOmnigentClaudeCodeRoute(skillEnv, frameworkAdapter.getName(),
+                    verifier.getModel(), verifier.getRuntimeType(), verifier.getOmnigentAgentId(), verifier.getCode());
+            SpkAgentDispatchReq req = new SpkAgentDispatchReq()
+                    .setRoleId(verifier.getRoleId())
+                    .setPrompt(prompt)
+                    .setInstanceId(processInstanceId)
+                    .setNodeKey("verify:" + artifact.getArtifactId())
+                    .setLeadCode(verifier.getCode())
+                    .setLeadDefId(verifier.getId())
+                    .setActivityRunId(activityRunId + "-verify")
+                    .setMode("omnigent")
+                    .setOmnigentAgentId(verifier.getOmnigentAgentId())
+                    .setModel(verifier.getModel())
+                    .setSkillName("spk-ipd-verifier")
+                    .setSkillPath(skillPath);
+            inheritFlowProjectContext(req, processInstanceId, skillEnv);
+            try {
+                SpkAgentDispatchResult result = frameworkAdapter.dispatchTask(req);
+                llm = parseVerdict(result.getResult());
+            } catch (Exception e) {
+                log.error("[verify][activityRunId={} artifactId={} 验证器 LLM 调用失败（重试耗尽），"
+                        + "降级 ERROR 推进，主产物已真实生成]", activityRunId, artifact.getArtifactId(), e);
+                llm = new ParsedVerdict();
+                llm.conclusion = "ERROR";
+                llm.summary = "验证器 LLM 调用失败（已重试）：" + truncate(e.getMessage(), 200);
+                llm.pointsJson = "[]";
+            }
         }
 
         // 裁决聚合：确定性（Layer1/2）与语义（Layer3）取较高严重度
@@ -189,8 +236,83 @@ public class SpkVerifierService {
         return receipt;
     }
 
+    static SpkVerificationReceiptDO selectReusablePassReceipt(List<SpkVerificationReceiptDO> receipts,
+                                                               Long verifierId, String activityRunId) {
+        if (receipts == null || verifierId == null || activityRunId == null) {
+            return null;
+        }
+        return receipts.stream()
+                .filter(r -> verifierId.equals(r.getVerifierId()))
+                .filter(r -> activityRunId.equals(r.getActivityRunId()))
+                .filter(r -> "PASS".equalsIgnoreCase(r.getOverallConclusion()))
+                .filter(r -> r.getSignedAt() != null)
+                .max(java.util.Comparator.comparing(SpkVerificationReceiptDO::getSignedAt))
+                .orElse(null);
+    }
+
     public List<SpkVerificationReceiptDO> listByActivityRunId(String activityRunId) {
         return receiptMapper.selectListByActivityRunId(activityRunId);
+    }
+
+    private String resolveSkillEnv(String processInstanceId) {
+        try {
+            Object value = runtimeService.getVariable(processInstanceId, "spk_skill_env");
+            if (value != null && !value.toString().isBlank()) {
+                return value.toString().trim();
+            }
+        } catch (Exception e) {
+            log.warn("[resolveSkillEnv][processInstanceId={} 读取失败，使用默认环境：{}]",
+                    processInstanceId, truncate(e.getMessage(), 160));
+        }
+        return skillConfigService.getConfig().getDefaultEnv();
+    }
+
+    private String resolveVerifierSkillPath(String skillEnv) {
+        Path path = Path.of(skillConfigService.getConfig().getSkillsRoot(), skillEnv,
+                "spk-ipd-verifier", "SKILL.md");
+        return Files.isRegularFile(path) ? path.toString() : null;
+    }
+
+    /**
+     * Verifier 与被核证 Activity 必须共享 FlowRun 冻结的项目/版本工作区，但仍以独立
+     * activityRunId 创建独立 Omnigent 会话。商用环境读取失败或变量缺失时 fail-closed，
+     * 不允许 OmnigentAdapter 回退到历史全局 workspace。
+     */
+    SpkAgentDispatchReq inheritFlowProjectContext(SpkAgentDispatchReq req, String processInstanceId,
+                                                   String skillEnv) {
+        Long projectId = null;
+        Long versionId = null;
+        String projectRoot = null;
+        try {
+            projectId = longValue(runtimeService.getVariable(processInstanceId, VAR_PROJECT_ID));
+            versionId = longValue(runtimeService.getVariable(processInstanceId, VAR_VERSION_ID));
+            projectRoot = stringValue(runtimeService.getVariable(processInstanceId, VAR_PROJECT_ROOT));
+        } catch (Exception e) {
+            if (SpkCommercialDeliveryGuard.isCommercialRelease(skillEnv)) {
+                throw new IllegalStateException("读取 commercial-release FlowRun 项目上下文失败: processInstanceId="
+                        + processInstanceId, e);
+            }
+            log.warn("[inheritFlowProjectContext][processInstanceId={} 读取失败，非商用流程保留兼容回退：{}]",
+                    processInstanceId, truncate(e.getMessage(), 160));
+        }
+        SpkCommercialDeliveryGuard.requireProjectExecutionContext(skillEnv, projectId, versionId,
+                projectRoot, req.getNodeKey());
+        return req.setProjectId(projectId).setVersionId(versionId).setWorkspace(projectRoot);
+    }
+
+    private static Long longValue(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return value == null ? null : Long.valueOf(value.toString());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static String stringValue(Object value) {
+        return value == null ? null : value.toString();
     }
 
     // ---------- 内部 ----------
@@ -202,41 +324,67 @@ public class SpkVerifierService {
         sb.append("completeness（查必填项缺失）/ traceback（追溯证据链）。\n\n");
         sb.append("产物类型：").append(artifact.getArtifactType()).append("\n");
         sb.append("产物摘要：").append(artifact.getSummary()).append("\n");
-        sb.append("产物正文：\n").append(truncate(content, 8000)).append("\n\n");
+        sb.append("权威产物 URI：").append(artifact.getUri() == null ? "(未登记，禁止猜测路径)" : artifact.getUri())
+                .append("\n");
+        sb.append("权威产物 SHA-256：").append(artifact.getContentHash()).append("\n");
+        sb.append("必须读取上述唯一冻结文件并核对 SHA-256；只允许以该文件和 Cortex 冻结的项目上下文为权威，")
+                .append("不得扫描、猜测或改用其他目录中的旧产物，也不得把摘要当作正文。\n");
+        if ("project-plan".equals(artifact.getArtifactType())) {
+            sb.append("计划阶段尚未进入开发。计划中声明的未来交付物、测试报告、ADR、代码、部署证据")
+                    .append("不得因其当前不存在而判 FAIL；仅核验计划本身的完整性、可执行性与追溯关系。")
+                    .append("权威来源证据仅限冻结项目上下文列出的设计文档、需求章节、原型与 API 文档，")
+                    .append("不得用当前实现状态替代计划阶段验收。\n");
+        }
+        sb.append("\n");
         sb.append("请以 JSON 返回，格式：\n");
         sb.append("{\"overall\":\"PASS|CONDITIONAL|FAIL\",\"summary\":\"一句话结论\",");
         sb.append("\"evidencePoints\":[{\"point\":\"<检查点>\",\"verdict\":\"Confirmed|Challenged|Missing|Contradicted\"}]}");
         return sb.toString();
     }
 
+    static boolean shouldSkipSemantic(List<String> structuralErrors,
+                                      List<SpkAcceptanceRuleEngine.Result> ruleResults) {
+        if (structuralErrors != null && !structuralErrors.isEmpty()) {
+            return true;
+        }
+        if (ruleResults == null) {
+            return false;
+        }
+        return ruleResults.stream().anyMatch(result -> result != null && !result.passed && result.isFail());
+    }
+
     private ParsedVerdict parseVerdict(String result) {
         ParsedVerdict v = new ParsedVerdict();
         v.conclusion = SpkVerificationConclusionEnum.CONDITIONAL.getLabel();
-        v.summary = "验证未返回结构化结论（P1 桩默认 CONDITIONAL）";
+        v.summary = "验证未返回结构化结论，默认 CONDITIONAL";
         v.pointsJson = "[]";
         if (result == null || result.isBlank()) {
             return v;
         }
-        try {
-            JsonNode node = JsonUtils.parseTree(result);
-            JsonNode overall = node.get("overall");
-            if (overall != null && !overall.isNull()) {
-                SpkVerificationConclusionEnum c = SpkVerificationConclusionEnum.of(overall.asText());
-                if (c != null) {
-                    v.conclusion = c.getLabel();
-                }
-            }
-            JsonNode summary = node.get("summary");
-            if (summary != null && !summary.isNull()) {
-                v.summary = summary.asText();
-            }
-            JsonNode points = node.get("evidencePoints");
-            if (points != null && points.isArray()) {
-                v.pointsJson = JsonUtils.toJsonString(points);
-            }
-        } catch (Exception e) {
-            // 非 JSON：把整段当 summary
+        JsonNode node = extractJsonObject(result);
+        if (node == null) {
+            // Omnigent/Claude Code 没有返回任何可解析 JSON 时保持 fail-closed。
             v.summary = truncate(result, 500);
+            return v;
+        }
+        JsonNode overall = node.get("overall");
+        if (overall == null || overall.isNull()) {
+            // 兼容已发布 verifier 的字段名；未知值仍保持 CONDITIONAL。
+            overall = node.get("overallConclusion");
+        }
+        if (overall != null && !overall.isNull()) {
+            SpkVerificationConclusionEnum c = SpkVerificationConclusionEnum.of(overall.asText());
+            if (c != null) {
+                v.conclusion = c.getLabel();
+            }
+        }
+        JsonNode summary = node.get("summary");
+        if (summary != null && !summary.isNull()) {
+            v.summary = summary.asText();
+        }
+        JsonNode points = node.get("evidencePoints");
+        if (points != null && points.isArray()) {
+            v.pointsJson = JsonUtils.toJsonString(points);
         }
         return v;
     }
@@ -361,9 +509,12 @@ public class SpkVerifierService {
         if (content == null || content.isBlank()) {
             return null;
         }
-        JsonNode direct = tryParse(content);
-        if (direct != null && direct.isObject()) {
-            return direct;
+        String trimmed = content.trim();
+        if (trimmed.startsWith("{")) {
+            JsonNode direct = tryParse(trimmed);
+            if (direct != null && direct.isObject()) {
+                return direct;
+            }
         }
         // ```json 围栏
         int fs = content.indexOf("```json");

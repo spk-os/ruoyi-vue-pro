@@ -6,13 +6,16 @@ import cn.iocoder.yudao.module.spkdelivery.controller.admin.agent.vo.SpkAgentLoa
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agent.SpkAgentTaskDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.agentdef.SpkAgentDefDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.artifact.SpkArtifactManifestDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdFlowRunDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.taskcontract.SpkTaskContractDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agent.SpkAgentTaskMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.agentdef.SpkAgentDefMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.artifact.SpkArtifactManifestMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdFlowRunMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.taskcontract.SpkTaskContractMapper;
 import cn.iocoder.yudao.module.spkdelivery.enums.SpkAgentTaskStatusEnum;
 import cn.iocoder.yudao.module.spkdelivery.enums.SpkTaskContractStatusEnum;
+import cn.iocoder.yudao.module.spkdelivery.service.router.SpkActivityRetryVariables;
 import cn.iocoder.yudao.module.spkdelivery.service.router.SpkRouteResult;
 import cn.iocoder.yudao.module.spkdelivery.service.router.SpkTaskRouterService;
 import cn.iocoder.yudao.module.spkdelivery.service.feedback.SpkFeedbackService;
@@ -33,6 +36,9 @@ import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.AGENT
 import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.AGENT_TASK_CALLBACK_FAIL;
 import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.AGENT_TASK_DISPATCH_FAIL;
 import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.AGENT_TASK_NOT_EXISTS;
+import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.AGENT_RECOVERY_REASON_REQUIRED;
+import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.AGENT_RECOVERY_STATE_INVALID;
+import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.AGENT_RECOVERY_WAIT_STATE_MISSING;
 
 /**
  * SPK-OS Agent 任务服务实现
@@ -50,6 +56,8 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
     public static final String VAR_AGENT_ROLE_ID = "agentRoleId";
     /** 流程变量名：派发 prompt */
     public static final String VAR_TASK_PROMPT = "taskPrompt";
+    /** 商用 Activity 总执行次数上限（含首次）；与 TaskContract.retryPolicy 一致。 */
+    private static final int ACTIVITY_MAX_ATTEMPTS = 3;
 
     /**
      * fencing 令牌单调计数器（单实例足够；多实例需换 DB sequence）。
@@ -92,6 +100,8 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
     private SpkAgentDefMapper agentDefMapper;
     @Resource
     private SpkFeedbackService feedbackService;
+    @Resource
+    private SpkIpdFlowRunMapper flowRunMapper;
 
     @Override
     public SpkAgentTaskDO dispatch(Long roleId, String prompt, String instanceId, String nodeKey, String receiveTaskKey) {
@@ -171,24 +181,15 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
                 // 独立线程跑 route（同步 LLM 落三件套）。后台线程独立，setVariables+triggerTask 不与
                 // 触发器线程互锁（[[flowable-sync-trigger-deadlock]]：互锁仅在触发器线程内 setVariables 时发生）。
                 // complete 事务毫秒级提交，LLM 数十秒~3min，trigger 时 receiveTask 已落库可见。
-                SpkRouteResult result = taskRouterService.route(activityId, activityVersion, instanceId,
-                        taskId, businessKey, nodeKey, receiveTaskKey, inputRefs);
-                // 流程严格性：仅 activity 成功才推进 receiveTask；failed 不 trigger，流程卡在该节点，
-                // 等 scanTimeout 周期 rerun（attempt<max）或人工 intervene 兜底——避免"前面没完成就跑后面"。
-                if (SpkTaskContractStatusEnum.FAILED.getLabel().equalsIgnoreCase(result.getStatus())) {
-                    log.warn("[dispatchActivityAsync][activity failed status={} 不推进 receiveTask={} activityRunId={}，等 scanTimeout/人工介入]",
-                            result.getStatus(), receiveTaskKey, result.getActivityRunId());
-                } else {
-                    applyResultAndTrigger(instanceId, receiveTaskKey, result.getAgentResult());
-                    log.info("[dispatchActivityAsync][后台 route 完成 activityId={} activityRunId={} instanceId={}]",
-                            activityId, result.getActivityRunId(), instanceId);
-                }
-                return result;
+                return routeWithAutomaticRetry(activityId, activityVersion, instanceId, taskId,
+                        businessKey, nodeKey, receiveTaskKey, inputRefs,
+                        1, 0L, null);
             } catch (Exception e) {
-                // LLM 失败/超时：receiveTask 永久卡住，流程停滞，由 Cockpit「介入」(rerun/abort) 人工兜底
-                // （[[cortext-ipd-d2-d8-gap-impl]] 的 TimeoutJob 兜底待后续补）。
+                // 自动重试编排自身异常也必须 fail-closed；禁止 FlowRun 继续显示伪 RUNNING。
                 log.error("[dispatchActivityAsync][后台 route 失败 activityId={} instanceId={} nodeKey={}]",
                         activityId, instanceId, nodeKey, e);
+                blockFlowRunAfterRetryExhausted(instanceId, activityId,
+                        "自动重试编排异常：" + safeMessage(e));
                 return null;
             } finally {
                 if (prev != null) {
@@ -322,38 +323,23 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
         String act = action == null ? "note" : action.toLowerCase();
         switch (act) {
             case "rerun": {
-                // 按 contract 上的 activityId 重新路由派发（生成新 activityRunId + 三件套）。
-                // 注意：本方法不在 BPM 触发器事务上下文，setVariables 由 route 内部不触碰 Flowable 运行时（同 dispatchActivity 铁律）。
-                // D5 fencing：新合同继承旧 fencing_token+1 / attempt_no+1，使旧合同的陈旧回调（token<current）被拒。
                 long oldFence = contract.getFencingToken() == null ? 0L : contract.getFencingToken();
-                int oldAttempt = contract.getAttemptNo() == null ? 0 : contract.getAttemptNo();
-                SpkRouteResult reran = taskRouterService.route(contract.getActivityId(), contract.getActivityVersion(),
+                // 修复前的合同 attemptNo=0 也代表已实际执行一次；从下一次开始由 Cortex 有界自动重试。
+                int completedAttempt = Math.max(1,
+                        contract.getAttemptNo() == null ? 0 : contract.getAttemptNo());
+                if (completedAttempt >= ACTIVITY_MAX_ATTEMPTS) {
+                    blockFlowRunAfterRetryExhausted(contract.getProcessInstanceId(), contract.getActivityId(),
+                            "触发重跑时已达到最大执行次数；最后失败：" + contract.getFailureReason());
+                    return null;
+                }
+                return routeWithAutomaticRetry(contract.getActivityId(), contract.getActivityVersion(),
                         contract.getProcessInstanceId(), null, contract.getBusinessKey(),
-                        contract.getNodeKey(), contract.getReceiveTaskKey(), java.util.Collections.emptyList());
-                SpkTaskContractDO next = taskContractMapper.selectByActivityRunId(reran.getActivityRunId());
-                if (next != null) {
-                    next.setFencingToken(oldFence + 1);
-                    next.setAttemptNo(oldAttempt + 1);
-                    taskContractMapper.updateById(next);
-                    log.info("[intervene][rerun activityRunId={} → newRunId={} fence={}→{} attempt={}→{}]",
-                            activityRunId, reran.getActivityRunId(), oldFence, oldFence + 1,
-                            oldAttempt, oldAttempt + 1);
-                }
-                // 恢复闭环：rerun 成功则推进卡住的 receiveTask；仍 failed 则继续卡住（严格流程，前面没完成不跑后面）。
-                if (SpkTaskContractStatusEnum.DONE.getLabel().equalsIgnoreCase(reran.getStatus())) {
-                    String effKey = resolveReceiveTaskKey(contract.getProcessInstanceId(),
-                            next != null ? next.getReceiveTaskKey() : contract.getReceiveTaskKey());
-                    if (effKey != null) {
-                        applyResultAndTrigger(contract.getProcessInstanceId(), effKey, reran.getAgentResult());
-                        log.info("[intervene][rerun 成功推进 receiveTask={} pid={}]", effKey, contract.getProcessInstanceId());
-                    } else {
-                        log.warn("[intervene][rerun 成功但未找到 pending receiveTask，无法推进 pid={}]", contract.getProcessInstanceId());
-                    }
-                } else {
-                    log.warn("[intervene][rerun 仍 failed status={} 流程继续卡住 activityRunId={}]",
-                            reran.getStatus(), activityRunId);
-                }
-                return reran;
+                        contract.getNodeKey(), contract.getReceiveTaskKey(), java.util.Collections.emptyList(),
+                        completedAttempt + 1, oldFence, failureReason(contract, null));
+            }
+            case "recover": {
+                recoverBlockedActivityAsync(contract, note);
+                return null;
             }
             case "abort": {
                 contract.setStatus("failed");
@@ -371,6 +357,69 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
                         "note " + activityRunId + "：" + note, note, false);
                 return null;
             }
+        }
+    }
+
+    /**
+     * Cortex 基础设施恢复入口。它不是审批驳回，也不允许操作既有 Claude 会话：
+     * 保留旧合同/产物/核验收据不变，在原 Flowable wait-state 上异步开启一组全新的 1..3 次执行。
+     */
+    private void recoverBlockedActivityAsync(SpkTaskContractDO contract, String note) {
+        if (note == null || note.isBlank()) {
+            throw exception(AGENT_RECOVERY_REASON_REQUIRED);
+        }
+        String instanceId = contract.getProcessInstanceId();
+        SpkIpdFlowRunDO run = flowRunMapper.selectByProcessInstanceId(instanceId);
+        if (run == null || !"BLOCKED".equals(run.getStatus())) {
+            throw exception(AGENT_RECOVERY_STATE_INVALID);
+        }
+        List<String> activeIds = runtimeService.getActiveActivityIds(instanceId);
+        String receiveTaskKey = resolveReceiveTaskKey(instanceId, contract.getReceiveTaskKey());
+        if (receiveTaskKey == null || activeIds == null || !activeIds.contains(receiveTaskKey)) {
+            throw exception(AGENT_RECOVERY_WAIT_STATE_MISSING);
+        }
+
+        // 条件更新防止重复点击/并发请求启动两组恢复执行。
+        if (flowRunMapper.recoverBlocked(run.getId()) != 1) {
+            throw exception(AGENT_RECOVERY_STATE_INVALID);
+        }
+        String recoveryReason = "Cortex 基础设施修复后恢复：" + note.trim();
+        feedbackService.collect(instanceId, "agent-infrastructure-recovery",
+                "Activity " + contract.getActivityId() + " 开启新的有界自动执行", recoveryReason, false);
+        writeRetryContext(instanceId, contract.getActivityId(), recoveryReason, 0);
+
+        long oldFence = contract.getFencingToken() == null ? 0L : contract.getFencingToken();
+        final Long tenantId = TenantContextHolder.getTenantId();
+        try {
+            java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                Long prev = TenantContextHolder.getTenantId();
+                if (tenantId != null) {
+                    TenantContextHolder.setTenantId(tenantId);
+                } else {
+                    TenantContextHolder.clear();
+                }
+                try {
+                    return routeWithAutomaticRetry(contract.getActivityId(), contract.getActivityVersion(),
+                            instanceId, null, contract.getBusinessKey(), contract.getNodeKey(), receiveTaskKey,
+                            java.util.Collections.emptyList(), 1, oldFence, recoveryReason);
+                } catch (Exception e) {
+                    log.error("[recoverBlockedActivityAsync][恢复编排失败 activityId={} instanceId={}]",
+                            contract.getActivityId(), instanceId, e);
+                    blockFlowRunAfterRetryExhausted(instanceId, contract.getActivityId(),
+                            "基础设施恢复编排异常：" + safeMessage(e));
+                    return null;
+                } finally {
+                    if (prev != null) {
+                        TenantContextHolder.setTenantId(prev);
+                    } else {
+                        TenantContextHolder.clear();
+                    }
+                }
+            });
+        } catch (RuntimeException e) {
+            blockFlowRunAfterRetryExhausted(instanceId, contract.getActivityId(),
+                    "基础设施恢复任务未能入队：" + safeMessage(e));
+            throw e;
         }
     }
 
@@ -420,6 +469,128 @@ public class SpkAgentTaskServiceImpl implements SpkAgentTaskService {
                 .filter(id -> id != null && id.startsWith("Activity_"))
                 .findFirst()
                 .orElse(activeIds.get(0));
+    }
+
+    /**
+     * Cortex 自动完成“执行 → 独立核验 → 失败意见回灌 → 新会话重试”。审批人不参与该循环。
+     * 仅 DONE 才推进 receiveTask；三次仍失败则将业务 FlowRun 置 BLOCKED，保留引擎 wait-state 供修复后恢复。
+     */
+    private SpkRouteResult routeWithAutomaticRetry(String activityId, String activityVersion,
+                                                    String instanceId, String taskId, String businessKey,
+                                                    String nodeKey, String receiveTaskKey, List<String> inputRefs,
+                                                    int firstAttempt, long previousFence,
+                                                    String previousFailure) {
+        String retryReason = previousFailure;
+        long fence = previousFence;
+        SpkRouteResult last = null;
+        int start = Math.max(1, firstAttempt);
+        for (int attempt = start; attempt <= ACTIVITY_MAX_ATTEMPTS; attempt++) {
+            if (attempt > 1) {
+                writeRetryContext(instanceId, activityId, retryReason, attempt - 1);
+            }
+            try {
+                last = taskRouterService.route(activityId, activityVersion, instanceId,
+                        taskId, businessKey, nodeKey, receiveTaskKey, inputRefs);
+            } catch (Exception e) {
+                retryReason = "路由或派发异常：" + safeMessage(e);
+                log.error("[routeWithAutomaticRetry][activityId={} attempt={}/{} route 异常]",
+                        activityId, attempt, ACTIVITY_MAX_ATTEMPTS, e);
+                continue;
+            }
+            SpkTaskContractDO current = last.getActivityRunId() == null ? null
+                    : taskContractMapper.selectByActivityRunId(last.getActivityRunId());
+            if (current != null) {
+                current.setAttemptNo(attempt);
+                current.setFencingToken(++fence);
+                taskContractMapper.updateById(current);
+            }
+            if (SpkTaskContractStatusEnum.DONE.getLabel().equalsIgnoreCase(last.getStatus())) {
+                clearRetryContext(instanceId);
+                String effectiveReceiveTask = resolveReceiveTaskKey(instanceId,
+                        current != null ? current.getReceiveTaskKey() : receiveTaskKey);
+                if (effectiveReceiveTask == null) {
+                    blockFlowRunAfterRetryExhausted(instanceId, activityId,
+                            "Activity 已通过但未找到等待中的 receiveTask，禁止静默推进");
+                    return last;
+                }
+                applyResultAndTrigger(instanceId, effectiveReceiveTask, last.getAgentResult());
+                log.info("[routeWithAutomaticRetry][activityId={} attempt={}/{} done runId={} receiveTask={}]",
+                        activityId, attempt, ACTIVITY_MAX_ATTEMPTS, last.getActivityRunId(), effectiveReceiveTask);
+                return last;
+            }
+            retryReason = failureReason(current, last);
+            log.warn("[routeWithAutomaticRetry][activityId={} attempt={}/{} failed runId={} reason={}]",
+                    activityId, attempt, ACTIVITY_MAX_ATTEMPTS,
+                    last.getActivityRunId(), retryReason);
+        }
+        blockFlowRunAfterRetryExhausted(instanceId, activityId,
+                "已用尽 " + ACTIVITY_MAX_ATTEMPTS + " 次自动执行；最后失败：" + retryReason);
+        return last;
+    }
+
+    private void writeRetryContext(String instanceId, String activityId, String reason, int completedAttempts) {
+        Map<String, Object> vars = new HashMap<>();
+        vars.put(SpkActivityRetryVariables.ACTIVITY_ID, activityId);
+        vars.put(SpkActivityRetryVariables.REASON,
+                reason == null || reason.isBlank() ? "上一轮未形成可用失败摘要，按 fail-closed 修复产物" : reason);
+        vars.put(SpkActivityRetryVariables.COUNT, completedAttempts);
+        vars.put(SpkActivityRetryVariables.MAX_ATTEMPTS, ACTIVITY_MAX_ATTEMPTS);
+        runtimeService.setVariables(instanceId, vars);
+    }
+
+    private void clearRetryContext(String instanceId) {
+        try {
+            runtimeService.removeVariables(instanceId, java.util.Set.of(
+                    SpkActivityRetryVariables.ACTIVITY_ID,
+                    SpkActivityRetryVariables.REASON,
+                    SpkActivityRetryVariables.COUNT,
+                    SpkActivityRetryVariables.MAX_ATTEMPTS));
+        } catch (Exception e) {
+            log.warn("[clearRetryContext][instanceId={} 清理失败：{}]", instanceId, safeMessage(e));
+        }
+    }
+
+    private String failureReason(SpkTaskContractDO contract, SpkRouteResult result) {
+        StringBuilder reason = new StringBuilder();
+        if (result != null && result.getVerificationConclusion() != null) {
+            reason.append("独立核验结论=").append(result.getVerificationConclusion());
+        }
+        if (result != null && result.getVerificationSummary() != null
+                && !result.getVerificationSummary().isBlank()) {
+            if (!reason.isEmpty()) reason.append("；");
+            reason.append(result.getVerificationSummary().trim());
+        }
+        if (contract != null && contract.getFailureReason() != null
+                && !contract.getFailureReason().isBlank()) {
+            if (!reason.isEmpty()) reason.append("；");
+            reason.append(contract.getFailureReason().trim());
+        }
+        return reason.isEmpty() ? "执行未达到 DONE，且未形成可用失败摘要" : reason.toString();
+    }
+
+    private void blockFlowRunAfterRetryExhausted(String instanceId, String activityId, String reason) {
+        try {
+            SpkIpdFlowRunDO run = flowRunMapper.selectByProcessInstanceId(instanceId);
+            if (run != null && !"COMPLETED".equals(run.getStatus()) && !"CANCELLED".equals(run.getStatus())) {
+                run.setStatus("BLOCKED");
+                run.setHealth("BLOCKED");
+                run.setBlockReason("AGENT_ACTIVITY_RETRY_EXHAUSTED[" + activityId + "]:" + reason);
+                flowRunMapper.updateById(run);
+                feedbackService.collect(instanceId, "agent-auto-retry-exhausted",
+                        "Activity " + activityId + " 自动重试耗尽", reason, false);
+            }
+        } catch (Exception e) {
+            log.error("[blockFlowRunAfterRetryExhausted][instanceId={} activityId={} 阻断失败]",
+                    instanceId, activityId, e);
+        }
+    }
+
+    private static String safeMessage(Exception e) {
+        if (e == null || e.getMessage() == null || e.getMessage().isBlank()) {
+            return e == null ? "unknown" : e.getClass().getSimpleName();
+        }
+        String message = e.getMessage().trim();
+        return message.length() <= 500 ? message : message.substring(0, 500);
     }
 
     @Override

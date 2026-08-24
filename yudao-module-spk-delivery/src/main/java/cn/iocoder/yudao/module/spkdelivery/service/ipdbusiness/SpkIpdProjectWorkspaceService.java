@@ -165,6 +165,7 @@ public class SpkIpdProjectWorkspaceService {
         m.put("status", p.getStatus());
         m.put("health", p.getHealth());
         m.put("ownerUserId", p.getOwnerUserId());
+        m.put("deliveryRoot", p.getDeliveryRoot());
         // Bug1-C：epoch0 守卫——前端 date-picker 历史传字符串 ISO 日期，后端 TimestampLocalDateTimeDeserializer
         // 解析失败回退 0 → DB 落 1970-01-01 08:00:00 → dueIn 算出"逾期 20681 天"。该区间视为未排期输出 null。
         LocalDateTime pStart = guardEpoch(p.getPlannedStartAt());

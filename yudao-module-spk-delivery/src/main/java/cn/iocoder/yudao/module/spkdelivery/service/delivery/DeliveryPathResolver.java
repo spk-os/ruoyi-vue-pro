@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,8 +25,8 @@ import java.util.Map;
  *   <li>状态文件：&lt;root&gt;/.flow/state-&lt;activityRunId&gt;.json + &lt;root&gt;/.flow/manifest.json</li>
  *   <li>产物文件：&lt;root&gt;/asset/&lt;stage&gt;/&lt;artifactId&gt;.md</li>
  * </ul>
- * <b>路径安全铁律</b>：resolve 后必须以 {@link #DELIVERY_ROOT_BASE} 为前缀，禁 {@code ..} 与路径分隔符注入
- * （坑#路径注入）。businessKey / activityRunId / artifactId 等分段禁止含 {@code /} {@code \} {@code ..}。
+ * <b>路径安全铁律</b>：resolve 后必须位于 Cortex 受管根目录的项目子目录内，禁 {@code ..} 与路径分隔符注入。
+ * businessKey / activityRunId / artifactId 等分段禁止含 {@code /} {@code \} {@code ..}。
  *
  * @author SPK-OS
  */
@@ -33,8 +34,17 @@ import java.util.Map;
 @Service
 public class DeliveryPathResolver {
 
-    /** 交付根目录的强制前缀（防越出根，坑#路径注入） */
+    /** 默认交付根目录前缀。 */
     public static final String DELIVERY_ROOT_BASE = "/work/SPK-OS/Delivery";
+
+    /**
+     * Cortex 允许管理的三个精确根：常规交付、开发工作区、商用部署目录。
+     * 使用 {@link Path#startsWith(Path)} 做路径边界判断，避免字符串前缀绕过。
+     */
+    private static final List<Path> ALLOWED_ROOTS = List.of(
+            Paths.get(DELIVERY_ROOT_BASE).toAbsolutePath().normalize(),
+            Paths.get("/work/SPK-OS/dev").toAbsolutePath().normalize(),
+            Paths.get("/work/SPK-OS/soft/spk").toAbsolutePath().normalize());
 
     /** 默认项目根路径模板（Profile 未配置时兜底） */
     public static final String DEFAULT_ROOT_PATTERN = "/work/SPK-OS/Delivery/project/{businessKey}";
@@ -147,8 +157,9 @@ public class DeliveryPathResolver {
         }
         Path normalized = Paths.get(root).normalize().toAbsolutePath();
         String abs = normalized.toString();
-        if (!abs.startsWith(DELIVERY_ROOT_BASE)) {
-            throw new IllegalArgumentException("交付根目录须位于 " + DELIVERY_ROOT_BASE + " 下：" + abs);
+        boolean allowed = ALLOWED_ROOTS.stream().anyMatch(normalized::startsWith);
+        if (!allowed || ALLOWED_ROOTS.stream().anyMatch(normalized::equals)) {
+            throw new IllegalArgumentException("交付根目录须位于受管项目子目录下：" + abs);
         }
         return abs;
     }

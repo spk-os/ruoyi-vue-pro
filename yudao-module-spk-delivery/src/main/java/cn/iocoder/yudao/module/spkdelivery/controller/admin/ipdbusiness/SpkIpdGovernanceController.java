@@ -192,7 +192,7 @@ public class SpkIpdGovernanceController {
     }
 
     @PutMapping("/flow-config/activity-def/{id}")
-    @Operation(summary = "行内保存 activity_def 的阶段规范字段（skills/envRequirements/outputArtifactType/useIndependentVerifier/verifierType/executionLocation）")
+    @Operation(summary = "行内保存 activity_def 的阶段规范字段（skills/envRequirements/outputArtifactType/useWorkerAgent/useIndependentVerifier/verifierType/executionLocation）")
     @PreAuthorize("@ss.hasPermission('spk-delivery:ipd-governance:update')")
     public CommonResult<Boolean> updateActivityDefBindings(@PathVariable("id") Long id,
                                                            @RequestBody Map<String, String> body) {

@@ -111,11 +111,11 @@ public class SpkAgentTaskController {
 
     @PostMapping("/{id}/intervene")
     @ApiAccessLog(operateModule = "SPK IPD", operateName = "人工介入Activity")
-    @Operation(summary = "人工介入 Activity 运行（rerun 重新派发 / abort 标记失败 / note 落反馈）")
+    @Operation(summary = "介入 Activity 运行（rerun 余量重试 / recover 修复后自动恢复 / abort 终止 / note 反馈）")
     @PreAuthorize("@ss.hasPermission('spk-delivery:agent:intervene')")
     public CommonResult<Map<String, Object>> intervene(
             @Parameter(description = "Activity 运行实例编号") @PathVariable("id") String activityRunId,
-            @Parameter(description = "介入动作 rerun/abort/note") @RequestParam(value = "action", defaultValue = "note") String action,
+            @Parameter(description = "介入动作 rerun/recover/abort/note") @RequestParam(value = "action", defaultValue = "note") String action,
             @Parameter(description = "介入备注") @RequestParam(value = "note", required = false) String note) {
         SpkRouteResult result = agentTaskService.intervene(activityRunId, action, note);
         Map<String, Object> data = new HashMap<>();

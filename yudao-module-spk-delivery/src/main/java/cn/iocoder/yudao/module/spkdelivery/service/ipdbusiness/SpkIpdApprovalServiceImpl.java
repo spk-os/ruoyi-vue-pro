@@ -5,7 +5,6 @@ import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.bpm.controller.admin.task.vo.task.BpmTaskApproveReqVO;
 import cn.iocoder.yudao.module.bpm.controller.admin.task.vo.task.BpmTaskPageReqVO;
-import cn.iocoder.yudao.module.bpm.controller.admin.task.vo.task.BpmTaskRejectReqVO;
 import cn.iocoder.yudao.module.bpm.controller.admin.task.vo.task.BpmTaskReturnReqVO;
 import cn.iocoder.yudao.module.bpm.service.task.BpmTaskService;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.approval.SpkIpdApprovalTaskPageReqVO;
@@ -14,6 +13,7 @@ import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.appro
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.approval.SpkIpdDecisionReqVO;
 import cn.iocoder.yudao.module.spkdelivery.controller.admin.ipdbusiness.vo.approval.SpkIpdEvidenceWaiverReqVO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.artifact.SpkArtifactManifestDO;
+import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.aegis.SpkAegisReviewDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ccb.SpkCcbRecordDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.dcp.SpkDcpRedirectLogDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.evidence.SpkEvidenceRecordDO;
@@ -26,6 +26,7 @@ import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdProj
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.ipdbusiness.SpkIpdVersionDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.dataobject.taskcontract.SpkTaskContractDO;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.artifact.SpkArtifactManifestMapper;
+import cn.iocoder.yudao.module.spkdelivery.dal.mysql.aegis.SpkAegisReviewMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ccb.SpkCcbRecordMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.dcp.SpkDcpRedirectLogMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.evidence.SpkEvidenceRecordMapper;
@@ -34,6 +35,7 @@ import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdDecisionR
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.ipdbusiness.SpkIpdEvidenceWaiverMapper;
 import cn.iocoder.yudao.module.spkdelivery.dal.mysql.taskcontract.SpkTaskContractMapper;
 import cn.iocoder.yudao.module.spkdelivery.service.context.SpkContextBuilderService;
+import cn.iocoder.yudao.module.spkdelivery.service.dcp.SpkDcpRedirectService;
 import cn.iocoder.yudao.module.spkdelivery.service.evidence.SpkEvidenceService;
 import cn.iocoder.yudao.module.system.api.user.AdminUserApi;
 import cn.iocoder.yudao.module.system.api.user.dto.AdminUserRespDTO;
@@ -67,9 +69,10 @@ import static cn.iocoder.yudao.module.spkdelivery.enums.ErrorCodeConstants.*;
  * - 待办/已办分页：复用 {@link BpmTaskService#getTaskTodoPage} / {@link BpmTaskService#getTaskDonePage}，
  *   按 processInstanceId 回填 FlowRun/项目/版本/阶段/门禁/健康等业务摘要；
  * - 决策包：聚合证据/产物/门禁/CCB/DCP 重定向/历史决策/豁免，计算快照 hash，给出阻断项与候选动作；
- * - 决策：先写不可变 {@link SpkIpdDecisionRecordDO}，再调用原生 BPM approve/reject/return。
+ * - 决策：先写不可变 {@link SpkIpdDecisionRecordDO}；APPROVE/RETURN 复用原生 BPM，
+ *   REJECT 按固定策略回到阶段自动节点，让流程重新触发 Agent 并再次提交审批。
  * <p>
- * 铁律：不改 Flowable 引擎语义、不改 BpmTaskController/BpmTaskServiceImpl，只扩展。
+ * 铁律：审批人不手工启动/接管 Agent；驳回必须自动返工，未知审批节点 fail-closed。
  *
  * @author SPK-OS
  */
@@ -91,6 +94,8 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
     @Resource
     private SpkArtifactManifestMapper artifactManifestMapper;
     @Resource
+    private SpkAegisReviewMapper aegisReviewMapper;
+    @Resource
     private SpkEvidenceRecordMapper evidenceRecordMapper;
     @Resource
     private SpkGateRecordMapper gateRecordMapper;
@@ -104,6 +109,8 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
     private SpkIpdDecisionRecordMapper decisionRecordMapper;
     @Resource
     private SpkIpdEvidenceWaiverMapper evidenceWaiverMapper;
+    @Resource
+    private SpkDcpRedirectService dcpRedirectService;
 
     @Override
     public PageResult<SpkIpdApprovalTaskRespVO> pageApprovalTasks(Long userId, SpkIpdApprovalTaskPageReqVO req) {
@@ -257,6 +264,7 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
         List<SpkDcpRedirectLogDO> redirects = dcpRedirectLogMapper.selectListByInstanceId(pid);
         List<SpkIpdDecisionRecordDO> decisions = decisionRecordMapper.selectListByProcessInstanceId(pid);
         List<SpkIpdEvidenceWaiverDO> waivers = evidenceWaiverMapper.selectListByProcessInstanceId(pid);
+        SpkAegisReviewDO latestAegis = aegisReviewMapper.selectByInstanceId(pid);
 
         // 证据哈希链校验：按 activityRunId 分组逐条 verifyChain
         boolean chainValid = true;
@@ -278,9 +286,15 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
         pkg.setDcpRedirects(redirects);
         pkg.setDecisions(decisions);
         pkg.setWaivers(waivers);
-        pkg.setRequiredArtifacts(buildRequiredArtifacts(artifacts, gates, evidence, chainValid));
-        pkg.setHeader(buildHeader(task, run, proj(run), ver(run)));
-        pkg.setSummary(buildSummary(run, proj(run), ver(run), artifacts, gates, ccb, redirects));
+        String approvalStage = resolveApprovalStage(task.getTaskDefinitionKey(),
+                run != null ? run.getCurrentStage() : null);
+        List<SpkArtifactManifestDO> currentStageArtifacts = selectCurrentStageArtifacts(
+                artifacts, contracts, decisions, approvalStage);
+        pkg.setRequiredArtifacts(buildRequiredArtifacts(currentStageArtifacts, gates, evidence, chainValid,
+                approvalStage, run != null ? run.getFlowType() : null, latestAegis));
+        pkg.setHeader(buildHeader(task, run, proj(run), ver(run), approvalStage));
+        pkg.setSummary(buildSummary(run, proj(run), ver(run), artifacts, currentStageArtifacts,
+                gates, ccb, redirects, approvalStage));
         pkg.setBlockingItems(buildBlockingItems(pkg.getRequiredArtifacts(), gates, chainValid, waivers));
         pkg.setCandidateActions(buildCandidateActions(pkg.getBlockingItems(), redirects));
         pkg.setDecisionPackageHash(computeHash(pkg));
@@ -296,8 +310,20 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
         return run != null && run.getVersionId() != null ? projectBusinessService.getVersion(run.getVersionId()) : null;
     }
 
+    /**
+     * 人审任务本身是审批阶段的权威来源。FlowRun.currentStage 由异步活动快照维护，
+     * 在 receiveTask -> userTask 的边界可能仍是上一审批阶段；若直接使用会把 PDCP
+     * 的 plan 产物误判成 concept 缺失。未知任务才回退 FlowRun，保持兼容且 fail-closed。
+     */
+    static String resolveApprovalStage(String taskDefinitionKey, String flowRunStage) {
+        return SpkIpdReworkPolicy.resolve(taskDefinitionKey)
+                .map(SpkIpdReworkPolicy.Route::stage)
+                .orElse(flowRunStage);
+    }
+
     private Map<String, Object> buildHeader(Task task, SpkIpdFlowRunDO run,
-                                             SpkIpdProjectDO proj, SpkIpdVersionDO ver) {
+                                             SpkIpdProjectDO proj, SpkIpdVersionDO ver,
+                                             String approvalStage) {
         Map<String, Object> h = new LinkedHashMap<>();
         h.put("taskId", task.getId());
         h.put("taskName", task.getName());
@@ -309,7 +335,7 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
         h.put("versionId", run != null ? run.getVersionId() : null);
         h.put("versionType", ver != null ? ver.getVersionType() : null);
         h.put("flowType", run != null ? run.getFlowType() : null);
-        h.put("stage", run != null ? run.getCurrentStage() : null);
+        h.put("stage", approvalStage);
         // 当前门禁
         String gate = null;
         if (run != null) {
@@ -334,9 +360,44 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
         return h;
     }
 
-    private List<SpkIpdDecisionPackageRespVO.RequiredArtifact> buildRequiredArtifacts(
+    /**
+     * 只把当前审批轮次、当前阶段且已成功完成合同的产物作为审批必需产物。
+     * <p>
+     * 自动重试会为同一 Activity 产生新的 activityRunId；失败尝试的 draft 仍保留在
+     * {@code pkg.artifacts} 与决策包 hash 中供审计，但不得污染当前审批。上一条不可变
+     * 审批决策是新审批轮次的时间边界；开发阶段 fan-out 的多个 REQ 合同因此仍会全部保留。
+     */
+    static List<SpkArtifactManifestDO> selectCurrentStageArtifacts(
+            List<SpkArtifactManifestDO> artifacts, List<SpkTaskContractDO> contracts,
+            List<SpkIpdDecisionRecordDO> decisions, String currentStage) {
+        if (artifacts == null || contracts == null || currentStage == null || currentStage.isBlank()) {
+            return Collections.emptyList();
+        }
+        LocalDateTime cycleStartedAt = decisions == null ? null : decisions.stream()
+                .map(SpkIpdDecisionRecordDO::getCreateTime)
+                .filter(t -> t != null)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+        Set<String> completedRunIds = contracts.stream()
+                .filter(c -> c.getActivityRunId() != null && !c.getActivityRunId().isBlank())
+                .filter(c -> currentStage.equalsIgnoreCase(c.getPhase()))
+                .filter(c -> "done".equalsIgnoreCase(c.getStatus()))
+                .filter(c -> cycleStartedAt == null || (c.getQueuedAt() != null
+                        && !c.getQueuedAt().isBefore(cycleStartedAt)))
+                .map(SpkTaskContractDO::getActivityRunId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (completedRunIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return artifacts.stream()
+                .filter(a -> completedRunIds.contains(a.getActivityRunId()))
+                .collect(Collectors.toList());
+    }
+
+    static List<SpkIpdDecisionPackageRespVO.RequiredArtifact> buildRequiredArtifacts(
             List<SpkArtifactManifestDO> artifacts, List<SpkGateRecordDO> gates,
-            List<SpkEvidenceRecordDO> evidence, boolean chainValid) {
+            List<SpkEvidenceRecordDO> evidence, boolean chainValid, String currentStage,
+            String flowType, SpkAegisReviewDO latestAegis) {
         List<SpkIpdDecisionPackageRespVO.RequiredArtifact> list = new ArrayList<>();
         // 产物
         for (SpkArtifactManifestDO a : artifacts) {
@@ -349,6 +410,17 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
             r.setScanStatus(a.getScanStatus());
             r.setHashOk(a.getContentHash() != null && !a.getContentHash().isEmpty());
             r.setBlocking(!"PASS".equals(r.getStatus()) || (a.getScanStatus() != null && a.getScanStatus().contains("FAIL")));
+            list.add(r);
+        }
+        // 流程已到人工审批但当前阶段没有成功合同产物时必须 fail-closed，不能仅凭历史产物放行。
+        if (artifacts.isEmpty()) {
+            SpkIpdDecisionPackageRespVO.RequiredArtifact r = new SpkIpdDecisionPackageRespVO.RequiredArtifact();
+            r.setRef("current-stage-artifact:" + (currentStage == null ? "unknown" : currentStage));
+            r.setType("ARTIFACT");
+            r.setStatus("MISSING");
+            r.setSigned(false);
+            r.setHashOk(false);
+            r.setBlocking(true);
             list.add(r);
         }
         // 门禁
@@ -370,7 +442,58 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
             r.setBlocking(!chainValid);
             list.add(r);
         }
+        // 商用完整/增量流程的 DCP 必须显式纳入当前阶段 Aegis 结论。仅有已签主产物
+        // 不能掩盖 TR 语义复核的 ERROR/CONDITIONAL/FAIL；旧阶段或旧产物之前的审查也
+        // 不能冒充当前轮次结果。
+        if (requiresAegis(flowType, currentStage)) {
+            SpkIpdDecisionPackageRespVO.RequiredArtifact r = new SpkIpdDecisionPackageRespVO.RequiredArtifact();
+            boolean stageMatches = aegisMatchesStage(latestAegis, currentStage);
+            LocalDateTime latestArtifactAt = artifacts.stream()
+                    .map(SpkArtifactManifestDO::getCreateTime)
+                    .filter(java.util.Objects::nonNull)
+                    .max(LocalDateTime::compareTo)
+                    .orElse(null);
+            boolean currentCycle = stageMatches && (latestArtifactAt == null || latestAegis.getCreateTime() == null
+                    || !latestAegis.getCreateTime().isBefore(latestArtifactAt));
+            String verdict = currentCycle ? latestAegis.getVerdict() : null;
+            boolean pass = "pass".equalsIgnoreCase(verdict);
+            r.setRef(currentCycle ? "aegis:" + latestAegis.getReviewId() : "aegis-review:" + currentStage);
+            r.setType("AEGIS");
+            r.setStatus(pass ? "PASS" : (verdict == null ? "MISSING" : verdict.toUpperCase(java.util.Locale.ROOT)));
+            r.setVerifier(verdict);
+            r.setSigned(currentCycle);
+            r.setHashOk(currentCycle);
+            r.setBlocking(!pass);
+            list.add(r);
+        }
         return list;
+    }
+
+    static boolean requiresAegis(String flowType, String stage) {
+        if (stage == null || flowType == null) {
+            return false;
+        }
+        if ("FULL_RELEASE".equalsIgnoreCase(flowType)) {
+            return Set.of("concept", "plan", "develop", "verify", "launch")
+                    .contains(stage.toLowerCase(java.util.Locale.ROOT));
+        }
+        return "INCREMENT".equalsIgnoreCase(flowType)
+                && Set.of("plan", "develop").contains(stage.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    static boolean aegisMatchesStage(SpkAegisReviewDO review, String stage) {
+        if (review == null || review.getNodeKey() == null || stage == null) {
+            return false;
+        }
+        String node = review.getNodeKey().toLowerCase(java.util.Locale.ROOT);
+        return switch (stage.toLowerCase(java.util.Locale.ROOT)) {
+            case "concept" -> node.startsWith("n_concept_");
+            case "plan" -> node.startsWith("n_plan_");
+            case "develop" -> node.startsWith("n_dev_") || node.startsWith("n_develop_");
+            case "verify" -> node.startsWith("n_qual_") || node.startsWith("n_verify_");
+            case "launch" -> node.startsWith("n_launch_");
+            default -> false;
+        };
     }
 
     private List<String> buildBlockingItems(List<SpkIpdDecisionPackageRespVO.RequiredArtifact> required,
@@ -417,8 +540,10 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
 
     private List<SpkIpdDecisionPackageRespVO.SummarySection> buildSummary(
             SpkIpdFlowRunDO run, SpkIpdProjectDO proj, SpkIpdVersionDO ver,
-            List<SpkArtifactManifestDO> artifacts, List<SpkGateRecordDO> gates,
-            List<SpkCcbRecordDO> ccb, List<SpkDcpRedirectLogDO> redirects) {
+            List<SpkArtifactManifestDO> artifacts, List<SpkArtifactManifestDO> currentStageArtifacts,
+            List<SpkGateRecordDO> gates,
+            List<SpkCcbRecordDO> ccb, List<SpkDcpRedirectLogDO> redirects,
+            String approvalStage) {
         List<SpkIpdDecisionPackageRespVO.SummarySection> sections = new ArrayList<>();
         // 目标与范围
         sections.add(section("目标与范围",
@@ -433,7 +558,7 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
                 row("计划结束", ver != null ? String.valueOf(ver.getPlannedEndAt()) : "-", null),
                 row("流程类型", run != null ? run.getFlowType() : "-", null),
                 row("运行编号", run != null ? run.getRunNo() : "-", null),
-                row("当前阶段", run != null ? run.getCurrentStage() : "-", null)));
+                row("当前阶段", approvalStage != null ? approvalStage : "-", null)));
         // 技术与质量
         int gatePass = (int) (gates == null ? 0 : gates.stream().filter(g -> Boolean.TRUE.equals(g.getPass())).count());
         int gateTotal = gates == null ? 0 : gates.size();
@@ -448,9 +573,10 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
                 row("阻断原因", run != null ? run.getBlockReason() : "-", null)));
         // 必需产物
         SpkIpdDecisionPackageRespVO.SummarySection ra = section("必需产物",
-                row("产物总数", String.valueOf(artifacts == null ? 0 : artifacts.size()), null));
-        if (artifacts != null) {
-            for (SpkArtifactManifestDO a : artifacts) {
+                row("当前审批轮次", String.valueOf(currentStageArtifacts == null ? 0 : currentStageArtifacts.size()), null),
+                row("历史审计总数", String.valueOf(artifacts == null ? 0 : artifacts.size()), null));
+        if (currentStageArtifacts != null) {
+            for (SpkArtifactManifestDO a : currentStageArtifacts) {
                 ra.getRows().add(row(a.getArtifactType(), a.getStatus(),
                         "MISSING".equalsIgnoreCase(a.getStatus()) ? "danger" : null));
             }
@@ -529,6 +655,9 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
                 && (req.getRedirectTargetTaskKey() == null || req.getRedirectTargetTaskKey().isEmpty())) {
             throw exception(IPD_REDIRECT_TARGET_REQUIRED);
         }
+        if (decision.equals("REJECT") && (req.getReason() == null || req.getReason().isBlank())) {
+            throw exception(IPD_FLOW_RUN_REASON_REQUIRED);
+        }
 
         SpkIpdFlowRunDO run = flowRunService.getByProcessInstanceId(task.getProcessInstanceId());
 
@@ -566,7 +695,8 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
                 .build();
         decisionRecordMapper.insert(record);
 
-        // 调用原生 BPM approve/reject/return（复用原生语义，不改引擎）
+        // APPROVE/RETURN 复用原生 BPM；REJECT 不使用会结束流程的通用 reject handler，
+        // 而是回到阶段自动执行节点，由 Flowable 重新触发 Omnigent 后再次进入审批。
         switch (decision) {
             case "APPROVE" -> {
                 BpmTaskApproveReqVO a = new BpmTaskApproveReqVO();
@@ -577,10 +707,18 @@ public class SpkIpdApprovalServiceImpl implements SpkIpdApprovalService {
                 bpmTaskService.approveTask(userId, a);
             }
             case "REJECT" -> {
-                BpmTaskRejectReqVO r = new BpmTaskRejectReqVO();
-                r.setId(taskId);
-                r.setReason(req.getReason());
-                bpmTaskService.rejectTask(userId, r);
+                SpkIpdReworkPolicy.Route route = SpkIpdReworkPolicy
+                        .resolve(task.getTaskDefinitionKey())
+                        .orElseThrow(() -> exception(DCP_REDIRECT_FAIL));
+                Map<String, Object> reworkVariables = new LinkedHashMap<>();
+                reworkVariables.put(SpkIpdReworkVariables.GATE, route.gate());
+                reworkVariables.put(SpkIpdReworkVariables.TARGET_STAGE, route.stage());
+                reworkVariables.put(SpkIpdReworkVariables.REASON, req.getReason().trim());
+                if (record.getId() != null) {
+                    reworkVariables.put(SpkIpdReworkVariables.DECISION_ID, record.getId());
+                }
+                dcpRedirectService.redirect(task.getProcessInstanceId(), route.gate(), route.targetNode(),
+                        reworkVariables);
             }
             case "RETURN", "REDIRECT" -> {
                 BpmTaskReturnReqVO r = new BpmTaskReturnReqVO();

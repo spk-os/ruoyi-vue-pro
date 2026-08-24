@@ -254,6 +254,9 @@ spk-delivery:
     fast-mode: false
     # 默认运行模式 test=桩仅测试 / product=真实交付。发起时前端可选 mode 覆盖；未传归 test。
     default-mode: test
+    # TaskContract 外层硬超时必须晚于 Omnigent adapter timeout-ms（3600s），
+    # 防止同步 route 仍在等待时，超时 Job 并发创建第二个会话。
+    task-timeout-seconds: 3900
   # 节点 skill 绑定（G：prompt 前置 SKILL.md 方法论）。skills 按 env 分区：
   # default（真实交付）/ test（E2E 桩）/ commercial-release / prototype-release。
   # env 解析链：def.envRequirements.skillEnv → 流程变量 spk_skill_env → 此处默认。
@@ -264,9 +267,8 @@ spk-delivery:
   # 跑完恢复鉴权后需重新注入 ap_session cookie（见 application-local.yaml omnigent.cookie）。
   omnigent:
     base-url: http://192.168.56.101:6767
-    # P7+：切单脑 spk-reporter（claude-sdk harness 直接产出简洁 IPD 报告，不分发子智能体）。
-    # 替代 debby（双头 fanout，首轮只产 preamble，240s 内不收敛）。
-    # spk-reporter 由 OMNIGENT_BUILTIN_AGENT_DIRS=/work/SPK-OS/env/omnigent-agents/spk-reporter 注册。
+    # 缺省 Agent 仅用于非商用兼容；商用流程必须由 Cortex Agent 配置显式绑定
+    # spk-ipd-executor / spk-architect / spk-ipd-verifier，路由守卫禁止回退到本值。
     agent-id: 'cdb4db4d0819f4234ce13e94e0f80b7d'
     # 在线 host_id（Ubuntu host，claude-sdk harness 已配置）；留空则动态解析
     host-id: '5aa2437bcd684847bc7c7afd6b8fb76b'
@@ -274,13 +276,19 @@ spk-delivery:
     workspace: /work/SPK-OS/Delivery/project/smart-home-hub
     # 鉴权关闭模式无需 cookie
     cookie: ''
-    # 调大至 300s：单脑 agent 收敛快（~10–30s），300s 留足余量兜底慢轮；
-    # yudao HTTP 触发器走全局 RestTemplate（无显式 read timeout），不会在 300s 处 clip。
-    timeout-ms: 300000
+    # 商用 IPD 活动会读取设计、执行工具并产出可核验交付物，实测可能超过 300s；
+    # 这里等待 Omnigent/Claude Code 的真实终态，超时仍失败关闭，禁止把中间消息当终态。
+    timeout-ms: 3600000
     poll-interval-ms: 2000
   # Gitea 凭证（dev profile 直读 env；run.sh / 集成用）
   gitea:
-    base-url: ${GITEA_BASE_URL:http://192.168.56.101:3000}
+    base-url: ${GITEA_URL:http://192.168.56.101:3000}
     token: ${GITEA_TOKEN:}
-    owner: spk-os
-    repo: smart-home-hub
+    owner: ${GITEA_OWNER:spk-os}
+    repo: ${GITEA_REPO:smart-home-hub}
+  # Plane 凭证与当前交付项目；实际值由 systemd EnvironmentFile 注入。
+  plane:
+    base-url: ${PLANE_URL:http://192.168.56.101}
+    api-key: ${PLANE_API_KEY:}
+    workspace: ${PLANE_WORKSPACE:spk-os}
+    project-id: ${PLANE_PROJECT_ID:}
