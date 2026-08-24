@@ -49,14 +49,6 @@
       "check": "conclusion.can_close == true",
       "field": "conclusion.can_close",
       "assert": {"op": "equals", "path": "conclusion.can_close", "value": true}
-    },
-    {
-      "id": "signoff_complete",
-      "name": "签署完整",
-      "severity": "conditional",
-      "check": "signed_by.decision == 'admitted'",
-      "field": "signed_by.decision",
-      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
     }
   ]
 }

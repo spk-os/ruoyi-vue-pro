@@ -16,7 +16,7 @@
       "severity": "fail",
       "check": "unit_tests is non-empty array（关键路径须有单测覆盖）",
       "field": "unit_tests",
-      "assert": {"op": "minItems", "path": "unit_tests", "value": 1}
+      "assert": {"op": "minItems", "path": "unit_tests", "min": 1}
     },
     {
       "id": "todo_described",
@@ -41,14 +41,6 @@
       "check": "every source_file has non-empty path AND language",
       "field": "source_files[*].path, language",
       "assert": {"op": "every", "path": "source_files", "item": {"op": "and", "of": [{"op": "nonEmpty", "path": "path"}, {"op": "nonEmpty", "path": "language"}]}}
-    },
-    {
-      "id": "signoff_complete",
-      "name": "签署完整",
-      "severity": "conditional",
-      "check": "signed_by.decision == 'admitted'",
-      "field": "signed_by.decision",
-      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
     }
   ]
 }

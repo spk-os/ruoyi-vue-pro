@@ -41,14 +41,6 @@
       "check": "persona.target_user is non-empty",
       "field": "persona.target_user",
       "assert": {"op": "nonEmpty", "path": "persona.target_user"}
-    },
-    {
-      "id": "signoff_complete",
-      "name": "签署完整",
-      "severity": "conditional",
-      "check": "signed_by.decision == 'admitted'",
-      "field": "signed_by.decision",
-      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
     }
   ]
 }

@@ -10,7 +10,7 @@ description: 编排商业软件 IPD 01 概念阶段的完整交付，按依赖�
 ## 读取顺序
 
 1. 读取 `references/stage-playbook.md`，确认阶段图、入口、并发和出口。
-2. 读取 `../references/activity-catalog.json`，以 catalog 的 Skill、模板、人工责任和来源摘要为运行时真相。
+2. 读取 `../references/activity-catalog.json` 和 `../references/approval-rework-contract.md`，以 catalog 的 Skill、模板、人工责任和来源摘要为运行时真相。
 3. 为当前节点调用 catalog 指定的编号 Activity Skill；该 Skill 会继续加载原始设计和执行规约。
 4. 跨阶段执行时由 `spk-ipd-commercial-release` 统一维护 Product Delivery Ledger。
 
@@ -28,15 +28,16 @@ description: 编排商业软件 IPD 01 概念阶段的完整交付，按依赖�
 6. 由具名责任人/评委完成原设计要求的签署。Agent 无投票权、审批权或代签权。
 7. 出口条件满足后锁定阶段基线，并把适用范围、失效条件与未关闭条件移交下一阶段。
 
+主产物必须逐字段符合 Cortex 为当前 `outputArtifactType` 配置的 `schema.json` 和 `acceptance.json`；JSON envelope 的 `document` 才是被确定性核验的对象。不得用同义字段、camelCase 别名或散文替代 Schema 字段。人类签署不属于 Agent 主产物的前置条件，必须由后置 DCP 节点独立记录，Agent 不得伪造 `signed_by`。
+
 ## 完成定义
 
 所有必需 Activity 均为 VERIFIED，catalog 中的人工责任和独立验证已真实履行，追溯无孤儿，阶段出口为“通过 TR1/CDCP，概念、商业价值与技术风险获授权”，且下一阶段确认可解析，才允许阶段 COMPLETE。
 
 ## 失败处理
 
-依赖失败时停止下游调度；写操作失败回滚到最近签名基线；门禁材料、法定人数、权限或签名不满足时保持 `AWAITING_HUMAN/BLOCKED`。不得为了推进流程修改门禁结果。
+依赖失败时停止下游调度；写操作失败回滚到最近签名基线；门禁材料、法定人数、权限或签名不满足时保持 `AWAITING_HUMAN/BLOCKED`。REJECT 后由流程自动回到阶段入口、启动 Agent 返工并再次送审，审批人不接管执行。不得为了推进流程修改门禁结果。
 
 ## 移交
 
 移交阶段 manifest、全部 Artifact 摘要与哈希、Claim/Evidence 索引、决策记录、条件项、残余风险、失效传播订阅和下一责任人。
-

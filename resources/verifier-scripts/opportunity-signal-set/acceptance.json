@@ -33,14 +33,6 @@
       "check": "every cluster has signal_count >= 3",
       "field": "clusters[*].signal_count",
       "assert": {"op": "every", "path": "clusters", "item": {"op": "range", "path": "signal_count", "min": 3}}
-    },
-    {
-      "id": "signoff_complete",
-      "name": "签署完整",
-      "severity": "conditional",
-      "check": "signed_by.decision == 'admitted'",
-      "field": "signed_by.decision",
-      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
     }
   ]
 }

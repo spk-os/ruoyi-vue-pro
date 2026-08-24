@@ -24,6 +24,7 @@ SPEC_TOKENS = (
 TEMPLATE_TOKENS = ("输入与基线", "业务内容", "追溯矩阵", "证据清单", "验收执行记录")
 REQUIRED_FILES = (
     "references/agent-execution-contract.md", "references/ai-native-controls.md",
+    "references/approval-rework-contract.md",
     "references/support-activity-routing.md", "schemas/activity-result.schema.json",
     "schemas/verification-receipt.schema.json", "schemas/human-approval-record.schema.json",
     "templates/activity-result.template.json", "templates/verification-receipt.template.json",
@@ -188,6 +189,24 @@ def validate_pack(root: Path) -> list[str]:
     for shared in ("spk-ipd-tr-gate", "spk-ipd-verifier"):
         if not (root / shared / "SKILL.md").is_file():
             errors.append(f"缺共享治理 Skill：{shared}")
+    rework_contract = root / "references" / "approval-rework-contract.md"
+    if rework_contract.is_file():
+        body = rework_contract.read_text(encoding="utf-8")
+        for token in (
+            "流程自动启动 Omnigent", "审批人只", "REJECT 必须包含", "禁止覆盖历史或结束流程实例",
+            "自动重新启动 Omnigent→Claude Code", "再次送审", "独立验证", "同一流程实例",
+        ):
+            if token not in body:
+                errors.append(f"审批自动返工契约缺标记：{token}")
+    execution_contract = root / "references" / "agent-execution-contract.md"
+    if execution_contract.is_file():
+        body = execution_contract.read_text(encoding="utf-8")
+        for token in (
+            ".ipd/output/<activityRunId>/<artifactType>.json", "唯一权威主产物",
+            "assistant 过程消息", "文件缺失", "fail-closed", "Cortex 自动重试",
+        ):
+            if token not in body:
+                errors.append(f"Agent 精确产物契约缺标记：{token}")
     return errors
 
 

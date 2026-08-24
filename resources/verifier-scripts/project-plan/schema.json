@@ -1,9 +1,9 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ProjectPlan",
-  "description": "IPD 完整发布计划阶段 ACT-FULL-PLAN-1 项目计划书产物结构（SpkVerifierService Layer 1）。对齐 def prompt：WBS/里程碑(CDCP/PDCP/ADCP/GA/LDCP)/资源矩阵/关键路径/风险登记。",
+  "description": "IPD 完整发布计划阶段 ACT-FULL-PLAN-1 商用项目计划书产物结构（SpkVerifierService Layer 1）。除 WBS/里程碑/资源/关键路径/风险外，计划必须冻结可直接驱动开发与测试的结构化需求、规格、RTM 和外部计划系统映射。",
   "type": "object",
-  "required": ["plan_id", "version", "created_at", "created_by", "wbs", "milestones", "resource_matrix", "critical_path", "risk_register"],
+  "required": ["plan_id", "version", "created_at", "created_by", "requirements", "specifications", "rtm", "wbs", "milestones", "resource_matrix", "critical_path", "risk_register", "environment", "plane_sync", "tr2_pdcp_criteria", "sources", "evidence"],
   "properties": {
     "plan_id": {"type": "string", "minLength": 1},
     "version": {"type": "string", "minLength": 1},
@@ -17,6 +17,128 @@
         "decision": {"type": "string", "enum": ["admitted", "rejected", "revision"]}
       }
     },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["requirementId", "name", "description", "level", "objective", "scope", "non_goals", "acceptance_criteria", "interface_impact", "data_impact", "ui_impact", "dependencies", "risks", "development_specification", "test_specification", "completion_definition", "dev_package", "evidence_target", "agent", "design_refs"],
+        "properties": {
+          "requirementId": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1},
+          "level": {"type": "string", "enum": ["P0", "P1", "P2"]},
+          "objective": {"type": "string", "minLength": 1},
+          "scope": {"type": "string", "minLength": 1},
+          "non_goals": {"type": "string", "minLength": 1},
+          "acceptance_criteria": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["criterion_id", "scenario", "metric", "expected_result", "evidence"],
+              "properties": {
+                "criterion_id": {"type": "string", "minLength": 1},
+                "scenario": {"type": "string", "minLength": 1},
+                "metric": {"type": "string", "minLength": 1},
+                "expected_result": {"type": "string", "minLength": 1},
+                "evidence": {"type": "string", "minLength": 1}
+              }
+            }
+          },
+          "interface_impact": {"type": "string", "minLength": 1},
+          "data_impact": {"type": "string", "minLength": 1},
+          "ui_impact": {"type": "string", "minLength": 1},
+          "dependencies": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "risks": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["risk_id", "description", "mitigation"],
+              "properties": {
+                "risk_id": {"type": "string", "minLength": 1},
+                "description": {"type": "string", "minLength": 1},
+                "mitigation": {"type": "string", "minLength": 1}
+              }
+            }
+          },
+          "development_specification": {
+            "type": "object",
+            "required": ["change_scope", "interface_contracts", "data_contracts", "ui_contracts", "constraints", "definition_of_done"],
+            "properties": {
+              "change_scope": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+              "interface_contracts": {"type": "array", "items": {"type": "string", "minLength": 1}},
+              "data_contracts": {"type": "array", "items": {"type": "string", "minLength": 1}},
+              "ui_contracts": {"type": "array", "items": {"type": "string", "minLength": 1}},
+              "constraints": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+              "definition_of_done": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+            }
+          },
+          "test_specification": {
+            "type": "object",
+            "required": ["strategy", "cases"],
+            "properties": {
+              "strategy": {"type": "string", "minLength": 1},
+              "cases": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["test_id", "level", "preconditions", "steps", "expected_result", "evidence"],
+                  "properties": {
+                    "test_id": {"type": "string", "minLength": 1},
+                    "level": {"type": "string", "minLength": 1},
+                    "preconditions": {"type": "string", "minLength": 1},
+                    "steps": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+                    "expected_result": {"type": "string", "minLength": 1},
+                    "evidence": {"type": "string", "minLength": 1}
+                  }
+                }
+              }
+            }
+          },
+          "completion_definition": {"type": "string", "minLength": 1},
+          "dev_package": {"type": "string", "minLength": 1},
+          "evidence_target": {"type": "string", "minLength": 1},
+          "agent": {"type": "string", "minLength": 1},
+          "design_refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "specifications": {
+      "type": "object",
+      "required": ["architecture", "api", "data_migration", "compat_retirement", "security", "performance", "observability", "rollback", "deployment"],
+      "properties": {
+        "architecture": {"type": "object", "required": ["summary", "constraints", "acceptance_criteria", "evidence_targets"]},
+        "api": {"type": "object", "required": ["summary", "constraints", "acceptance_criteria", "evidence_targets"]},
+        "data_migration": {"type": "object", "required": ["summary", "constraints", "acceptance_criteria", "evidence_targets"]},
+        "compat_retirement": {"type": "object", "required": ["summary", "constraints", "acceptance_criteria", "evidence_targets"]},
+        "security": {"type": "object", "required": ["summary", "constraints", "acceptance_criteria", "evidence_targets"]},
+        "performance": {"type": "object", "required": ["summary", "constraints", "acceptance_criteria", "evidence_targets"]},
+        "observability": {"type": "object", "required": ["summary", "constraints", "acceptance_criteria", "evidence_targets"]},
+        "rollback": {"type": "object", "required": ["summary", "constraints", "acceptance_criteria", "evidence_targets"]},
+        "deployment": {"type": "object", "required": ["summary", "constraints", "acceptance_criteria", "evidence_targets"]},
+        "topology_g6": {"type": "object", "required": ["summary", "constraints", "acceptance_criteria", "evidence_targets"]},
+        "menu_ui": {"type": "object", "required": ["summary", "constraints", "acceptance_criteria", "evidence_targets"]}
+      }
+    },
+    "rtm": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["req_id", "design_refs", "dev_package", "test_case_ids", "evidence_targets", "agent"],
+        "properties": {
+          "req_id": {"type": "string", "minLength": 1},
+          "design_refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "dev_package": {"type": "string", "minLength": 1},
+          "test_case_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "evidence_targets": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "agent": {"type": "string", "minLength": 1}
+        }
+      }
+    },
     "wbs": {
       "type": "array",
       "minItems": 1,
@@ -28,7 +150,7 @@
           "name": {"type": "string", "minLength": 1},
           "deliverable": {"type": "string", "minLength": 1},
           "owner": {"type": "string", "minLength": 1},
-          "duration_days": {"type": "integer", "minimum": 0}
+          "duration_days": {"type": "integer", "minimum": 1}
         }
       }
     },
@@ -65,12 +187,57 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["risk_id", "description", "severity"],
+        "required": ["risk_id", "description", "severity", "mitigation"],
         "properties": {
           "risk_id": {"type": "string", "minLength": 1},
           "description": {"type": "string", "minLength": 1},
           "severity": {"type": "string", "enum": ["P0", "P1", "P2"]},
-          "mitigation": {"type": "string"}
+          "mitigation": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "environment": {"type": "object"},
+    "plane_sync": {
+      "type": "object",
+      "required": ["status", "gitea_project", "issue_mappings"],
+      "properties": {
+        "status": {"type": "string", "enum": ["planned", "synced"]},
+        "gitea_project": {"type": "string", "minLength": 1},
+        "issue_mappings": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["requirementId", "issueIdentifier"],
+            "properties": {
+              "requirementId": {"type": "string", "minLength": 1},
+              "issueIdentifier": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "tr2_pdcp_criteria": {
+      "type": "object",
+      "required": ["entry", "exit", "fail_conditions"],
+      "properties": {
+        "entry": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "exit": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "fail_conditions": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "sources": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["evidence_id", "path", "sha256", "exists"],
+        "properties": {
+          "evidence_id": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string"},
+          "exists": {"type": "boolean"}
         }
       }
     },

@@ -33,14 +33,6 @@
       "check": "critical_path is non-empty array",
       "field": "critical_path",
       "assert": {"op": "nonEmpty", "path": "critical_path"}
-    },
-    {
-      "id": "signoff_complete",
-      "name": "签署完整",
-      "severity": "conditional",
-      "check": "signed_by.decision == 'admitted'",
-      "field": "signed_by.decision",
-      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
     }
   ]
 }

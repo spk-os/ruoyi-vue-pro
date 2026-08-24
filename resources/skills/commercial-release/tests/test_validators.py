@@ -129,6 +129,39 @@ class SkillPackTests(unittest.TestCase):
         for stage, skill in expected.items():
             self.assertIn(f'"{stage}", "{skill}"', router)
 
+    def test_runtime_publishes_only_after_independent_verification_and_signing(self):
+        router = (
+            REPO_ROOT
+            / "yudao-module-spk-delivery/src/main/java/cn/iocoder/yudao/module/spkdelivery/"
+              "service/router/SpkTaskRouterService.java"
+        ).read_text(encoding="utf-8")
+        verify = router.index("SpkCommercialDeliveryGuard.requireVerificationPassed(true")
+        sign = router.index("artifact = artifactService.sign(artifact.getArtifactId(), verifier.getCode())")
+        publish = router.index("delivery = doProductDelivery(")
+        self.assertLess(verify, publish, "禁止在独立核验通过前创建 Gitea/Plane 外部交付")
+        self.assertLess(sign, publish, "禁止在冻结产物签名完成前创建 Gitea/Plane 外部交付")
+
+    def test_approval_rejection_is_process_owned_automatic_rework(self):
+        contract = (PACK_ROOT / "references" / "approval-rework-contract.md").read_text(encoding="utf-8")
+        for token in (
+            "流程自动启动 Omnigent", "审批人只", "REJECT 必须包含明确、可验证的原因",
+            "禁止覆盖历史或结束流程实例", "自动重新启动 Omnigent→Claude Code",
+            "重新验证", "再次送审", "同一流程实例",
+        ):
+            self.assertIn(token, contract)
+        for stage in ("01-concept", "02-plan", "03-develop", "04-verify", "05-launch", "06-lifecycle"):
+            body = (PACK_ROOT / f"spk-ipd-{stage}" / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn("approval-rework-contract.md", body)
+            self.assertIn("审批人不接管执行", body)
+
+    def test_cortex_frozen_output_file_is_the_only_authoritative_artifact(self):
+        contract = (PACK_ROOT / "references" / "agent-execution-contract.md").read_text(encoding="utf-8")
+        for token in (
+            ".ipd/output/<activityRunId>/<artifactType>.json", "唯一权威主产物",
+            "assistant 过程消息", "文件缺失", "fail-closed", "Cortex 自动重试",
+        ):
+            self.assertIn(token, contract)
+
     def test_every_activity_has_a_fillable_document_template(self):
         catalog = json.loads((PACK_ROOT / "references" / "activity-catalog.json").read_text())
         for activity in catalog["activities"]:

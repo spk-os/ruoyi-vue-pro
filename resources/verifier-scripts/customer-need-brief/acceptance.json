@@ -41,14 +41,6 @@
       "check": "sample_limitation is non-empty",
       "field": "sample_limitation",
       "assert": {"op": "nonEmpty", "path": "sample_limitation"}
-    },
-    {
-      "id": "signoff_complete",
-      "name": "签署完整",
-      "severity": "conditional",
-      "check": "signed_by.decision == 'admitted'",
-      "field": "signed_by.decision",
-      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
     }
   ]
 }

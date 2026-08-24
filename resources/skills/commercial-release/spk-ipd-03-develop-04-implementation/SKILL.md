@@ -13,7 +13,8 @@ description: 执行商业软件 IPD 03 开发阶段 04「实现草案」，生�
 2. 读取 `references/source-design.md`，执行原设计中的资源表、工具顺序、Artifact Schema 和上下游约束。
 3. 复制并填写 `../templates/develop/ACT-03-04-04-ImplementationDraft.template.md`；模板是正式交付文档骨架，不能提交空模板。
 4. 读取 `../references/agent-execution-contract.md` 与 `../references/ai-native-controls.md`，应用全包证据和安全约束。
-5. 遇到边界或失败分支时读取 `references/examples.md`，按相近案例处理但仍以本次真实证据为准。
+5. 读取 `../references/requirement-agent-contract.md`，由 Cortex→Omnigent→Claude Code 自动为每个 REQ 启动独立 Agent run。
+6. 遇到边界或失败分支时读取 `references/examples.md`，按相近案例处理但仍以本次真实证据为准。
 
 ## 输入就绪
 
@@ -28,13 +29,14 @@ description: 执行商业软件 IPD 03 开发阶段 04「实现草案」，生�
 2. 严格执行 `execution-spec.md` 的领域算法；每个中间结论同时登记 claim、来源证据、置信度和反证。
 3. 按原设计的工具顺序调用真实工具。确定性提取、编译、计算、测试、Schema 校验优先于模型判断。
 4. 使用正式模板生成 `ImplementationDraft`；所有必填字段填入本项目真实内容，保留假设、风险和开放项。
+   必须按 `DevelopmentPackageSet` 逐 REQ 调度，检查一需求一 run、模型路由与隔离工作区；少一个回执或证据即 `BLOCKED`。
 5. 执行结构、领域、追溯和独立复核（若 catalog 要求），保存原始输出与退出码。
 6. 生成 ArtifactManifest、EvidenceManifest、RunReceipt 和 `activity-result.json`，计算每个文件的 SHA-256。
 7. 运行 `python3 ../scripts/validate_delivery.py <交付目录>/activity-result.json`；修复所有错误后才可请求移交。
 
 ## 完成定义
 
-仅当 `ImplementationDraft` 已按模板填满、执行规约中的验收项全部有实测结果、每个关键 claim 可直达证据、所有哈希匹配、无未处理冲突且下游能够消费时，状态才允许为 `COMPLETE`。禁止以“文档已生成”“大部分完成”或模型自评替代验收。
+仅当 `ImplementationDraft` 已按模板填满、每个 REQ 都有唯一 Agent run 与 PASS 证据、执行规约中的验收项全部有实测结果、每个关键 claim 可直达证据、所有哈希匹配、无未处理冲突且下游能够消费时，状态才允许为 `COMPLETE`。禁止以“文档已生成”“大部分完成”或模型自评替代验收。
 
 ## 失败处理
 
@@ -43,6 +45,5 @@ description: 执行商业软件 IPD 03 开发阶段 04「实现草案」，生�
 ## 移交
 
 提交主产物、输入清单、证据清单、验证回执、活动结果和开放项；向下游说明基线版本、可依赖结论、不得依赖内容、剩余风险与下一责任人。移交后若上游证据失效，按 Claim → Artifact → 下游活动传播失效。
-
 
 

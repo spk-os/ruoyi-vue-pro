@@ -33,14 +33,6 @@
       "check": "monitoring_readiness.dashboards is non-empty",
       "field": "monitoring_readiness.dashboards",
       "assert": {"op": "nonEmpty", "path": "monitoring_readiness.dashboards"}
-    },
-    {
-      "id": "signoff_complete",
-      "name": "签署完整",
-      "severity": "conditional",
-      "check": "signed_by.decision == 'admitted'",
-      "field": "signed_by.decision",
-      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
     }
   ]
 }

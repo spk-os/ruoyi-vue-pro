@@ -60,3 +60,6 @@ application-my.yaml
 ### 本地配置备份，勿入库 ###
 *.bak.*
 *.bak
+
+# Python bytecode\__pycache__/
+*.pyc

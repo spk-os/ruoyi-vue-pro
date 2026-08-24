@@ -41,14 +41,6 @@
       "check": "ga_readiness.rationale is non-empty",
       "field": "ga_readiness.rationale",
       "assert": {"op": "nonEmpty", "path": "ga_readiness.rationale"}
-    },
-    {
-      "id": "signoff_complete",
-      "name": "签署完整",
-      "severity": "conditional",
-      "check": "signed_by.decision == 'admitted'",
-      "field": "signed_by.decision",
-      "assert": {"op": "equals", "path": "signed_by.decision", "value": "admitted"}
     }
   ]
 }
