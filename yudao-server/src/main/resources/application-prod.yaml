@@ -1,5 +1,5 @@
 server:
-  port: 48075
+  port: 48080
 
 --- #################### 数据库相关配置 ####################
 
@@ -60,15 +60,15 @@ spring:
       primary: master
       datasource:
         master:
-          url: jdbc:postgresql://192.168.56.101:5434/yudao
+          url: jdbc:postgresql://192.168.56.101:5435/yudao
           username: spk
-          password: A20zsp1rKQYWzcq7ipirR9uh
+          password: wNqULpoQdeNSeFPRPSkGOlOh
           driver-class-name: org.postgresql.Driver
         slave: # 模拟从库，可根据自己需要修改
           lazy: true # 开启懒加载，保证启动速度
-          url: jdbc:postgresql://192.168.56.101:5434/yudao
+          url: jdbc:postgresql://192.168.56.101:5435/yudao
           username: spk
-          password: A20zsp1rKQYWzcq7ipirR9uh
+          password: wNqULpoQdeNSeFPRPSkGOlOh
           driver-class-name: org.postgresql.Driver
         tdengine: # IoT 时序数据库（device_message 超级表）；SPK-OS 2026-08-02 部署，供 iot/home 设备消息统计
           lazy: true # 开启懒加载，保证启动速度
@@ -84,7 +84,7 @@ spring:
     redis:
       host: 192.168.56.101
       port: 6381
-      database: 2 # 数据库索引（dev 隔离，prod 用 db1）
+      database: 1 # 数据库索引
       password: MQ9PWN5iL27G2n3N7dPpx4SK
 
 --- #################### 定时任务相关配置 ####################
