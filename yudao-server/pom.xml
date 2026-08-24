@@ -64,7 +64,7 @@
         </dependency>
         -->
 
-        <!-- 工作流。默认注释，保证编译速度 -->
+        <!-- 工作流。SPK-OS: 启用 -->
         <dependency>
             <groupId>cn.iocoder.boot</groupId>
             <artifactId>yudao-module-bpm</artifactId>
@@ -157,6 +157,20 @@
             <artifactId>yudao-module-wms</artifactId>
             <version>${revision}</version>
         </dependency>
+
+        <!-- HRM 人力资源管理模块。默认注释，按需启用 -->
+<!--        <dependency>-->
+<!--            <groupId>cn.iocoder.boot</groupId>-->
+<!--            <artifactId>yudao-module-hrm</artifactId>-->
+<!--            <version>${revision}</version>-->
+<!--        </dependency>-->
+
+        <!-- FMS 财务管理模块。默认注释，按需启用 -->
+<!--        <dependency>-->
+<!--            <groupId>cn.iocoder.boot</groupId>-->
+<!--            <artifactId>yudao-module-fms</artifactId>-->
+<!--            <version>${revision}</version>-->
+<!--        </dependency>-->
 
         <!-- IM 相关模块。SPK-OS: 启用 -->
         <dependency>
