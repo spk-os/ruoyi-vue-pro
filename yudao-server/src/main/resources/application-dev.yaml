@@ -83,9 +83,9 @@ spring:
   data:
     redis:
       host: 192.168.56.101
-      port: 6381
+      port: 6380
       database: 2 # 数据库索引（dev 隔离，prod 用 db1）
-      password: MQ9PWN5iL27G2n3N7dPpx4SK
+      password: 7c1lUHK07bFXByw96LRXp5tt
 
 --- #################### 定时任务相关配置 ####################
 
